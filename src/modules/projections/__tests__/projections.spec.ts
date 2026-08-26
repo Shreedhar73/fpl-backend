@@ -26,6 +26,11 @@ const SCORING: RawScoring = {
   assists: 3,
   saves: 1,
   bonus: 1,
+  own_goals: -2,
+  penalties_saved: 5,
+  penalties_missed: -2,
+  yellow_cards: -1,
+  red_cards: -3,
 };
 
 describe('minutesModel', () => {
