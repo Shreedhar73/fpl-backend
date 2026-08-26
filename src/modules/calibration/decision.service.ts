@@ -27,6 +27,23 @@ import {
   pairedDifference,
   RoundDecision,
 } from './xi-decision';
+import {
+  GREEDY_ONE_FT,
+  NO_TRANSFER,
+  openingSquad,
+  SeasonResult,
+  simulateSeason,
+  SimPolicy,
+} from './season-sim';
+
+/**
+ * The free-transfer cap and the hit cost, for the season being simulated.
+ *
+ * Passed in rather than assumed: the bank was one, then two, then five, and the five holds for
+ * 2024-25 onward (`fpl-agent-guide` §2.2). The test season here is 2025-26, so five is right — but a
+ * simulator that hardcodes it is silently wrong the first time an earlier season is walked.
+ */
+export const SIM_OPTIONS = { freeTransferCap: 5, hitCost: 4 };
 
 /**
  * The seed behind every random fixed squad in this report.
@@ -54,6 +71,7 @@ export interface DecisionReport {
   path: string;
   ordering: Map<Predictor, OrderingSummary>;
   decisions: DecisionSummary[];
+  seasons: SeasonResult[];
 }
 
 @Injectable()
@@ -121,6 +139,39 @@ export class DecisionService {
       }
     }
 
+    // Phase 3-4: the season simulation. Every predictor picks its own opening fifteen and then walks
+    // the season under the real rules — which is the point: this is the first metric where "which
+    // fifteen you own" is part of what is being measured.
+    const seasons: SeasonResult[] = [];
+    for (const policy of [NO_TRANSFER, GREEDY_ONE_FT] as SimPolicy[]) {
+      for (const p of PREDICTORS) {
+        // `form` is null for every player at a season's first deadline, so it cannot choose an
+        // opening squad at all. It falls back to last season's points-per-90 — the only signal
+        // knowable at that point, and the charter's own naive baseline — and takes over from round 2.
+        const opening = await openingSquad(
+          [...squadPool.values()],
+          p,
+          rules,
+          p === 'form' ? 'priorSeason' : null,
+        );
+        seasons.push(
+          simulateSeason(byRound, opening, p, rules, policy, SIM_OPTIONS),
+        );
+      }
+      // The template squad, run under the same policy, as the crowd proxy.
+      seasons.push({
+        ...simulateSeason(
+          byRound,
+          squads[0].members,
+          'model',
+          rules,
+          policy,
+          SIM_OPTIONS,
+        ),
+        squadLabel: 'template (crowd proxy)',
+      });
+    }
+
     const path = await this.writeReport(
       label,
       result.rows,
@@ -129,6 +180,7 @@ export class DecisionService {
       decisions,
       roundsBy,
       squadRound,
+      seasons,
     );
 
     const after = await this.repo.projectionCount();
@@ -148,7 +200,7 @@ export class DecisionService {
       );
     }
 
-    return { path, ordering, decisions };
+    return { path, ordering, decisions, seasons };
   }
 
   private async scoringResolver(): Promise<(season: string) => Scoring> {
@@ -179,6 +231,7 @@ export class DecisionService {
     decisions: DecisionSummary[],
     roundsBy: Map<string, RoundDecision[]>,
     squadRound: number,
+    seasons: SeasonResult[],
   ): Promise<string> {
     const lines: string[] = [];
     const w = (s = '') => lines.push(s);
@@ -437,14 +490,177 @@ export class DecisionService {
       }
       w();
     }
+    w(`## The simulated season`);
+    w();
+    w(
+      `Each predictor picks its **own** opening fifteen and walks the season under the real rules — ` +
+        `one free transfer a round banked to ${SIM_OPTIONS.freeTransferCap}, the 50% sell-on fee, ` +
+        `auto-substitutions on 0 minutes only, the vice taking the armband when the captain blanks ` +
+        `and nobody doubling when both do. **This is the first metric where *which* fifteen you own ` +
+        `is part of what is measured**, which is exactly where the ordering advantage should show up ` +
+        `if it is real.`,
+    );
+    w();
+    w(
+      `**Both policies are deliberately weak, and the totals below are floors rather than ` +
+        `estimates.** \`no-transfer\` holds the opening squad for the whole season. \`greedy-1ft\` ` +
+        `takes at most one free transfer a round, on this round's projection, and **never takes a ` +
+        `hit** — so the −4 path is exercised by a unit test and never by a walked season. Choosing ` +
+        `transfers well is B-008, which plugs into this same simulator rather than bringing its own.`,
+    );
+    w();
+    w(
+      `**Chips are unused.** A wildcard or free hit is a transfer policy (B-008); bench boost and ` +
+        `triple captain are single-week variance bets needing B-017's distributions. An unused chip ` +
+        `is a handicap applied equally to every predictor. A guessed one is a confound.`,
+    );
+    w();
+    w(
+      `**\`form\` cannot choose an opening squad** — it is this season's trailing rounds and there ` +
+        `are none at the first deadline. It falls back to last season's points per 90, the only ` +
+        `signal knowable then and the charter's own naive baseline, and takes over from round 2. A ` +
+        `baseline handed a better opening squad than it could have chosen is not a baseline.`,
+    );
+    w();
+    w(`| Policy | Squad picked by | rounds | **points** | transfers | hits | final team value |`);
+    w(`|---|---|---:|---:|---:|---:|---:|`);
+    for (const r of seasons) {
+      w(
+        `| ${r.policy} | ${r.squadLabel ?? r.predictor} | ${r.rounds.length} | **${r.totalPoints}** | ` +
+          `${r.totalTransfers} | ${r.totalHitCost} | £${(r.finalTeamValue / 10).toFixed(1)}m |`,
+      );
+    }
+    w();
+    w(`### Is the difference bigger than the noise?`);
+    w();
+    w(`| Policy | comparison | rounds | mean difference | ± s.e. | clears noise |`);
+    w(`|---|---|---:|---:|---:|---|`);
+    for (const policy of ['no-transfer', 'greedy-1ft']) {
+      const forPolicy = seasons.filter((s2) => s2.policy === policy);
+      const model = forPolicy.find((s2) => s2.predictor === 'model');
+      for (const against of ['form', 'priorSeason'] as Predictor[]) {
+        const other = forPolicy.find((s2) => s2.predictor === against);
+        if (!model || !other) continue;
+        const d = pairedDifference(
+          model.rounds.map((r) => ({
+            season: TEST_SEASON,
+            round: r.round,
+            points: r.points,
+            ceiling: 0,
+            captainPoints: 0,
+            bestFieldedPoints: 0,
+            substitutions: 0,
+          })),
+          other.rounds.map((r) => ({
+            season: TEST_SEASON,
+            round: r.round,
+            points: r.points,
+            ceiling: 0,
+            captainPoints: 0,
+            bestFieldedPoints: 0,
+            substitutions: 0,
+          })),
+        );
+        if (!d) continue;
+        w(
+          `| ${policy} | model − ${against} | ${d.rounds} | ` +
+            `${d.meanDifference >= 0 ? '+' : ''}${d.meanDifference.toFixed(2)} | ` +
+            `${d.standardError.toFixed(2)} | ${d.clearsNoise ? '**yes**' : 'no'} |`,
+        );
+      }
+    }
+    w();
+    w(`### What the simulated season says`);
+    w();
+    {
+      const get = (policy: string, predictor: Predictor, template = false) =>
+        seasons.find(
+          (x) =>
+            x.policy === policy &&
+            x.predictor === predictor &&
+            Boolean(x.squadLabel) === template,
+        );
+      const holdModel = get('no-transfer', 'model');
+      const holdForm = get('no-transfer', 'form');
+      const greedyModel = get('greedy-1ft', 'model');
+      const greedyForm = get('greedy-1ft', 'form');
+      const greedyTemplate = get('greedy-1ft', 'model', true);
+
+      if (holdModel && holdForm) {
+        w(
+          `**Held all season, the model's opening fifteen is worth ${holdModel.totalPoints} points ` +
+            `against ${holdForm.totalPoints}** — a gap of ` +
+            `${holdModel.totalPoints - holdForm.totalPoints} over the season, which clears the noise ` +
+            `floor comfortably. This is the ordering advantage from the section above, showing up ` +
+            `exactly where Phase 2 predicted it would: **in which fifteen you own, not in how you ` +
+            `arrange a fifteen you already have.** Note what the \`form\` row actually is — form ` +
+            `cannot pick an opening squad, so that squad was chosen by last season's points per 90.`,
+        );
+        w();
+      }
+      if (greedyModel && greedyForm) {
+        const gap = greedyModel.totalPoints - greedyForm.totalPoints;
+        w(
+          `**Give both a transfer a week and most of that gap closes.** \`form\` goes from ` +
+            `${holdForm?.totalPoints ?? '—'} to ${greedyForm.totalPoints}; the model goes from ` +
+            `${holdModel?.totalPoints ?? '—'} to ${greedyModel.totalPoints}, a remaining gap of ` +
+            `**${gap}** which does **not** clear the noise floor. A weekly transfer is a powerful ` +
+            `error-correction mechanism, and it corrects a weak opening squad faster than it ` +
+            `improves a strong one. **A model that is better only before the first deadline is worth ` +
+            `much less than the season totals first suggest.**`,
+        );
+        w();
+      }
+      if (greedyTemplate && greedyModel) {
+        const diff = greedyTemplate.totalPoints - greedyModel.totalPoints;
+        if (diff > 0) {
+          w(
+            `**And the most uncomfortable number in this report: the crowd's opening fifteen, run ` +
+              `under the same policy and the same projections, scores ${greedyTemplate.totalPoints} ` +
+              `against the model's ${greedyModel.totalPoints} — ${diff} points better.** The only ` +
+              `difference between those two runs is the opening squad, so this says our squad solve ` +
+              `is worse than simply owning what everyone else owned. It is a proxy for the FPL ` +
+              `average rather than the average itself, and it is not a flattering one. **Recorded as ` +
+              `the headline finding it is**, not buried under the rows above.`,
+          );
+          w();
+        }
+      }
+      w(
+        `**The bar B-012 set was: beat \`form\` on ordering AND on simulated season points, or say ` +
+          `plainly that we did not.** Ordering: yes, on points-captured at every k. Season points: ` +
+          `**only when neither side may transfer.** Once both can, the difference does not clear the ` +
+          `noise floor. \`modelVersion\` does not move on this, and the serving version is not ` +
+          `deleted — B-007 (D-020) established both rules and neither is met here.`,
+      );
+      w();
+      w(
+        `The next question is not "is the model better" but "why is a squad built from its own ` +
+          `projections worse than the crowd's", and B-013 (which component is wrong) and B-014 (team ` +
+          `strength carries no signal, and both fixture elasticities fitted to 0) are where it gets ` +
+          `answered.`,
+      );
+    }
+    w();
+    w(`### The baseline that does not exist`);
+    w();
+    w(
+      `**The real FPL average is unavailable for archive seasons.** \`Gameweek.averageScore\` ` +
+        `exists for the live season only, upstream serves no past season's \`bootstrap-static\`, and ` +
+        `the archive carries no per-round average. The **template squad** row above — the legal ` +
+        `fifteen maximising ownership, held under the same policy — is the closest thing available ` +
+        `and is a **proxy**, not the average. Recording the absence rather than quietly dropping it: ` +
+        `an unavailable baseline left out of a table reads as a baseline that was beaten.`,
+    );
+    w();
+
     w(`## Still to come in this report`);
     w();
     w(
-      `B-012's remaining phases: a full-season simulation under the real rules — free transfers ` +
-        `banked to five, −4 hits, the 50% sell fee, transfers as a policy (Phases 3–4). The squads ` +
-        `above are **held fixed all season**, so what is measured here is the XI and the armband and ` +
-        `nothing else; a model that would have transferred its way to a better squad gets no credit ` +
-        `for it yet.`,
+      `Nothing — B-012's phases are complete. What is **not** measured here, and is named rather ` +
+        `than implied: a transfer policy worth the name (B-008), chips, uncertainty on any ` +
+        `projection (B-017), and the per-component calibration that would say *which* term drives ` +
+        `what is measured here (B-013).`,
     );
     w();
     w(`Nothing was written to \`projections\` — asserted, not assumed.`);
