@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { CalibrationService } from './calibration.service';
 import { CalibrationRepository } from './calibration.repository';
+import { DecisionService } from './decision.service';
 import { ProjectionsModule } from '../projections/projections.module';
 
 /**
@@ -13,7 +14,7 @@ import { ProjectionsModule } from '../projections/projections.module';
  */
 @Module({
   imports: [PrismaModule, ProjectionsModule],
-  providers: [CalibrationService, CalibrationRepository],
-  exports: [CalibrationService],
+  providers: [CalibrationService, CalibrationRepository, DecisionService],
+  exports: [CalibrationService, DecisionService],
 })
 export class CalibrationModule {}

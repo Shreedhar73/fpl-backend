@@ -33,7 +33,8 @@
     "calibrate": "nest build && node dist/scripts/calibrate.js",
     "fit:model": "nest build && node dist/scripts/fit-model.js",
     "guards:report": "nest build && node dist/scripts/guards-report.js",
-    "sweep:collision": "nest build && node dist/scripts/collision-sweep.js"
+    "sweep:collision": "nest build && node dist/scripts/collision-sweep.js",
+    "decision-quality": "nest build && node dist/scripts/decision-quality.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
