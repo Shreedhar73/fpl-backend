@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
-    "sync:fpl": "ts-node -r tsconfig-paths/register src/scripts/sync.ts",
+    "sync:fpl": "nest build && node dist/scripts/sync.js",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "prisma:migrate": "prisma migrate dev",
