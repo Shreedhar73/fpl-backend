@@ -10,6 +10,7 @@ import { SquadModule } from './modules/squad/squad.module';
 import { InsightsModule } from './modules/insights/insights.module';
 import { PlayersModule } from './modules/players/players.module';
 import { ArchiveModule } from './modules/archive/archive.module';
+import { CalibrationModule } from './modules/calibration/calibration.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ArchiveModule } from './modules/archive/archive.module';
     InsightsModule,
     PlayersModule,
     ArchiveModule,
+    CalibrationModule,
     // Domain modules land here: fixtures, teams.
     // One directory each under src/modules/ — see fpl-architecture-contract.
   ],
