@@ -14,6 +14,7 @@ import {
   RawEvent,
   RawFixture,
   RawElementHistory,
+  RawSeasonHistory,
 } from '../../infra/fpl/fpl.types';
 
 export type PositionCode = 'GKP' | 'DEF' | 'MID' | 'FWD';
@@ -24,6 +25,12 @@ export interface MappedTeam {
   name: string;
   shortName: string;
   strength: number;
+  strengthOverallHome: number;
+  strengthOverallAway: number;
+  strengthAttackHome: number;
+  strengthAttackAway: number;
+  strengthDefenceHome: number;
+  strengthDefenceAway: number;
 }
 
 export interface MappedPlayer {
@@ -39,6 +46,42 @@ export interface MappedPlayer {
   chanceOfPlayingNextRound: number | null;
   news: string | null;
   newsAddedAt: Date | null;
+  // projection inputs (season-to-date, from the bootstrap element)
+  form: string | null;
+  pointsPerGame: string | null;
+  epNext: string | null;
+  epThis: string | null;
+  expectedGoalsPer90: number;
+  expectedAssistsPer90: number;
+  expectedGoalsConcededPer90: number;
+  defensiveContributionPer90: number;
+  savesPer90: number;
+  startsPer90: number;
+  penaltiesOrder: number | null;
+  directFreekicksOrder: number | null;
+  cornersOrder: number | null;
+  seasonMinutes: number;
+  seasonStarts: number;
+}
+
+export interface MappedSeasonHistory {
+  season: string;
+  totalPoints: number;
+  minutes: number;
+  starts: number;
+  goalsScored: number;
+  assists: number;
+  cleanSheets: number;
+  goalsConceded: number;
+  saves: number;
+  bonus: number;
+  bps: number;
+  defensiveContribution: number;
+  expectedGoals: string;
+  expectedAssists: string;
+  expectedGoalsConceded: string;
+  startCost: number;
+  endCost: number;
 }
 
 export interface MappedGameweek {
@@ -105,7 +148,9 @@ export interface MappedGameweekStat {
 }
 
 /** `element_types` → { 1: 'GKP', 2: 'DEF', … }. `singular_name_short` already matches our enum. */
-export function positionByType(types: RawElementType[]): Record<number, PositionCode> {
+export function positionByType(
+  types: RawElementType[],
+): Record<number, PositionCode> {
   const map: Record<number, PositionCode> = {};
   for (const t of types) {
     map[t.id] = t.singular_name_short as PositionCode;
@@ -121,13 +166,24 @@ export function mapTeam(t: RawTeam): MappedTeam {
     shortName: t.short_name,
     // `strength` is null in preseason payloads; the column is non-null. 0 = "not yet rated".
     strength: t.strength ?? 0,
+    strengthOverallHome: t.strength_overall_home,
+    strengthOverallAway: t.strength_overall_away,
+    strengthAttackHome: t.strength_attack_home,
+    strengthAttackAway: t.strength_attack_away,
+    strengthDefenceHome: t.strength_defence_home,
+    strengthDefenceAway: t.strength_defence_away,
   };
 }
 
-export function mapPlayer(e: RawElement, position: Record<number, PositionCode>): MappedPlayer {
+export function mapPlayer(
+  e: RawElement,
+  position: Record<number, PositionCode>,
+): MappedPlayer {
   const pos = position[e.element_type];
   if (!pos) {
-    throw new Error(`unknown element_type ${e.element_type} for player ${e.id}`);
+    throw new Error(
+      `unknown element_type ${e.element_type} for player ${e.id}`,
+    );
   }
   return {
     fplId: e.id,
@@ -143,6 +199,44 @@ export function mapPlayer(e: RawElement, position: Record<number, PositionCode>)
     chanceOfPlayingNextRound: e.chance_of_playing_next_round,
     news: e.news === '' ? null : e.news,
     newsAddedAt: e.news_added ? new Date(e.news_added) : null,
+    form: e.form,
+    pointsPerGame: e.points_per_game,
+    epNext: e.ep_next,
+    epThis: e.ep_this,
+    expectedGoalsPer90: e.expected_goals_per_90,
+    expectedAssistsPer90: e.expected_assists_per_90,
+    expectedGoalsConcededPer90: e.expected_goals_conceded_per_90,
+    defensiveContributionPer90: e.defensive_contribution_per_90,
+    savesPer90: e.saves_per_90,
+    startsPer90: e.starts_per_90,
+    penaltiesOrder: e.penalties_order,
+    directFreekicksOrder: e.direct_freekicks_order,
+    cornersOrder: e.corners_and_indirect_freekicks_order,
+    seasonMinutes: e.minutes,
+    seasonStarts: e.starts,
+  };
+}
+
+/** A prior season's totals from `history_past`. The player id comes from the fetch context. */
+export function mapSeasonHistory(h: RawSeasonHistory): MappedSeasonHistory {
+  return {
+    season: h.season_name,
+    totalPoints: h.total_points,
+    minutes: h.minutes,
+    starts: h.starts,
+    goalsScored: h.goals_scored,
+    assists: h.assists,
+    cleanSheets: h.clean_sheets,
+    goalsConceded: h.goals_conceded,
+    saves: h.saves,
+    bonus: h.bonus,
+    bps: h.bps,
+    defensiveContribution: h.defensive_contribution ?? 0,
+    expectedGoals: h.expected_goals,
+    expectedAssists: h.expected_assists,
+    expectedGoalsConceded: h.expected_goals_conceded,
+    startCost: h.start_cost,
+    endCost: h.end_cost,
   };
 }
 

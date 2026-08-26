@@ -9,6 +9,7 @@ import {
   mapFixture,
   mapOwnership,
   mapGameweekStat,
+  mapSeasonHistory,
   seasonLabel,
 } from './mappers';
 import { ElementSummary } from '../../infra/fpl/fpl.types';
@@ -52,13 +53,24 @@ export class SyncService {
       const data = await this.api.getBootstrap();
       const hash = this.api.hash(data);
       if ((await this.repo.lastGoodHash(endpoint)) === hash) {
-        await this.repo.finishRun(run.id, { rowsWritten: 0, status: 'skipped', payloadHash: hash });
-        return { endpoint, mode: 'incremental', status: 'skipped', rowsWritten: 0 };
+        await this.repo.finishRun(run.id, {
+          rowsWritten: 0,
+          status: 'skipped',
+          payloadHash: hash,
+        });
+        return {
+          endpoint,
+          mode: 'incremental',
+          status: 'skipped',
+          rowsWritten: 0,
+        };
       }
 
       const pos = positionByType(data.element_types);
       const teamRows = await this.repo.upsertTeams(data.teams.map(mapTeam));
-      const gwRows = await this.repo.upsertGameweeks(data.events.map(mapGameweek));
+      const gwRows = await this.repo.upsertGameweeks(
+        data.events.map(mapGameweek),
+      );
       await this.repo.upsertScoringConfig(
         seasonLabel(data.events),
         data.game_config.scoring,
@@ -70,15 +82,24 @@ export class SyncService {
       const playerRows = await this.repo.upsertPlayers(players, teamId);
 
       const playerId = await this.repo.playerIdByFplId();
-      const priceRows = await this.repo.appendPriceHistory(players, playerId, run.startedAt);
+      const priceRows = await this.repo.appendPriceHistory(
+        players,
+        playerId,
+        run.startedAt,
+      );
       const ownershipRows = await this.repo.appendOwnershipHistory(
         data.elements.map(mapOwnership),
         playerId,
         run.startedAt,
       );
 
-      const rowsWritten = teamRows + gwRows + playerRows + priceRows + ownershipRows;
-      await this.repo.finishRun(run.id, { rowsWritten, status: 'success', payloadHash: hash });
+      const rowsWritten =
+        teamRows + gwRows + playerRows + priceRows + ownershipRows;
+      await this.repo.finishRun(run.id, {
+        rowsWritten,
+        status: 'success',
+        payloadHash: hash,
+      });
       this.log.log(
         `bootstrap: ${teamRows} teams, ${gwRows} gameweeks, ${playerRows} players, ` +
           `${priceRows} price rows, ${ownershipRows} ownership rows`,
@@ -86,9 +107,19 @@ export class SyncService {
       return { endpoint, mode: 'incremental', status: 'success', rowsWritten };
     } catch (err) {
       const message = (err as Error).message;
-      await this.repo.finishRun(run.id, { rowsWritten: 0, status: 'failed', error: message });
+      await this.repo.finishRun(run.id, {
+        rowsWritten: 0,
+        status: 'failed',
+        error: message,
+      });
       this.log.error(`bootstrap sync failed: ${message}`);
-      return { endpoint, mode: 'incremental', status: 'failed', rowsWritten: 0, error: message };
+      return {
+        endpoint,
+        mode: 'incremental',
+        status: 'failed',
+        rowsWritten: 0,
+        error: message,
+      };
     }
   }
 
@@ -99,19 +130,45 @@ export class SyncService {
       const data = await this.api.getFixtures();
       const hash = this.api.hash(data);
       if ((await this.repo.lastGoodHash(endpoint)) === hash) {
-        await this.repo.finishRun(run.id, { rowsWritten: 0, status: 'skipped', payloadHash: hash });
-        return { endpoint, mode: 'incremental', status: 'skipped', rowsWritten: 0 };
+        await this.repo.finishRun(run.id, {
+          rowsWritten: 0,
+          status: 'skipped',
+          payloadHash: hash,
+        });
+        return {
+          endpoint,
+          mode: 'incremental',
+          status: 'skipped',
+          rowsWritten: 0,
+        };
       }
       const teamId = await this.repo.teamIdByFplId();
-      const rowsWritten = await this.repo.upsertFixtures(data.map(mapFixture), teamId);
-      await this.repo.finishRun(run.id, { rowsWritten, status: 'success', payloadHash: hash });
+      const rowsWritten = await this.repo.upsertFixtures(
+        data.map(mapFixture),
+        teamId,
+      );
+      await this.repo.finishRun(run.id, {
+        rowsWritten,
+        status: 'success',
+        payloadHash: hash,
+      });
       this.log.log(`fixtures: ${rowsWritten} upserted`);
       return { endpoint, mode: 'incremental', status: 'success', rowsWritten };
     } catch (err) {
       const message = (err as Error).message;
-      await this.repo.finishRun(run.id, { rowsWritten: 0, status: 'failed', error: message });
+      await this.repo.finishRun(run.id, {
+        rowsWritten: 0,
+        status: 'failed',
+        error: message,
+      });
       this.log.error(`fixtures sync failed: ${message}`);
-      return { endpoint, mode: 'incremental', status: 'failed', rowsWritten: 0, error: message };
+      return {
+        endpoint,
+        mode: 'incremental',
+        status: 'failed',
+        rowsWritten: 0,
+        error: message,
+      };
     }
   }
 
@@ -127,49 +184,103 @@ export class SyncService {
       const playerId = await this.repo.playerIdByFplId();
       const fixtureId = await this.repo.fixtureIdByFplId();
       if (playerId.size === 0) {
-        throw new Error('no players in the database — run the incremental sync first');
+        throw new Error(
+          'no players in the database — run the incremental sync first',
+        );
       }
 
       const fplIds = [...playerId.keys()];
       const cap = this.api.backfillConcurrency;
-      let rowsWritten = 0;
+      let statRows = 0;
+      let seasonRows = 0;
       let failedPlayers = 0;
 
       for (let i = 0; i < fplIds.length; i += cap) {
         const batch = fplIds.slice(i, i + cap);
-        const summaries = await Promise.all(
-          batch.map(async (id): Promise<ElementSummary | null> => {
-            try {
-              return await this.api.getElementSummary(id);
-            } catch (err) {
-              failedPlayers++;
-              this.log.warn(`element-summary ${id} failed: ${(err as Error).message}`);
-              return null;
-            }
-          }),
+        const results = await Promise.all(
+          batch.map(
+            async (
+              id,
+            ): Promise<{ id: number; summary: ElementSummary | null }> => {
+              try {
+                return { id, summary: await this.api.getElementSummary(id) };
+              } catch (err) {
+                failedPlayers++;
+                this.log.warn(
+                  `element-summary ${id} failed: ${(err as Error).message}`,
+                );
+                return { id, summary: null };
+              }
+            },
+          ),
         );
-        const stats = summaries
-          .filter((s): s is ElementSummary => s !== null)
-          .flatMap((s) => s.history.map(mapGameweekStat));
-        rowsWritten += await this.repo.upsertGameweekStats(stats, playerId, fixtureId);
+        const got = results.filter(
+          (r): r is { id: number; summary: ElementSummary } =>
+            r.summary !== null,
+        );
+
+        const stats = got.flatMap((r) =>
+          r.summary.history.map(mapGameweekStat),
+        );
+        statRows += await this.repo.upsertGameweekStats(
+          stats,
+          playerId,
+          fixtureId,
+        );
+
+        const seasonEntries = got
+          .map((r) => ({
+            playerId: playerId.get(r.id),
+            seasons: r.summary.history_past.map(mapSeasonHistory),
+          }))
+          .filter(
+            (
+              e,
+            ): e is {
+              playerId: string;
+              seasons: ReturnType<typeof mapSeasonHistory>[];
+            } => e.playerId !== undefined && e.seasons.length > 0,
+          );
+        seasonRows += await this.repo.upsertSeasonHistory(seasonEntries);
+
         if (i + cap < fplIds.length) {
-          await new Promise((r) => setTimeout(r, this.api.backfillBatchDelayMs));
+          await new Promise((r) =>
+            setTimeout(r, this.api.backfillBatchDelayMs),
+          );
         }
       }
 
+      const rowsWritten = statRows + seasonRows;
       const status = failedPlayers === 0 ? 'success' : 'partial';
       await this.repo.finishRun(run.id, {
         rowsWritten,
         status,
-        error: failedPlayers ? `${failedPlayers} players failed to fetch` : undefined,
+        error: failedPlayers
+          ? `${failedPlayers} players failed to fetch`
+          : undefined,
       });
-      this.log.log(`full backfill: ${rowsWritten} gameweek-stat rows, ${failedPlayers} players failed`);
+      this.log.log(
+        `full backfill: ${statRows} gameweek-stat rows, ${seasonRows} prior-season rows, ` +
+          `${failedPlayers} players failed`,
+      );
       return [{ endpoint, mode: 'full', status, rowsWritten }];
     } catch (err) {
       const message = (err as Error).message;
-      await this.repo.finishRun(run.id, { rowsWritten: 0, status: 'failed', error: message });
+      await this.repo.finishRun(run.id, {
+        rowsWritten: 0,
+        status: 'failed',
+        error: message,
+      });
       this.log.error(`full backfill failed: ${message}`);
-      return [{ endpoint, mode: 'full', status: 'failed', rowsWritten: 0, error: message }];
+      return [
+        {
+          endpoint,
+          mode: 'full',
+          status: 'failed',
+          rowsWritten: 0,
+          error: message,
+        },
+      ];
     }
   }
 

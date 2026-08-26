@@ -29,7 +29,9 @@ export class SyncScheduler {
       const summaries = await this.sync.runIncremental();
       const failed = summaries.filter((s) => s.status === 'failed');
       if (failed.length) {
-        this.log.error(`hourly sync had failures: ${failed.map((f) => f.endpoint).join(', ')}`);
+        this.log.error(
+          `hourly sync had failures: ${failed.map((f) => f.endpoint).join(', ')}`,
+        );
       }
     } finally {
       this.running = false;
