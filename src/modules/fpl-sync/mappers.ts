@@ -147,6 +147,23 @@ export interface MappedGameweekStat {
   selectedBy: number;
 }
 
+export interface MappedPositionQuota {
+  position: PositionCode;
+  squadSelect: number;
+  squadMinPlay: number;
+  squadMaxPlay: number;
+}
+
+/** Per-position squad quotas from `element_types`, for the optimizer to read from config. */
+export function mapPositionQuotas(types: RawElementType[]): MappedPositionQuota[] {
+  return types.map((t) => ({
+    position: t.singular_name_short as PositionCode,
+    squadSelect: t.squad_select,
+    squadMinPlay: t.squad_min_play,
+    squadMaxPlay: t.squad_max_play,
+  }));
+}
+
 /** `element_types` → { 1: 'GKP', 2: 'DEF', … }. `singular_name_short` already matches our enum. */
 export function positionByType(
   types: RawElementType[],

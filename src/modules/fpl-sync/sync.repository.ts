@@ -187,11 +187,17 @@ export class SyncRepository {
     season: string,
     scoring: unknown,
     rules: unknown,
+    positions: unknown,
   ): Promise<void> {
+    const data = {
+      scoring: scoring as object,
+      rules: rules as object,
+      positions: positions as object,
+    };
     await this.prisma.scoringConfig.upsert({
       where: { season },
-      create: { season, scoring: scoring as object, rules: rules as object },
-      update: { scoring: scoring as object, rules: rules as object },
+      create: { season, ...data },
+      update: data,
     });
   }
 

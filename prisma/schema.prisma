@@ -381,6 +381,9 @@ model ScoringConfig {
   season    String   @unique
   scoring   Json
   rules     Json
+  /// Per-position squad quotas from `element_types` (squad_select / squad_min_play / squad_max_play),
+  /// so the optimizer reads formation constraints from config rather than hardcoding 2/5/5/3.
+  positions Json?
   updatedAt DateTime @updatedAt
 
   @@map("scoring_config")
