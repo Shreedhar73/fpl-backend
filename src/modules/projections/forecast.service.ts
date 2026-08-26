@@ -163,12 +163,7 @@ export class ForecastService {
           byCode.set(row.playerCode, entry);
         }
 
-        entry.expectedPoints += projection.ep;
-        entry.expectedMinutes += minutes.expectedMinutes;
-        entry.fixtures += 1;
-        for (const [k, v] of Object.entries(projection.components)) {
-          entry.components[k] = (entry.components[k] ?? 0) + v;
-        }
+        foldFixture(entry, projection, minutes.expectedMinutes);
       }
     }
 
@@ -192,6 +187,31 @@ export class ForecastService {
       },
       players,
     };
+  }
+}
+
+/**
+ * Add one fixture's projection into a player's running total for the gameweek.
+ *
+ * **Extracted so a double gameweek is testable.** A player with two fixtures in one event must have
+ * both counted — the points from both matches score — and a player with none must produce no entry at
+ * all, which is the caller's business because a blank is the *absence* of a call. `player_gameweek_stats`
+ * is keyed by fixture rather than by gameweek for exactly this reason, and doubles and blanks are the
+ * highest-leverage weeks of a season and the ones naive code silently gets wrong (`fpl-optimizer`).
+ *
+ * It was inline and untested until B-012 Phase 5. The behaviour was correct; nothing would have said
+ * so if it stopped being.
+ */
+export function foldFixture(
+  entry: PlayerForecast,
+  projection: { ep: number; components: Record<string, number> },
+  expectedMinutes: number,
+): void {
+  entry.expectedPoints += projection.ep;
+  entry.expectedMinutes += expectedMinutes;
+  entry.fixtures += 1;
+  for (const [k, v] of Object.entries(projection.components)) {
+    entry.components[k] = (entry.components[k] ?? 0) + v;
   }
 }
 
