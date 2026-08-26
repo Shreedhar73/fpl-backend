@@ -4,7 +4,7 @@ import { DEFCON_THRESHOLD } from '../projections/points';
 import { thresholdProbability } from '../projections/distributions';
 import { FittedParams, UNFITTED_PARAMS } from '../projections/fitted';
 import { HistoryRow, walkRounds } from '../projections/features';
-import { runBacktest } from './harness';
+import { observationsFor, runBacktest } from './harness';
 import { errorStats } from './metrics';
 
 /**
@@ -140,7 +140,13 @@ export function fitParams(input: FitInput): FitReport {
       const run = runBacktest(rows, trial, scoringFor, {
         evaluate: (row) => set.has(row),
       });
-      const stats = errorStats(run.model);
+      // The MODEL's own rows, deliberately NOT restricted to the rows every baseline could also
+      // score. B-012 restricts *comparisons* to a common population, because comparing two
+      // predictors over different rows is not a comparison. A grid search compares a parameter
+      // against itself on one predictor, so the restriction would do nothing but throw away the
+      // hardest rows — debuts and returns, exactly where a minutes parameter earns its keep — and
+      // move every fitted constant for a reason no report would explain.
+      const stats = errorStats(observationsFor(run.rows, 'model'));
       return { value, rmse: stats.rmse, mae: stats.mae };
     });
     const best = scored.reduce((a, b) => (b.rmse < a.rmse ? b : a));
