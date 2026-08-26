@@ -1,11 +1,21 @@
-import { Controller, Get, Param, ParseIntPipe, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseIntPipe,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import {
   ApiEnvelopeError,
   ApiEnvelopeResponse,
 } from '../../common/swagger/api-envelope.decorator';
 import { markDataAsOf, type DataAsOfRequest } from '../../common/data-as-of';
-import { SquadErrorCode } from '../squad/squad.errors';
+import { ErrorCode } from '../../common/error-codes';
+import { AdviceRequestDto } from './dto/advice-request.dto';
 import { AdviceDto } from './dto/advice.dto';
 import { InsightsService } from './insights.service';
 
@@ -19,6 +29,34 @@ import { InsightsService } from './insights.service';
 @Controller('insights')
 export class InsightsController {
   constructor(private readonly insights: InsightsService) {}
+
+  @Post('advice')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Advice for a squad built by hand.',
+    description:
+      'The squad is validated first and refused if illegal: a captain and a bench for a team ' +
+      'that cannot be fielded would read as encouragement.',
+  })
+  @ApiEnvelopeResponse(AdviceDto, { description: 'The advice.' })
+  @ApiEnvelopeError(
+    400,
+    'SQUAD_ILLEGAL',
+    'That squad breaks at least one rule — the message lists every one.',
+  )
+  @ApiEnvelopeError(
+    409,
+    ErrorCode.UNKNOWN_PLAYER,
+    'One of those player ids does not exist.',
+  )
+  async adviceForBuilt(
+    @Body() body: AdviceRequestDto,
+    @Req() req: DataAsOfRequest,
+  ): Promise<AdviceDto> {
+    const advice = await this.insights.adviseBuilt(body.playerIds);
+    markDataAsOf(req, advice.gameweekId);
+    return advice;
+  }
 
   @Get('advice/recommended')
   @ApiOperation({
@@ -46,7 +84,7 @@ export class InsightsController {
   @ApiEnvelopeResponse(AdviceDto, { description: 'The advice.' })
   @ApiEnvelopeError(
     404,
-    SquadErrorCode.SQUAD_NOT_IMPORTED,
+    ErrorCode.SQUAD_NOT_IMPORTED,
     'Import the squad first: POST /api/squad/import.',
   )
   async adviceForManager(

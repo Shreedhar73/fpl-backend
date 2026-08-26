@@ -8,6 +8,7 @@ export interface PlayerRow {
   webName: string;
   position: Position;
   nowCost: number;
+  teamId: string;
   teamShortName: string;
 }
 
@@ -46,6 +47,7 @@ export class SquadRepository {
         webName: true,
         position: true,
         nowCost: true,
+        teamId: true,
         team: { select: { shortName: true } },
       },
     });
@@ -58,6 +60,7 @@ export class SquadRepository {
           webName: r.webName,
           position: r.position,
           nowCost: r.nowCost,
+          teamId: r.teamId,
           teamShortName: r.team.shortName,
         },
       ]),
@@ -73,6 +76,7 @@ export class SquadRepository {
         webName: true,
         position: true,
         nowCost: true,
+        teamId: true,
         team: { select: { shortName: true } },
       },
     });
@@ -85,6 +89,7 @@ export class SquadRepository {
           webName: r.webName,
           position: r.position,
           nowCost: r.nowCost,
+          teamId: r.teamId,
           teamShortName: r.team.shortName,
         },
       ]),
@@ -198,6 +203,7 @@ export class SquadRepository {
                 webName: true,
                 position: true,
                 nowCost: true,
+                teamId: true,
                 team: { select: { shortName: true } },
               },
             },
@@ -225,6 +231,7 @@ export class SquadRepository {
           webName: p.player.webName,
           position: p.player.position,
           nowCost: p.player.nowCost,
+          teamId: p.player.teamId,
           teamShortName: p.player.team.shortName,
         },
       })),

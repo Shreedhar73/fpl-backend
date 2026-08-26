@@ -1,6 +1,6 @@
 import { FplHttpError } from '../../../infra/fpl/fpl-api.client';
 import { SquadService } from '../squad.service';
-import { SquadErrorCode } from '../squad.errors';
+import { ErrorCode } from '../../../common/error-codes';
 import { ENTRY_1, PICKS_1, PLAYER_ROWS } from './fixtures';
 
 /**
@@ -173,7 +173,7 @@ describe('SquadService.importSquad — every failure gets its own code', () => {
       },
     });
     expect(await codeOf(service.importSquad(7))).toBe(
-      SquadErrorCode.MANAGER_NOT_FOUND,
+      ErrorCode.MANAGER_NOT_FOUND,
     );
   });
 
@@ -186,7 +186,7 @@ describe('SquadService.importSquad — every failure gets its own code', () => {
       },
     });
     expect(await codeOf(service.importSquad(1))).toBe(
-      SquadErrorCode.SQUAD_NOT_AVAILABLE_YET,
+      ErrorCode.SQUAD_NOT_AVAILABLE_YET,
     );
   });
 
@@ -200,7 +200,7 @@ describe('SquadService.importSquad — every failure gets its own code', () => {
     });
     // The distinction is the whole point: the manager plainly exists, we just fetched them.
     expect(await codeOf(service.importSquad(1))).toBe(
-      SquadErrorCode.SQUAD_NOT_AVAILABLE_YET,
+      ErrorCode.SQUAD_NOT_AVAILABLE_YET,
     );
   });
 
@@ -209,7 +209,7 @@ describe('SquadService.importSquad — every failure gets its own code', () => {
       repo: { gameweekExists: jest.fn().mockResolvedValue(false) },
     });
     expect(await codeOf(service.importSquad(1))).toBe(
-      SquadErrorCode.SQUAD_NOT_AVAILABLE_YET,
+      ErrorCode.SQUAD_NOT_AVAILABLE_YET,
     );
   });
 
@@ -222,7 +222,7 @@ describe('SquadService.importSquad — every failure gets its own code', () => {
       },
     });
     expect(await codeOf(service.importSquad(1))).toBe(
-      SquadErrorCode.FPL_UPSTREAM_UNAVAILABLE,
+      ErrorCode.FPL_UPSTREAM_UNAVAILABLE,
     );
   });
 
@@ -233,7 +233,7 @@ describe('SquadService.importSquad — every failure gets its own code', () => {
       },
     });
     expect(await codeOf(service.importSquad(1))).toBe(
-      SquadErrorCode.FPL_UPSTREAM_UNAVAILABLE,
+      ErrorCode.FPL_UPSTREAM_UNAVAILABLE,
     );
   });
 
@@ -242,9 +242,7 @@ describe('SquadService.importSquad — every failure gets its own code', () => {
     const { service, repo } = build({
       repo: { playersByFplId: jest.fn().mockResolvedValue(partial) },
     });
-    expect(await codeOf(service.importSquad(1))).toBe(
-      SquadErrorCode.UNKNOWN_PLAYER,
-    );
+    expect(await codeOf(service.importSquad(1))).toBe(ErrorCode.UNKNOWN_PLAYER);
     // And nothing was written — a 14-player squad must never reach the database.
     expect(repo.upsertSquad).not.toHaveBeenCalled();
   });
@@ -252,7 +250,7 @@ describe('SquadService.importSquad — every failure gets its own code', () => {
   it('SQUAD_NOT_IMPORTED when reading a manager we have never fetched', async () => {
     const { service } = build();
     expect(await codeOf(service.getSquad(4242))).toBe(
-      SquadErrorCode.SQUAD_NOT_IMPORTED,
+      ErrorCode.SQUAD_NOT_IMPORTED,
     );
   });
 });

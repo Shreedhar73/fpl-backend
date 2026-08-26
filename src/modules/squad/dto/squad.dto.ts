@@ -97,11 +97,12 @@ export class SquadDto {
   activeChip!: string | null;
 
   @ApiProperty({
-    enum: ['import', 'recommended'],
+    enum: ['import', 'recommended', 'built'],
     description:
-      'Where this squad came from. The advice is identical either way.',
+      'Which of the three ways this squad arrived (D-013). The advice is identical for all of ' +
+      'them — that is the point of one shape.',
   })
-  source!: 'import' | 'recommended';
+  source!: 'import' | 'recommended' | 'built';
 
   @ApiProperty({ type: [SquadPickDto] })
   picks!: SquadPickDto[];

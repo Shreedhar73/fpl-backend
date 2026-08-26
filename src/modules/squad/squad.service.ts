@@ -4,6 +4,11 @@ import type { RawEntry, RawEntryPicks } from '../../infra/fpl/fpl.types';
 import { OptimizerService } from '../optimizer/optimizer.service';
 import { SquadDto, SquadPickDto } from './dto/squad.dto';
 import { SquadError } from './squad.errors';
+import {
+  checkLegality,
+  type LegalityPlayer,
+  type LegalityResult,
+} from './legality';
 import { PersistedSquad, PlayerRow, SquadRepository } from './squad.repository';
 
 /**
@@ -178,6 +183,73 @@ export class SquadService {
       teamValue,
       activeChip: null,
       source: 'recommended',
+      picks,
+    };
+  }
+
+  /**
+   * Is this set of players a legal squad? Prices, positions and clubs come from our own store, not
+   * from the request — a client claiming a £4.0m Haaland gets the real price checked.
+   *
+   * Every limit is read through the ruleset in `scoring_config`, never a constant. An id with no
+   * player behind it is an error, the same as on the import path: a silently shorter squad would
+   * pass the very check being asked for.
+   */
+  async validateSquad(playerIds: string[]): Promise<LegalityResult> {
+    const found = await this.repo.playersByIds([...new Set(playerIds)]);
+    const missing = playerIds.filter((id) => !found.has(id));
+    if (missing.length > 0) throw SquadError.unknownPlayerIds(missing);
+
+    // Mapped from the request array rather than from the map, so a repeated id stays repeated and
+    // the duplicate check has something to find.
+    const players: LegalityPlayer[] = playerIds.map((id) => {
+      const p = found.get(id)!;
+      return {
+        playerId: p.id,
+        webName: p.webName,
+        position: p.position,
+        teamId: p.teamId,
+        teamShortName: p.teamShortName,
+        nowCost: p.nowCost,
+      };
+    });
+
+    return checkLegality(players, await this.optimizer.loadRules());
+  }
+
+  /**
+   * A hand-built squad in the same shape as an imported or recommended one, so the advice layer
+   * and the view treat all three identically. Not persisted: it belongs to no manager and has not
+   * been entered into FPL by anybody.
+   *
+   * Slots are assigned in the order given, which is enough for the advice — `arrangeSquad` picks
+   * the XI, the captain and the bench order from scratch and ignores whatever slots arrive.
+   */
+  async asSquadDto(playerIds: string[]): Promise<SquadDto> {
+    const found = await this.repo.playersByIds(playerIds);
+    const missing = playerIds.filter((id) => !found.has(id));
+    if (missing.length > 0) throw SquadError.unknownPlayerIds(missing);
+
+    const picks = playerIds.map((id, i) =>
+      toPickDto(found.get(id)!, {
+        slot: i + 1,
+        multiplier: 1,
+        isCaptain: false,
+        isViceCaptain: false,
+      }),
+    );
+    const teamValue = picks.reduce((sum, p) => sum + p.nowCost, 0);
+    const rules = await this.optimizer.loadRules();
+    const gameweekIds = (await this.optimizer.buildUniverse()).gameweekIds;
+
+    return {
+      managerId: null,
+      managerName: null,
+      gameweekId: gameweekIds[0],
+      bank: rules.budget() - teamValue,
+      teamValue,
+      activeChip: null,
+      source: 'built',
       picks,
     };
   }

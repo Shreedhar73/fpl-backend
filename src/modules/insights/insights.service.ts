@@ -7,6 +7,7 @@ import {
   type Universe,
 } from '../optimizer/optimizer.service';
 import { SquadService } from '../squad/squad.service';
+import { SquadError } from '../squad/squad.errors';
 import type { SquadDto } from '../squad/dto/squad.dto';
 import {
   AdviceDto,
@@ -51,6 +52,19 @@ export class InsightsService {
 
   async adviseRecommended(): Promise<AdviceDto> {
     return this.advise(await this.squads.getRecommendedSquad(), null);
+  }
+
+  /**
+   * Advice for a squad someone built by hand. It is validated first and refused if illegal —
+   * advising on an illegal squad would produce a captain and a bench for a team that cannot be
+   * fielded, which reads as encouragement.
+   */
+  async adviseBuilt(playerIds: string[]): Promise<AdviceDto> {
+    const verdict = await this.squads.validateSquad(playerIds);
+    if (!verdict.legal) {
+      throw SquadError.illegalSquad(verdict.violations.map((v) => v.message));
+    }
+    return this.advise(await this.squads.asSquadDto(playerIds), null);
   }
 
   private async advise(

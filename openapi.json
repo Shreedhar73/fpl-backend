@@ -221,6 +221,103 @@
         ]
       }
     },
+    "/api/squad/validate": {
+      "post": {
+        "description": "Returns EVERY broken rule, not just the first — a builder that reports one violation at a time makes the user play twenty questions with the form. Prices, positions and clubs are read from our own store, so the numbers cannot be supplied by the caller, and every limit comes from scoring_config rather than a constant.",
+        "operationId": "SquadController_validate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateSquadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The verdict, with the counts behind it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/SquadValidationDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "One of those player ids does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN_PLAYER"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Check whether a set of players is a legal squad.",
+        "tags": [
+          "squad"
+        ]
+      }
+    },
     "/api/squad/recommended": {
       "get": {
         "description": "Solved fresh, and deliberately not persisted to squads — it belongs to no manager, and every solve is already recorded in optimizer_runs.",
@@ -365,6 +462,140 @@
         "summary": "A previously imported squad, from our own store.",
         "tags": [
           "squad"
+        ]
+      }
+    },
+    "/api/insights/advice": {
+      "post": {
+        "description": "The squad is validated first and refused if illegal: a captain and a bench for a team that cannot be fielded would read as encouragement.",
+        "operationId": "InsightsController_adviceForBuilt",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdviceRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The advice.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/AdviceDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "That squad breaks at least one rule — the message lists every one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "SQUAD_ILLEGAL"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "One of those player ids does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN_PLAYER"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Advice for a squad built by hand.",
+        "tags": [
+          "insights"
         ]
       }
     },
@@ -716,9 +947,10 @@
             "type": "string",
             "enum": [
               "import",
-              "recommended"
+              "recommended",
+              "built"
             ],
-            "description": "Where this squad came from. The advice is identical either way."
+            "description": "Which of the three ways this squad arrived (D-013). The advice is identical for all of them — that is the point of one shape."
           },
           "picks": {
             "type": "array",
@@ -750,6 +982,90 @@
         },
         "required": [
           "managerId"
+        ]
+      },
+      "ViolationDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "SQUAD_SIZE",
+              "POSITION_QUOTA",
+              "BUDGET_EXCEEDED",
+              "CLUB_LIMIT",
+              "DUPLICATE_PLAYER",
+              "NO_LEGAL_FORMATION"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Written for a person, not a log."
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
+      "SquadValidationDto": {
+        "type": "object",
+        "properties": {
+          "legal": {
+            "type": "boolean"
+          },
+          "violations": {
+            "description": "EVERY broken rule, not just the first. A builder that reports one violation at a time makes the user play twenty questions with the form.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViolationDto"
+            }
+          },
+          "totalCost": {
+            "type": "number",
+            "description": "Total cost in tenths of a million."
+          },
+          "bank": {
+            "type": "number",
+            "description": "Budget minus cost, in tenths. Negative means over budget."
+          },
+          "positionCounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "How many of each position, against the quota."
+          },
+          "clubCounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "How many from each club, against the 3-per-club limit."
+          }
+        },
+        "required": [
+          "legal",
+          "violations",
+          "totalCost",
+          "bank",
+          "positionCounts",
+          "clubCounts"
+        ]
+      },
+      "ValidateSquadDto": {
+        "type": "object",
+        "properties": {
+          "playerIds": {
+            "description": "Our internal player ids (cuid). Order does not matter here.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "playerIds"
         ]
       },
       "EvidenceDto": {
@@ -1026,6 +1342,21 @@
           "players",
           "comparison",
           "notAdvisedOn"
+        ]
+      },
+      "AdviceRequestDto": {
+        "type": "object",
+        "properties": {
+          "playerIds": {
+            "description": "Our internal player ids (cuid) for the 15.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "playerIds"
         ]
       }
     }
