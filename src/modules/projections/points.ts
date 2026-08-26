@@ -53,8 +53,13 @@ export interface RealisedStats {
  * From GW1 2026/27, the paid/unpaid split is clean and leaves no room for another value:
  *   DEF — lowest paid 10, highest unpaid 9
  *   MID — lowest paid 12, highest unpaid 11
- *   FWD — nobody reached it (highest unpaid 8), so 12 is assumed from MID and is NOT yet confirmed
+ *   FWD — nobody reached it (highest unpaid 8)
  *   GKP — the category does not apply; every goalkeeper's count is 0
+ *
+ * **FWD confirmed 2026-08-26** by the 2025-26 archive (B-007 Phase 2b), which GW1 could not settle:
+ * across a full season, forwards at 10 (13 rows) and 11 (7 rows) went unpaid while 12 was paid, and
+ * re-scoring all 29,747 rows of that season with this table produced zero disagreements with the
+ * official totals. DEF and MID hold there too, on 250/202 and 199/153 rows either side.
  */
 export const DEFCON_THRESHOLD: Record<PositionCode, number> = {
   GKP: 0,
