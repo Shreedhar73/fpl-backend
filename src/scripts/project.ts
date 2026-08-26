@@ -24,9 +24,13 @@ async function main(): Promise<void> {
         `${summary.gameweekIds.join(', ')} — ${summary.rowsWritten} rows written`,
     );
     if (summary.baselineMaeVsEpNext !== null) {
-      log.log(`next-GW baseline: MAE vs ep_next = ${summary.baselineMaeVsEpNext}`);
+      log.log(
+        `next-GW baseline: MAE vs ep_next = ${summary.baselineMaeVsEpNext}`,
+      );
     }
-    log.log(`top expected points for GW${summary.nextGameweek} (ours | ep_next | horizon):`);
+    log.log(
+      `top expected points for GW${summary.nextGameweek} (ours | ep_next | horizon):`,
+    );
     for (const t of summary.top) {
       log.log(
         `  ${t.webName.padEnd(18)} ${t.nextGwEp.toFixed(2).padStart(6)} | ` +

@@ -23,6 +23,7 @@
     "prisma:studio": "prisma studio",
     "sync:fpl": "nest build && node dist/scripts/sync.js",
     "project": "nest build && node dist/scripts/project.js",
+    "optimize": "nest build && node dist/scripts/optimize.js",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "prisma:migrate": "prisma migrate dev",
@@ -42,6 +43,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "dotenv": "^17.4.2",
+    "highs": "^1.15.2",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"

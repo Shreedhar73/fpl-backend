@@ -25,6 +25,9 @@ export interface RawTeam {
 export interface RawElementType {
   id: number;
   singular_name_short: string; // 'GKP' | 'DEF' | 'MID' | 'FWD'
+  squad_select: number; // how many to pick in the 15
+  squad_min_play: number; // min in the XI
+  squad_max_play: number; // max in the XI
 }
 
 export interface RawElement {

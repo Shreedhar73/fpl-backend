@@ -10,6 +10,7 @@ import {
   mapOwnership,
   mapGameweekStat,
   mapSeasonHistory,
+  mapPositionQuotas,
   seasonLabel,
 } from './mappers';
 import { ElementSummary } from '../../infra/fpl/fpl.types';
@@ -75,6 +76,7 @@ export class SyncService {
         seasonLabel(data.events),
         data.game_config.scoring,
         data.game_config.rules,
+        mapPositionQuotas(data.element_types),
       );
 
       const teamId = await this.repo.teamIdByFplId();
