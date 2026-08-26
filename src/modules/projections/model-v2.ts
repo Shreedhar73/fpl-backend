@@ -100,6 +100,29 @@ export function projectFixtureV2(
 ): FixtureProjectionV2 {
   const ninetieths = minutes.expectedMinutes / 90;
 
+  // **The minutes states, and why every non-linear term is evaluated INSIDE them.**
+  //
+  // `distributions.ts` exists to enforce one rule: the expectation of a function is not the function
+  // of the expectation. v1 broke it on the COUNT — `E[saves]/3` instead of `E[floor(S/3)]` — and v2
+  // fixed that. The identical defect survived one argument earlier, on the MINUTES: every non-linear
+  // term was evaluated once at `expectedMinutes`, which is itself an expectation.
+  //
+  // A defender on 7.5 defensive actions per 90 who is 30% to start has `expectedMinutes` around 25,
+  // so lambda is about 1.9 and `P(X >= 10)` is nearly zero. What actually happens is that 30% of the
+  // time he plays 83 minutes at lambda 6.9 with a real chance of clearing the threshold, and 70% of
+  // the time he plays nothing. A threshold is convex in lambda, so averaging the minutes first
+  // destroys the tail. B-013 measured it: the term predicted 0.054 of its own base rate at 0.013.
+  //
+  // Two states, not a finer grid, because two is what the minutes model has fitted. Inventing a
+  // smoother minutes distribution here would be structure the parameters do not carry.
+  const states: { p: number; ninetieths: number }[] = [
+    { p: minutes.pStart, ninetieths: params.minutes.minutesGivenStart / 90 },
+    { p: minutes.pSub, ninetieths: params.minutes.minutesGivenSub / 90 },
+  ];
+  /** `Σ_s P(state s) × f(rate in state s)` — the mixture, rather than `f` at the mean. */
+  const overStates = (f: (ninetiethsInState: number) => number): number =>
+    states.reduce((total, s) => total + s.p * f(s.ninetieths), 0);
+
   // --- Appearance. v1 asked `E[minutes] >= 60 ? 2 : 1`, which pays a rotation risk like a certainty.
   const pShort = Math.max(0, minutes.pPlay - minutes.pSixtyPlus);
   const appearance =
@@ -132,12 +155,19 @@ export function projectFixtureV2(
   const csPoints = pCleanSheet * scoring.cleanSheet(position);
 
   // --- Goals conceded: -1 per TWO conceded, so E[floor(X/2)], not E[X]/2.
+  // Two separate corrections here, and they pull in opposite directions.
+  //
+  // 1. There is **no 60-minute gate on goals conceded.** `fpl-domain-rules`: only the clean sheet has
+  //    one. The rule is -1 per two goals conceded WHILE THE PLAYER IS ON THE PITCH, at any minute
+  //    count. Gating it on `pSixtyPlus` under-charged every player who comes on and concedes.
+  // 2. A player on the pitch for twenty minutes is not exposed to a full match's lambda, so the
+  //    lambda is scaled by the minutes of each state before the floor is taken.
   const concededUnit = scoring.goalsConceded(position);
-  const expectedConcededPenalties = expectedFloorDiv(goals.lambdaAgainst, 2);
+  const expectedConcededPenalties = overStates((n) =>
+    expectedFloorDiv(goals.lambdaAgainst * n, 2),
+  );
   const concededPoints =
-    concededUnit !== 0
-      ? minutes.pSixtyPlus * expectedConcededPenalties * concededUnit
-      : 0;
+    concededUnit !== 0 ? expectedConcededPenalties * concededUnit : 0;
 
   // --- Saves: 1 per THREE saves. Same defect, same fix. Saves scale with what the opponent creates,
   // so the fixture's lambda-against carries the shot volume.
@@ -145,7 +175,8 @@ export function projectFixtureV2(
     position === 'GKP' ? saveRate(rates, ninetieths, goals) : 0;
   const savePoints =
     position === 'GKP'
-      ? expectedFloorDiv(expectedSaves, 3) * scoring.savePoint()
+      ? overStates((n) => expectedFloorDiv(saveRate(rates, n, goals), 3)) *
+        scoring.savePoint()
       : 0;
 
   // --- Defensive contribution: a tail probability, not a linear ramp. The ramp over-paid exactly the
@@ -156,10 +187,12 @@ export function projectFixtureV2(
     rates.defcon90 * ninetieths * params.defcon.ratePer90ToMatch;
   const pDefcon =
     threshold > 0
-      ? thresholdProbability(
-          expectedDefconActions,
-          threshold,
-          params.defcon.dispersion,
+      ? overStates((n) =>
+          thresholdProbability(
+            rates.defcon90 * n * params.defcon.ratePer90ToMatch,
+            threshold,
+            params.defcon.dispersion,
+          ),
         )
       : 0;
   const defconPoints = defconUnit !== 0 ? pDefcon * defconUnit : 0;
