@@ -202,6 +202,75 @@ export class SyncRepository {
   }
 
   /** Append a price row per player only where `nowCost` differs from that player's latest row. */
+  /**
+   * The gameweek whose deadline has not yet passed, with that deadline — the one a snapshot describes.
+   *
+   * Null after the final deadline of a season, which is a real state and not an error: there is
+   * nothing left to take a snapshot of.
+   */
+  async nextDeadline(
+    now: Date,
+  ): Promise<{ gameweekId: number; deadlineTime: Date } | null> {
+    const row = await this.prisma.gameweek.findFirst({
+      where: { deadlineTime: { gt: now } },
+      orderBy: { id: 'asc' },
+      select: { id: true, deadlineTime: true },
+    });
+    return row
+      ? { gameweekId: row.id, deadlineTime: row.deadlineTime }
+      : null;
+  }
+
+  /**
+   * Capture what is knowable before a deadline, one row per player, upserted.
+   *
+   * Upsert rather than append on purpose: several captures per gameweek are expected as news moves,
+   * and the one that describes the decision is the LAST one before the deadline. Appending would
+   * leave the reader to guess which row mattered.
+   *
+   * Everything here is overwritten on the next sync and kept by no public archive — including
+   * `epNext`, which is the baseline the model is measured against. A gameweek not captured before its
+   * deadline cannot be reconstructed from anywhere afterwards.
+   */
+  async captureDeadlineSnapshot(
+    players: MappedPlayer[],
+    playerId: Map<number, string>,
+    gameweekId: number,
+    deadlineTime: Date,
+    capturedAt: Date,
+  ): Promise<number> {
+    const hoursToDeadline =
+      (deadlineTime.getTime() - capturedAt.getTime()) / 3_600_000;
+
+    let written = 0;
+    for (const p of players) {
+      const pid = playerId.get(p.fplId);
+      if (!pid) continue;
+      const data = {
+        status: p.status,
+        chanceOfPlayingNextRound: p.chanceOfPlayingNextRound,
+        news: p.news,
+        newsAddedAt: p.newsAddedAt,
+        epNext: p.epNext === null ? null : new Prisma.Decimal(p.epNext),
+        epThis: p.epThis === null ? null : new Prisma.Decimal(p.epThis),
+        form: p.form === null ? null : new Prisma.Decimal(p.form),
+        nowCost: p.nowCost,
+        penaltiesOrder: p.penaltiesOrder,
+        directFreekicksOrder: p.directFreekicksOrder,
+        cornersOrder: p.cornersOrder,
+        capturedAt,
+        hoursToDeadline: new Prisma.Decimal(hoursToDeadline.toFixed(2)),
+      };
+      await this.prisma.playerDeadlineSnapshot.upsert({
+        where: { playerId_gameweekId: { playerId: pid, gameweekId } },
+        create: { playerId: pid, gameweekId, ...data },
+        update: data,
+      });
+      written++;
+    }
+    return written;
+  }
+
   async appendPriceHistory(
     players: MappedPlayer[],
     playerId: Map<number, string>,

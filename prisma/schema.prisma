@@ -102,6 +102,7 @@ model Player {
   projections      Projection[]
   squadPicks       SquadPick[]
   archiveGameweeks ArchivePlayerGameweek[]
+  deadlineSnapshots PlayerDeadlineSnapshot[]
 
   @@index([teamId])
   @@index([position])
@@ -161,6 +162,7 @@ model Gameweek {
   playerStats PlayerGameweekStat[]
   projections Projection[]
   squads      Squad[]
+  deadlineSnapshots PlayerDeadlineSnapshot[]
 
   @@map("gameweeks")
 }
@@ -491,4 +493,57 @@ model ArchiveSeasonScoring {
   updatedAt DateTime @updatedAt
 
   @@map("archive_season_scoring")
+}
+
+/// DEADLINE SNAPSHOT — the only record of what was knowable BEFORE a gameweek.
+///
+/// `players` is a snapshot table: `status`, `chanceOfPlayingNextRound`, `epNext`, `epThis`, `form`,
+/// `nowCost` and the set-piece orders are overwritten on every sync, kept nowhere, and served by no
+/// public archive. After a deadline they say what was true AFTER the matches, so a minutes model
+/// backtested against them is reading the answer, and `ep_next` — the baseline the model is measured
+/// against — cannot be scored for any gameweek that has already gone.
+///
+/// This table is also the ONLY route to ever fitting the availability half of the minutes model: the
+/// community archive carries no per-gameweek `status` or `chance_of_playing` either (D-016), so
+/// nothing that has not been captured here can be recovered later from anywhere.
+///
+/// One row per player per gameweek, upserted, so the last capture before a deadline is the one kept.
+model PlayerDeadlineSnapshot {
+  id         String @id @default(cuid())
+  playerId   String
+  gameweekId Int
+
+  /// a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad
+  status String
+  /// null means FULLY FIT, not unknown. Treating null as 0 benches every healthy player.
+  chanceOfPlayingNextRound Int?
+  news        String?
+  newsAddedAt DateTime?
+
+  /// FPL's own expected points — the baseline the model has to beat, and unrecoverable once overwritten
+  epNext Decimal? @db.Decimal(6, 2)
+  epThis Decimal? @db.Decimal(6, 2)
+  form   Decimal? @db.Decimal(6, 2)
+
+  /// tenths of a million, the price the optimiser would actually have paid at this deadline
+  nowCost Int
+
+  /// set-piece duty — a large, cheap rate signal that flips without notice and is a scalar upstream
+  penaltiesOrder       Int?
+  directFreekicksOrder Int?
+  cornersOrder         Int?
+
+  /// when this was taken, NOT the deadline — several captures per gameweek are expected and the
+  /// latest one before the deadline is the one that describes the decision
+  capturedAt   DateTime @default(now())
+  /// hours between the capture and the deadline; a capture taken 20 hours out is weaker evidence
+  /// about a late fitness call than one taken at two, and the fit has to be able to tell them apart
+  hoursToDeadline Decimal @db.Decimal(6, 2)
+
+  player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  gameweek Gameweek @relation(fields: [gameweekId], references: [id])
+
+  @@unique([playerId, gameweekId])
+  @@index([gameweekId])
+  @@map("player_deadline_snapshot")
 }
