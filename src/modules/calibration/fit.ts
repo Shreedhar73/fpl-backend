@@ -213,6 +213,27 @@ export function fitParams(input: FitInput): FitReport {
     });
   };
 
+  // **Strength first, elasticities second, and the order is the whole experiment.** An elasticity
+  // fitted on top of a strength estimate that carries no information will fit to zero whatever the
+  // true fixture effect is — which is exactly what happened in B-007 and is what B-014 exists to
+  // test. So the definition of strength is chosen before anything is fitted on top of it.
+  //
+  // `goalsWeight = 0` is the incumbent, pure expected goals, and is the null candidate under D-023:
+  // if the grid is flat, the rebuild earned nothing and the model keeps the definition it had.
+  search(
+    'strength.goalsWeight',
+    [0, 0.25, 0.5, 0.75, 1],
+    (p, v) => ({ ...p, strength: { ...p.strength, goalsWeight: v } }),
+    'main',
+    0,
+  );
+  search(
+    'strength.decayHalfLife',
+    [0, 24, 16, 10, 6, 4],
+    (p, v) => ({ ...p, strength: { ...p.strength, decayHalfLife: v } }),
+    'main',
+    0,
+  );
   // Grids widened after the first run put three of four winners on an edge.
   search(
     'strength.confidenceMatches',
@@ -221,14 +242,17 @@ export function fitParams(input: FitInput): FitReport {
   );
   search(
     'attack.xgFixtureElasticity',
-    [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
+    // Widened for B-014: on the rebuilt strength the assist elasticity ran off the top of the old
+    // grid at 2, so both are given room above it. A grid that stops where the answer is is the same
+    // failure as a flat one — it returns a number that is the edge of the search, not the optimum.
+    [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4],
     (p, v) => ({ ...p, attack: { ...p.attack, xgFixtureElasticity: v } }),
     'main',
     0,
   );
   search(
     'attack.xaFixtureElasticity',
-    [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
+    [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4],
     (p, v) => ({ ...p, attack: { ...p.attack, xaFixtureElasticity: v } }),
     'main',
     0,

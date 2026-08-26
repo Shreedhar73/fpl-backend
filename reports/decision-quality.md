@@ -22,7 +22,7 @@ Population: **11648** of 29482 player-gameweeks — the rows every predictor cou
 
 | Predictor | rounds | Spearman | points captured @11 | precision @11 | points captured @15 | precision @15 | points captured @30 | precision @30 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| model | 37 | 0.533 | 36.3% | 12.5% | 38.5% | 15.3% | 43.2% | 22.5% |
+| model | 37 | 0.529 | 35.0% | 12.0% | 38.4% | 15.3% | 41.9% | 20.9% |
 | form | 37 | 0.574 | 33.5% | 11.5% | 34.5% | 12.6% | 40.1% | 20.1% |
 | priorSeason | 37 | 0.052 | 12.6% | 2.5% | 17.3% | 5.9% | 22.8% | 11.7% |
 
@@ -30,7 +30,7 @@ Population: **11648** of 29482 player-gameweeks — the rows every predictor cou
 
 | Predictor | rounds | Spearman | points captured @11 | precision @11 | points captured @15 | precision @15 | points captured @30 | precision @30 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| model | 37 | 0.506 | 43.2% | 23.8% | 47.5% | 31.0% | 62.5% | 50.8% |
+| model | 37 | 0.498 | 45.7% | 26.3% | 46.7% | 29.4% | 61.3% | 49.5% |
 | form | 37 | 0.544 | 42.9% | 22.4% | 47.1% | 28.8% | 61.1% | 49.1% |
 | priorSeason | 37 | -0.024 | 24.9% | 13.3% | 26.0% | 16.4% | 36.4% | 28.6% |
 
@@ -38,13 +38,13 @@ Population: **11648** of 29482 player-gameweeks — the rows every predictor cou
 
 | Predictor | rounds | Spearman | points captured @11 | precision @11 | points captured @15 | precision @15 | points captured @30 | precision @30 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| model | 37 | 0.147 | 39.9% | 19.4% | 42.9% | 23.4% | 51.2% | 37.4% |
+| model | 37 | 0.124 | 38.2% | 18.4% | 42.5% | 23.2% | 49.4% | 36.4% |
 | form | 37 | 0.081 | 37.8% | 18.7% | 39.4% | 20.5% | 48.7% | 35.3% |
 | priorSeason | 37 | 0.023 | 16.1% | 9.1% | 23.3% | 16.0% | 37.5% | 38.6% |
 
 ## What the ordering says
 
-Against `form`, over the whole field: Spearman **0.533** against **0.574**, and points captured @11 **36.3%** against **33.5%**.
+Against `form`, over the whole field: Spearman **0.529** against **0.574**, and points captured @11 **35.0%** against **33.5%**.
 
 **A split, and the split is the finding.** `form` orders the *whole field* better, and this model captures more points in the *top k* at every k measured. Those are not in conflict: a whole-field rank correlation is dominated by the mass of players who score nothing, which `form` ranks well by predicting nothing for them — and a squad optimiser never chooses between two players who will both blank. It chooses at the top, which is what points-captured@k measures. **On the part of the ranking the product uses, the model is ahead.**
 
@@ -64,19 +64,19 @@ The squads are chosen once, at **round 1**, by rules that read no model: the **t
 
 | Squad | Predictor | rounds | points | XI efficiency | captain regret |
 |---|---|---:|---:|---:|---:|
-| template (most-owned legal fifteen) | model | 37 | 1732 | 86.6% | 6.000 |
+| template (most-owned legal fifteen) | model | 37 | 1707 | 85.4% | 6.432 |
 | template (most-owned legal fifteen) | form | 37 | 1731 | 86.6% | 6.162 |
 | template (most-owned legal fifteen) | priorSeason | 37 | 1696 | 84.8% | 7.081 |
-| random #1 (seed 20260827) | model | 37 | 491 | 84.8% | 2.189 |
+| random #1 (seed 20260827) | model | 37 | 495 | 85.5% | 2.081 |
 | random #1 (seed 20260827) | form | 37 | 505 | 87.2% | 1.811 |
 | random #1 (seed 20260827) | priorSeason | 37 | 455 | 78.6% | 3.162 |
-| random #2 (seed 20260827) | model | 37 | 1002 | 84.6% | 4.865 |
+| random #2 (seed 20260827) | model | 37 | 985 | 83.1% | 5.324 |
 | random #2 (seed 20260827) | form | 37 | 995 | 84.0% | 5.054 |
 | random #2 (seed 20260827) | priorSeason | 37 | 1031 | 87.0% | 4.081 |
-| random #3 (seed 20260827) | model | 37 | 775 | 87.0% | 3.135 |
+| random #3 (seed 20260827) | model | 37 | 740 | 83.1% | 4.081 |
 | random #3 (seed 20260827) | form | 37 | 775 | 87.0% | 3.135 |
 | random #3 (seed 20260827) | priorSeason | 37 | 778 | 87.3% | 3.054 |
-| random #4 (seed 20260827) | model | 37 | 960 | 82.1% | 5.541 |
+| random #4 (seed 20260827) | model | 37 | 980 | 83.8% | 5.000 |
 | random #4 (seed 20260827) | form | 37 | 963 | 82.4% | 5.459 |
 | random #4 (seed 20260827) | priorSeason | 37 | 977 | 83.6% | 5.081 |
 
@@ -88,21 +88,19 @@ So each row below is **paired by round** — both predictors faced the same fixt
 
 | Squad | comparison | rounds | mean difference | ± s.e. | clears noise |
 |---|---|---:|---:|---:|---|
-| template (most-owned legal fifteen) | model − form | 37 | +0.03 | 0.81 | no |
-| template (most-owned legal fifteen) | model − priorSeason | 37 | +0.97 | 0.83 | no |
-| random #1 (seed 20260827) | model − form | 37 | -0.38 | 0.49 | no |
-| random #1 (seed 20260827) | model − priorSeason | 37 | +0.97 | 0.61 | no |
-| random #2 (seed 20260827) | model − form | 37 | +0.19 | 0.65 | no |
-| random #2 (seed 20260827) | model − priorSeason | 37 | -0.78 | 0.49 | no |
-| random #3 (seed 20260827) | model − form | 37 | +0.00 | 0.53 | no |
-| random #3 (seed 20260827) | model − priorSeason | 37 | -0.08 | 0.44 | no |
-| random #4 (seed 20260827) | model − form | 37 | -0.08 | 0.68 | no |
-| random #4 (seed 20260827) | model − priorSeason | 37 | -0.46 | 0.77 | no |
+| template (most-owned legal fifteen) | model − form | 37 | -0.65 | 0.89 | no |
+| template (most-owned legal fifteen) | model − priorSeason | 37 | +0.30 | 0.87 | no |
+| random #1 (seed 20260827) | model − form | 37 | -0.27 | 0.33 | no |
+| random #1 (seed 20260827) | model − priorSeason | 37 | +1.08 | 0.63 | no |
+| random #2 (seed 20260827) | model − form | 37 | -0.27 | 0.61 | no |
+| random #2 (seed 20260827) | model − priorSeason | 37 | -1.24 | 0.57 | **yes** |
+| random #3 (seed 20260827) | model − form | 37 | -0.95 | 0.46 | **yes** |
+| random #3 (seed 20260827) | model − priorSeason | 37 | -1.03 | 0.65 | no |
+| random #4 (seed 20260827) | model − form | 37 | +0.46 | 0.73 | no |
+| random #4 (seed 20260827) | model − priorSeason | 37 | +0.08 | 0.65 | no |
 
 
-**Nothing here separates the predictors.** Not one model-versus-`form` comparison clears two standard errors, and the sign of the difference flips across squads (2 of 5 positive). **This is a null result and it is reported as one** — the model does not make measurably better XI and captain decisions than `form` over one season, on any of these fifteens.
-
-That is not a contradiction of the ordering section above, and it is worth being precise about why. Given a **fixed** fifteen, most of the XI picks itself: the decisions left are a handful of marginal calls at the bench boundary and the armband, which is a much smaller surface than ranking six hundred players. The ordering advantage is real and this is the wrong instrument to see it with — **it shows up in which fifteen you own, not in how you arrange the fifteen you already have.** Testing that needs the transfers, which is Phase 3.
+**1 of 5** model-versus-`form` comparisons clear two standard errors: random #3 (seed 20260827) (-0.95).
 
 ## The simulated season
 
@@ -116,31 +114,29 @@ Each predictor picks its **own** opening fifteen and walks the season under the 
 
 | Policy | Squad picked by | rounds | **points** | transfers | hits | final team value |
 |---|---|---:|---:|---:|---:|---:|
-| no-transfer | model | 37 | **1714** | 0 | 0 | £99.1m |
+| no-transfer | model | 37 | **1623** | 0 | 0 | £98.9m |
 | no-transfer | form | 37 | **1172** | 0 | 0 | £97.4m |
 | no-transfer | priorSeason | 37 | **1131** | 0 | 0 | £97.4m |
-| no-transfer | template (crowd proxy) | 37 | **1732** | 0 | 0 | £98.2m |
-| greedy-1ft | model | 37 | **1946** | 36 | 0 | £98.0m |
+| no-transfer | template (crowd proxy) | 37 | **1707** | 0 | 0 | £98.2m |
+| greedy-1ft | model | 37 | **1943** | 37 | 0 | £98.4m |
 | greedy-1ft | form | 37 | **1807** | 37 | 0 | £97.7m |
 | greedy-1ft | priorSeason | 37 | **1148** | 2 | 0 | £97.5m |
-| greedy-1ft | template (crowd proxy) | 37 | **1966** | 37 | 0 | £97.9m |
+| greedy-1ft | template (crowd proxy) | 37 | **1917** | 37 | 0 | £98.5m |
 
 ### Is the difference bigger than the noise?
 
 | Policy | comparison | rounds | mean difference | ± s.e. | clears noise |
 |---|---|---:|---:|---:|---|
-| no-transfer | model − form | 37 | +14.65 | 2.67 | **yes** |
-| no-transfer | model − priorSeason | 37 | +15.76 | 2.63 | **yes** |
-| greedy-1ft | model − form | 37 | +3.76 | 2.88 | no |
-| greedy-1ft | model − priorSeason | 37 | +21.57 | 2.77 | **yes** |
+| no-transfer | model − form | 37 | +12.19 | 2.89 | **yes** |
+| no-transfer | model − priorSeason | 37 | +13.30 | 2.82 | **yes** |
+| greedy-1ft | model − form | 37 | +3.68 | 2.85 | no |
+| greedy-1ft | model − priorSeason | 37 | +21.49 | 2.76 | **yes** |
 
 ### What the simulated season says
 
-**Held all season, the model's opening fifteen is worth 1714 points against 1172** — a gap of 542 over the season, which clears the noise floor comfortably. This is the ordering advantage from the section above, showing up exactly where Phase 2 predicted it would: **in which fifteen you own, not in how you arrange a fifteen you already have.** Note what the `form` row actually is — form cannot pick an opening squad, so that squad was chosen by last season's points per 90.
+**Held all season, the model's opening fifteen is worth 1623 points against 1172** — a gap of 451 over the season, which clears the noise floor comfortably. This is the ordering advantage from the section above, showing up exactly where Phase 2 predicted it would: **in which fifteen you own, not in how you arrange a fifteen you already have.** Note what the `form` row actually is — form cannot pick an opening squad, so that squad was chosen by last season's points per 90.
 
-**Give both a transfer a week and most of that gap closes.** `form` goes from 1172 to 1807; the model goes from 1714 to 1946, a remaining gap of **139** which does **not** clear the noise floor. A weekly transfer is a powerful error-correction mechanism, and it corrects a weak opening squad faster than it improves a strong one. **A model that is better only before the first deadline is worth much less than the season totals first suggest.**
-
-**And the most uncomfortable number in this report: the crowd's opening fifteen, run under the same policy and the same projections, scores 1966 against the model's 1946 — 20 points better.** The only difference between those two runs is the opening squad, so this says our squad solve is worse than simply owning what everyone else owned. It is a proxy for the FPL average rather than the average itself, and it is not a flattering one. **Recorded as the headline finding it is**, not buried under the rows above.
+**Give both a transfer a week and most of that gap closes.** `form` goes from 1172 to 1807; the model goes from 1623 to 1943, a remaining gap of **136** which does **not** clear the noise floor. A weekly transfer is a powerful error-correction mechanism, and it corrects a weak opening squad faster than it improves a strong one. **A model that is better only before the first deadline is worth much less than the season totals first suggest.**
 
 **The bar B-012 set was: beat `form` on ordering AND on simulated season points, or say plainly that we did not.** Ordering: yes, on points-captured at every k. Season points: **only when neither side may transfer.** Once both can, the difference does not clear the noise floor. `modelVersion` does not move on this, and the serving version is not deleted — B-007 (D-020) established both rules and neither is met here.
 

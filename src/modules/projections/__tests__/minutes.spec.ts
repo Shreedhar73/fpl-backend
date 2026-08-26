@@ -98,6 +98,7 @@ const row = (over: Partial<HistoryRow>): HistoryRow => ({
   starts: 0,
   totalPoints: 0,
   goalsScored: 0,
+  ownGoals: 0,
   assists: 0,
   cleanSheets: 0,
   goalsConceded: 0,

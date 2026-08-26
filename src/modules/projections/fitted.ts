@@ -98,6 +98,8 @@ export const UNFITTED_PARAMS: FittedParams = {
     homeAdvantage: 1.15,
     confidenceMatches: 4,
     leagueGoalsPerTeamMatch: 1.4,
+    goalsWeight: 0,
+    decayHalfLife: 0,
   },
   minutes: {
     startIntercept: 0,
@@ -165,18 +167,28 @@ export const UNFITTED_PARAMS: FittedParams = {
  *   never-used fringe player and a first substitute the same 15.4%. `subSlope` **1.384** is steeper
  *   than 1, the opposite direction to `startSlope` — the lagged sub rate is heavily smoothed toward
  *   the population prior before the model sees it, so the fit un-shrinks it.
- * - **Both fixture elasticities fitted to 0**, and `confidenceMatches` ran to the top of its grid.
- *   Held-out RMSE says the fixture-strength signal does not improve a SINGLE-GAMEWEEK points
- *   prediction: player-level variance swamps it. That is a real finding rather than a broken input —
- *   the same strength still drives clean sheets and goals conceded through λ_against, where it does
- *   pay. It should not be read as "fixtures do not matter" over a multi-gameweek horizon, which this
- *   backtest does not measure.
+ * - **The fixture elasticities are non-zero now, and the reason they were zero was the input.**
+ *   B-007 fitted both to 0 with `confidenceMatches` at the top of its grid, and read it as "the
+ *   fixture signal does not survive single-gameweek variance". B-014 rebuilt team strength off
+ *   decay-weighted ACTUAL goals blended half-and-half with the old expected-goals sum, and every one
+ *   of those numbers moved: `goalsWeight` 0.5 on an interior optimum, `decayHalfLife` 6 rounds,
+ *   `confidenceMatches` **64 rather than the grid edge** — the shrinkage stops running away, because
+ *   there is now something worth not shrinking. On top of that, `xaFixtureElasticity` fits to
+ *   **2.5** and `xgFixtureElasticity` to **0.25**.
+ *
+ *   State the asymmetry honestly: the assist elasticity is a clear win (1.9470 at 0 against 1.9453
+ *   at 2.5), and the goal elasticity is barely identified — 0, 0.25 and 0.5 all score 1.9459-1.9461,
+ *   and only the far end of the grid is clearly worse. An elasticity fitted on top of an
+ *   uninformative strength estimate fits to zero whatever the truth is, which is what happened
+ *   before; that does not make every non-zero number that follows a strong one.
  */
 export const FITTED_PARAMS: FittedParams = {
   strength: {
     homeAdvantage: 1.1186408380003194,
-    confidenceMatches: 96,
+    confidenceMatches: 64,
     leagueGoalsPerTeamMatch: 1.5486291739894333,
+    goalsWeight: 0.5,
+    decayHalfLife: 6,
   },
   minutes: {
     startIntercept: -0.18790070079541765,
@@ -190,12 +202,12 @@ export const FITTED_PARAMS: FittedParams = {
     minutesGivenSub: 18.151633138654553,
   },
   attack: {
-    xgFixtureElasticity: 0,
-    xaFixtureElasticity: 0,
+    xgFixtureElasticity: 0.25,
+    xaFixtureElasticity: 2.5,
     goalsPerXg: 0.9890259541292118,
     assistsPerXa: 1.3951956123013418,
   },
-  defcon: { dispersion: 1.5, ratePer90ToMatch: 1 },
+  defcon: { dispersion: 1.5, ratePer90ToMatch: 1.1 },
   bonus: {
     bonusPerBps: 0.04173248388494878,
     bpsIntercept: -0.2839231900427406,
@@ -216,8 +228,9 @@ export const FITTED_PARAMS: FittedParams = {
     notes: [
       'The defensive-contribution parameters are the ONE exception to the holdout: that category exists only in 2025-26, so dispersion is fitted on rounds 1-12 and ratePer90ToMatch chosen on 13-19. Those rows are passed separately and no other parameter reads them — an earlier version folded them into the training set, where the frequency measurements iterated them too, so a quarter of the test season silently informed the whole fit while this note claimed otherwise.',
       'The availability multiplier is NOT fitted: the archive carries no per-gameweek status or chance_of_playing. It waits on player_deadline_snapshot (B-007 Phase 2) accumulating live gameweeks.',
-      'strength.confidenceMatches reached the top of its search grid — the optimum is at or beyond 96, meaning held-out RMSE keeps improving as team strength is shrunk toward the league average.',
-      'Both fixture elasticities fitted to 0 on single-gameweek RMSE. Team strength still drives clean sheets and goals conceded through lambda-against.',
+      'strength: rebuilt in B-014. A team goals for a fixture are the sum of its players goalsScored plus the opponent ownGoals — neither source carries a team score, so this rollup IS the definition and it is the same rollup on both sides. goalsWeight 0.5 blends that with the old expected-goals sum ON THE RATIO rather than on the raw rates, because the two have different league means. decayHalfLife 6 rounds applies to the goals side only, so goalsWeight 0 reproduces the incumbent model exactly and the search is a comparison rather than two changes at once.',
+      'strength.confidenceMatches is 64 and NO LONGER at the grid edge. Under the old definition the search ran to 96 and kept improving — held-out RMSE preferred shrinking team strength away entirely, because the signal it was shrinking was not worth keeping. An interior optimum is the direct evidence that the rebuilt estimate carries information.',
+      'The fixture elasticities are non-zero for the first time: xa 2.5, xg 0.25. The assist result is clear (1.9470 at zero against 1.9453 at 2.5); the goal result is weak — 0, 0.25 and 0.5 are within 0.0002 RMSE of each other and only the top of the grid is clearly worse.',
       'xaFixtureElasticity: the grid was FLAT — every value from 1.0 to 2.0 scored 1.9497 and the whole grid spanned 0.0007 RMSE. A grid search returns a winner whether or not its objective can tell the candidates apart, so the search now takes the NULL candidate (no effect) when the spread is under 0.001, and says so. Without that rule this parameter would have shipped as 1.5 — a claim that the fixture moves assists by half again, on evidence of seven ten-thousandths of a point.',
       'defcon.ratePer90ToMatch moved 0.9 -> 1.0 when the non-linear terms began integrating over the MINUTES distribution as well as the count (B-020). It had been absorbing part of that error: with the threshold evaluated once at average minutes, a lower rate was the least-bad compromise across nailed and rotated players. Any parameter fitted against a wrong shape is partly a correction for it.',
       'subIntercept/subSlope replace the scalar subAppearanceRate (B-019). Fitted on non-start rows only — the population the term is asked about at prediction time. subAppearanceRate is kept as the population rate the report quotes and as the flat-curve fallback.',

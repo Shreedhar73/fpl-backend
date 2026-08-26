@@ -37,6 +37,7 @@ export interface HistoryRow {
   starts: number;
   totalPoints: number;
   goalsScored: number;
+  ownGoals: number;
   assists: number;
   cleanSheets: number;
   goalsConceded: number;
@@ -233,9 +234,19 @@ export function* walkRounds(
         opponentTeamCode: row.opponentTeamCode,
         fixtureKey: `${row.season}|${row.round}|${row.fixture}`,
         expectedGoals: row.expectedGoals,
+        goalsScored: row.goalsScored,
+        ownGoals: row.ownGoals,
+        round: row.round,
       });
     }
-    league = buildLeague(strengthRows);
+    // Built AS OF the round after the one just folded in, which is the round it will be asked about.
+    // The decay is a function of that distance, so passing the wrong reference round would weight
+    // every match by one round too many and no output would look wrong.
+    league = buildLeague(
+      strengthRows,
+      round + 1,
+      params.strength.decayHalfLife,
+    );
   }
 }
 
