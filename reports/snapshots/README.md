@@ -6,7 +6,7 @@ anywhere and no public archive to backfill from. After a deadline they say what 
 matches, so a minutes model backtested against them is reading the answer.
 
 B-007 Phase 2 builds `player_deadline_snapshot` to record this properly. It cannot land before the
-GW2 deadline (**2026-08-28 11:45 UTC**), so the files here are a zero-code hedge for that one
+GW2 deadline (**2026-08-28 17:30 UTC**), so the files here were a zero-code hedge for that one
 gameweek: a `\copy` of `players` joined to `teams`, taken before the deadline and committed.
 
 Run from the `fpl-backend` root. This is server-side `COPY … TO STDOUT` redirected by the shell, **not**
@@ -47,5 +47,6 @@ Two things a future session needs to know:
 - **`chanceOfPlayingNextRound` empty means fully fit**, not unknown. CSV renders the `NULL` as an
   empty field, and reading it as 0 benches every healthy player.
 
-Once `player_deadline_snapshot` exists, this directory stops growing — GW3 onward lives in the
-database. These files stay as the record for GW2.
+`player_deadline_snapshot` now exists, and **GW2 was captured into it after all** (614 players, via
+`pnpm sync:fpl -- --snapshot`), so this directory stops growing here. The CSV stays as the floor it was
+taken to be, and as the only record of the state at 2026-08-26 15:45 UTC.

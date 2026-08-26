@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { CalibrationService } from './calibration.service';
 import { CalibrationRepository } from './calibration.repository';
+import { ForecastService } from './forecast.service';
+import { ForecastRepository } from './forecast.repository';
 
 /**
  * The calibration harness and the model fit (B-007 Phases 3 and 4). Reads the archive, writes a
@@ -12,7 +14,12 @@ import { CalibrationRepository } from './calibration.repository';
  */
 @Module({
   imports: [PrismaModule],
-  providers: [CalibrationService, CalibrationRepository],
-  exports: [CalibrationService],
+  providers: [
+    CalibrationService,
+    CalibrationRepository,
+    ForecastService,
+    ForecastRepository,
+  ],
+  exports: [CalibrationService, ForecastService],
 })
 export class CalibrationModule {}
