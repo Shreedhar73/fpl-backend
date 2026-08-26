@@ -1,6 +1,6 @@
 # GW2 2026/27 — projection and best squad
 
-Produced 2026-08-26 with `pnpm forecast && pnpm optimize`, model version **`v2-fitted-2026-08-26`**.
+Produced 2026-08-26 with `pnpm project && pnpm optimize`, model version **`v2-fitted-2026-08-26`**.
 Deadline **2026-08-28 17:30 UTC**.
 
 Every number here comes from the fitted model (B-007 Phase 4), not from FPL's `ep_next`. The inputs
@@ -65,4 +65,5 @@ these numbers, not a claim that it is right.
   It beats a trailing-form baseline on RMSE and bias and loses to it on MAE. It has never been
   measured against `ep_next`, which cannot be scored historically.
 - **This is one gameweek's snapshot.** Prices, news and set-piece duty move until the deadline; re-run
-  `pnpm sync:fpl -- --snapshot` and `pnpm forecast` closer to it.
+  `pnpm sync:fpl` and `pnpm project` closer to it. (Inside 36 hours of a deadline the sync
+  captures the snapshot itself; `--snapshot` forces one outside that window.)
