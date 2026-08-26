@@ -745,6 +745,56 @@
           "insights"
         ]
       }
+    },
+    "/api/players": {
+      "get": {
+        "description": "Served whole rather than paged: the row count is bounded by the game itself, and a picker filters across all of it at once. Expected points are null, not zero, for a player the model has not projected.",
+        "operationId": "PlayersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The player universe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PlayerListDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Every player in the game, with our expected points where we have them.",
+        "tags": [
+          "players"
+        ]
+      }
     }
   },
   "info": {
@@ -1357,6 +1407,100 @@
         },
         "required": [
           "playerIds"
+        ]
+      },
+      "PlayerListItemDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string",
+            "description": "Our internal id (cuid) — what the squad endpoints take."
+          },
+          "fplId": {
+            "type": "number"
+          },
+          "webName": {
+            "type": "string",
+            "example": "Haaland"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string",
+            "example": "MCI"
+          },
+          "nowCost": {
+            "type": "number",
+            "description": "Market price in tenths of a million."
+          },
+          "status": {
+            "type": "string",
+            "description": "a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad. Only \"a\" is safe to start."
+          },
+          "news": {
+            "type": "string",
+            "nullable": true,
+            "description": "The injury or availability note, when there is one."
+          },
+          "epNextGw": {
+            "type": "number",
+            "nullable": true,
+            "description": "Our expected points for the next gameweek. Null when the model has not projected this player — a null is not a zero, and the UI must not render it as one."
+          },
+          "playProbability": {
+            "type": "number",
+            "nullable": true,
+            "description": "P(features at all) next gameweek. The term that dominates every other one."
+          }
+        },
+        "required": [
+          "playerId",
+          "fplId",
+          "webName",
+          "position",
+          "teamShortName",
+          "nowCost",
+          "status",
+          "news",
+          "epNextGw",
+          "playProbability"
+        ]
+      },
+      "PlayerListDto": {
+        "type": "object",
+        "properties": {
+          "gameweekId": {
+            "type": "number",
+            "description": "Which gameweek the expected points are for. Null when nothing has been projected yet.",
+            "nullable": true
+          },
+          "modelVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "count": {
+            "type": "number",
+            "description": "Every player in the game. The list is bounded by the game itself — 612 in 2025/26 — so it is served whole rather than paged: a picker needs to filter across all of them at once."
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerListItemDto"
+            }
+          }
+        },
+        "required": [
+          "gameweekId",
+          "modelVersion",
+          "count",
+          "players"
         ]
       }
     }
