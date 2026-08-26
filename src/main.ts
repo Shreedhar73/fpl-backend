@@ -13,7 +13,11 @@ async function bootstrap() {
     credentials: true,
   });
   app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
   );
   app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());

@@ -10,15 +10,20 @@ import { map } from 'rxjs/operators';
 import type { ApiResponse } from '../dto/api-response.dto';
 
 @Injectable()
-export class ResponseEnvelopeInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
-  intercept(ctx: ExecutionContext, next: CallHandler<T>): Observable<ApiResponse<T>> {
+export class ResponseEnvelopeInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
+  intercept(
+    ctx: ExecutionContext,
+    next: CallHandler<T>,
+  ): Observable<ApiResponse<T>> {
     const started = Date.now();
     const http = ctx.switchToHttp();
     const requestId =
-      (http.getRequest<{ headers: Record<string, string> }>().headers['x-request-id'] as string) ??
-      randomUUID();
+      http.getRequest<{ headers: Record<string, string> }>().headers[
+        'x-request-id'
+      ] ?? randomUUID();
 
     return next.handle().pipe(
       map((data) => ({

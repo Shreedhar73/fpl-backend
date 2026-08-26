@@ -8,6 +8,10 @@ import { Controller, Get } from '@nestjs/common';
 export class HealthController {
   @Get()
   check() {
-    return { status: 'ok', service: 'fpl-backend', uptimeSeconds: Math.floor(process.uptime()) };
+    return {
+      status: 'ok',
+      service: 'fpl-backend',
+      uptimeSeconds: Math.floor(process.uptime()),
+    };
   }
 }

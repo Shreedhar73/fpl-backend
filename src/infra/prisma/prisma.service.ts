@@ -10,7 +10,10 @@ import { PrismaClient } from '../../generated/prisma/client';
  * (migrate, studio) lives in prisma.config.ts.
  */
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
   constructor() {
     super({
       adapter: new PrismaPg({

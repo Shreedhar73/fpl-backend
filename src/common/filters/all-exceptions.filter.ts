@@ -30,7 +30,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = body;
       } else if (body && typeof body === 'object') {
         const b = body as { message?: string | string[]; errorCode?: string };
-        message = Array.isArray(b.message) ? b.message.join('; ') : (b.message ?? message);
+        message = Array.isArray(b.message)
+          ? b.message.join('; ')
+          : (b.message ?? message);
         errorCode = b.errorCode ?? HttpStatus[status] ?? errorCode;
       }
     } else {
