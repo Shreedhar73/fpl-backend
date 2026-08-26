@@ -12,9 +12,23 @@ import { benchOrder, Lineup, scoreLineup, SquadMember } from './squad-scoring';
  * isolates exactly one decision: every predictor is handed the same fifteen (`fixed-squads.ts`), so
  * the only thing that differs is the XI, the bench order and the captain.
  *
- * A player with **no row** in a round is not an error and not a zero-scoring player who was picked
- * badly: their club had no fixture. They stay in the squad, score 0, and are eligible to be
- * substituted out like any other blank — which is what FPL does.
+ * **A player with no row is two different things, and conflating them is a leak.** Measured on the
+ * archive, 2026-08-27: only rounds 31 and 34 of 2025-26 carry fewer than twenty clubs, so a *club*
+ * with no rows really did have no fixture. A *player* with no row is another matter — 690 players
+ * have a round-1 row and 820 have one by round 29, because squads are registered and re-registered
+ * through the season. So absence encodes "was not selected" as often as "had no fixture", and "was
+ * not selected" is not knowable before a deadline.
+ *
+ * The rule that follows:
+ *
+ *  - **The club had no fixture** — a blank, and the fixture list is public well before the deadline.
+ *    Predicting 0 for them is legitimate foresight, and benching them is what a manager would do.
+ *  - **The club played and the player did not** — dropped, injured, or an unused substitute. That is
+ *    hindsight. Their **last known prediction is carried forward** so the lineup is chosen as it
+ *    would have been on the day; they then score 0 and are substituted out like any other blank.
+ *
+ * Without the second rule the model quietly benches every player who was about to be dropped, which
+ * is worth several points a season and looks exactly like a good minutes model.
  */
 
 export interface RoundDecision {
@@ -69,17 +83,31 @@ function blank(row: PredictionRow): SquadMember {
  * reusing `pickBestXi` directly because that one ranks `Candidate`s by horizon EP and this one ranks
  * squad members by one round's prediction, with a bench order that has to come back out.
  */
+export interface SquadSlot {
+  row: PredictionRow | null;
+  base: PredictionRow;
+  /**
+   * What the predictor last said about this player, for a round where they have no row **and their
+   * club did play**. Null when the club genuinely blanked, where predicting 0 is legitimate.
+   */
+  carried?: { points: number; pPlay: number } | null;
+}
+
 export function chooseLineup(
-  squad: { row: PredictionRow | null; base: PredictionRow }[],
+  squad: SquadSlot[],
   predictor: Predictor,
   rules: Rules,
 ): Lineup {
   const scored = squad.map((s) => ({
     member: s.row ? member(s.row) : blank(s.base),
-    // A player with no row this round has no prediction either — the model was never asked about a
-    // fixture that does not exist. Ranked last rather than dropped: they are still in the squad.
-    predictedPoints: s.row ? (s.row.predicted[predictor] ?? 0) : 0,
-    pPlay: s.row ? s.row.pPlay : 0,
+    // No row and no carried value means the club had no fixture — a blank, knowable from the public
+    // fixture list before the deadline, so ranking them last is foresight rather than hindsight.
+    // A carried value means the club DID play and this player did not, which is not knowable, so the
+    // lineup is chosen on what the predictor last said about them.
+    predictedPoints: s.row
+      ? (s.row.predicted[predictor] ?? 0)
+      : (s.carried?.points ?? 0),
+    pPlay: s.row ? s.row.pPlay : (s.carried?.pPlay ?? 0),
   }));
 
   const byPos = (p: PositionCode) =>
@@ -174,6 +202,41 @@ function ceilingFor(members: SquadMember[], rules: Rules): number {
   return best;
 }
 
+/**
+ * The clubs that had a fixture in a round, inferred from the rows themselves.
+ *
+ * There is no archive fixtures table. A club with no rows at all had no fixture — verified on
+ * 2025-26, where exactly two rounds (31 and 34) carry fewer than twenty clubs and every other round
+ * carries all twenty. The same inference at *player* level is unsafe and is why `SquadSlot.carried`
+ * exists.
+ */
+export function playingTeams(byCode: Map<number, PredictionRow>): Set<number> {
+  const teams = new Set<number>();
+  for (const r of byCode.values()) if (r.teamCode !== null) teams.add(r.teamCode);
+  return teams;
+}
+
+/**
+ * Build the slot for one owned player in one round, applying the blank-versus-dropped rule.
+ *
+ * `lastSeen` is the predictor's most recent word on each player, updated as the walk proceeds.
+ */
+export function slotFor(
+  base: PredictionRow,
+  byCode: Map<number, PredictionRow>,
+  playing: Set<number>,
+  lastSeen: Map<number, { points: number; pPlay: number }>,
+): SquadSlot {
+  const row = byCode.get(base.playerCode) ?? null;
+  if (row) return { row, base, carried: null };
+  const clubPlayed = base.teamCode !== null && playing.has(base.teamCode);
+  return {
+    row: null,
+    base,
+    carried: clubPlayed ? (lastSeen.get(base.playerCode) ?? null) : null,
+  };
+}
+
 export function decideOverSeason(
   squad: FixedSquad,
   rowsByRound: Map<number, Map<number, PredictionRow>>,
@@ -183,11 +246,13 @@ export function decideOverSeason(
 ): { rounds: RoundDecision[]; summary: DecisionSummary } {
   const rounds: RoundDecision[] = [];
 
+  const lastSeen = new Map<number, { points: number; pPlay: number }>();
+
   for (const [round, byCode] of [...rowsByRound.entries()].sort((a, b) => a[0] - b[0])) {
-    const present = squad.members.map((base) => ({
-      base,
-      row: byCode.get(base.playerCode) ?? null,
-    }));
+    const playing = playingTeams(byCode);
+    const present = squad.members.map((base) =>
+      slotFor(base, byCode, playing, lastSeen),
+    );
     // A squad whose every member is missing this round is a squad this comparison cannot score.
     if (present.every((p) => p.row === null)) continue;
 
@@ -196,6 +261,15 @@ export function decideOverSeason(
     const allMembers = present.map((p) => (p.row ? member(p.row) : blank(p.base)));
     const bestFielded = Math.max(...scored.fielded.map((m) => m.actual));
     const captain = scored.fielded.find((m) => m.playerCode === scored.doubled);
+
+    for (const p of present) {
+      if (p.row) {
+        lastSeen.set(p.row.playerCode, {
+          points: p.row.predicted[predictor] ?? 0,
+          pPlay: p.row.pPlay,
+        });
+      }
+    }
 
     rounds.push({
       season,
