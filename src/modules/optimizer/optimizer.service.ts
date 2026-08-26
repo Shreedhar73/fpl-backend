@@ -242,17 +242,25 @@ export class OptimizerService {
 
     // What the floor cost, in players rather than in adjectives: the same solve with the floor
     // lifted and LAMBDA unchanged, so the diff isolates B-010 and does not smuggle B-011 into it.
-    const unfiltered = solve(prunePool(candidates, { floor: false })).squad;
+    //
+    // Only when the run is persisted. Its one consumer is the reasoning JSON, which an unpersisted
+    // run throws away — and `insights` calls `run({ persist: false })` on every advice request, so
+    // computing it there is a second ILP solve per request that nothing ever reads.
     const chosen = new Set(inSquad.map((c) => c.key));
-    const wouldHaveMadeTheSquad = unfiltered
-      .filter((c) => !chosen.has(c.key) && c.appearances < MIN_APPEARANCES)
-      .map((c) => ({
-        playerId: c.playerId,
-        webName: c.webName,
-        position: c.position,
-        appearances: c.appearances,
-        ep: round2(c.ep),
-      }));
+    const wouldHaveMadeTheSquad =
+      opts.persist === false
+        ? []
+        : solve(prunePool(candidates, { floor: false }))
+            .squad.filter(
+              (c) => !chosen.has(c.key) && c.appearances < MIN_APPEARANCES,
+            )
+            .map((c) => ({
+              playerId: c.playerId,
+              webName: c.webName,
+              position: c.position,
+              appearances: c.appearances,
+              ep: round2(c.ep),
+            }));
 
     // best legal XI, captain, vice and bench order — the same arrangement `insights` applies to a
     // squad the optimizer did not choose.
