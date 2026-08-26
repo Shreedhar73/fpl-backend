@@ -41,6 +41,12 @@ function candidate(row: PredictionRow, objective: number): Candidate {
     cost: row.value,
     ep: objective,
     pPlay: row.pPlay,
+    // Walk-local, from the harness — never `appearanceCounts()`, which reads current state and would
+    // tell a round-1 squad how often each player would go on to feature (B-010, and the leak the
+    // B-011 session flagged). `buildLp` does not read this field today; the floor is applied in
+    // `prunePool`. It is carried honestly rather than stubbed, because a placeholder here becomes a
+    // silent filter the day anyone applies the floor to these squads.
+    appearances: row.appearances,
   };
 }
 

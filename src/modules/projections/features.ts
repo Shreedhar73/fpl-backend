@@ -56,6 +56,19 @@ export interface PlayerFeatures {
   /** appearances the rates rest on — thin samples are shrunk, and the report says how thin */
   minutesSample: number;
   matchesSample: number;
+  /**
+   * Premier League appearances — gameweek rows with **minutes > 0** — before this round.
+   *
+   * Not the same number as `matchesSample`, which counts every row including unused-sub zeros. The
+   * names are close and the values are not, which is a trap worth naming: B-010's appearance floor is
+   * defined on this one.
+   *
+   * **Accumulated by the walk, deliberately, rather than read from `appearanceCounts()`.** That query
+   * returns appearances as of *today*; handing it to a backtest at round 1 of a past season tells the
+   * caller how often a player *would go on to* feature. It is the same class of leak `walkRounds`
+   * exists to prevent, and it produces no error and nothing wrong-looking in the output.
+   */
+  appearancesSample: number;
   /** trailing-30-day points per match, recomputed rather than read: the archive has no `form` column */
   form: number | null;
   /** previous season's points per 90, the other baseline */
@@ -65,7 +78,10 @@ export interface PlayerFeatures {
 interface Accumulator {
   minutes: number;
   starts: number;
+  /** every row, including unused-sub zeros — NOT an appearance count. See `appearances`. */
   matches: number;
+  /** rows with minutes > 0 — the appearance count B-010's floor is defined on */
+  appearances: number;
   xg: number;
   xa: number;
   defcon: number;
@@ -81,6 +97,7 @@ const empty = (): Accumulator => ({
   minutes: 0,
   starts: 0,
   matches: 0,
+  appearances: 0,
   xg: 0,
   xa: 0,
   defcon: 0,
@@ -215,6 +232,7 @@ function fold(acc: Map<number, Accumulator>, row: HistoryRow): void {
   a.minutes += row.minutes;
   a.starts += row.starts;
   a.matches += 1;
+  if (row.minutes > 0) a.appearances += 1;
   a.xg += row.expectedGoals;
   a.xa += row.expectedAssists;
   a.saves += row.saves;
@@ -275,6 +293,7 @@ function featuresFor(
     laggedStartRate: s.matches > 0 ? s.starts / s.matches : c.matches > 0 ? c.starts / c.matches : 0.3,
     minutesSample: mins,
     matchesSample: c.matches,
+    appearancesSample: c.appearances,
     form,
     priorSeasonPointsPer90:
       prior && prior.minutes >= 450 ? (prior.points / prior.minutes) * 90 : null,

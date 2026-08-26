@@ -29,6 +29,7 @@ const row = (over: Partial<PredictionRow>): PredictionRow => ({
   minutes: 0,
   predicted: { model: 0, form: 0, priorSeason: 0 },
   pPlay: 1,
+  appearances: 10,
   ...over,
 });
 

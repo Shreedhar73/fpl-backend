@@ -65,6 +65,14 @@ export interface PredictionRow {
    * baseline a component of our model and then reporting that we beat it.
    */
   pPlay: number;
+  /**
+   * Premier League appearances before this round, accumulated by the walk.
+   *
+   * B-010's appearance floor is defined on this count, and a backtest cannot take it from
+   * `OptimizerRepository.appearanceCounts()`: that reads current state, so a squad built at round 1
+   * of a past season would be told how often each player *would go on to* feature.
+   */
+  appearances: number;
 }
 
 export interface RunOptions {
@@ -152,6 +160,7 @@ export function runBacktest(
           priorSeason: features.priorSeasonPointsPer90,
         },
         pPlay: minutes.pPlay,
+        appearances: features.appearancesSample,
       });
     }
   }

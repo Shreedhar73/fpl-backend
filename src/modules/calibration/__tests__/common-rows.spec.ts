@@ -163,6 +163,46 @@ describe('the comparison artefact', () => {
   });
 });
 
+describe('the appearance count the walk accumulates', () => {
+  it('counts rows with minutes, not rows — they are different numbers', () => {
+    // `matchesSample` counts every row including unused-sub zeros; `appearancesSample` counts only
+    // rows where the player featured. B-010's floor is defined on the second, and the names are
+    // close enough that taking the wrong one would pass review.
+    const rows = [
+      row({ season: '2024-25', round: 1, playerCode: 9, minutes: 0, starts: 0 }),
+      row({ season: '2024-25', round: 2, playerCode: 9, minutes: 90 }),
+      row({ season: '2024-25', round: 3, playerCode: 9, minutes: 0, starts: 0 }),
+      row({ season: '2024-25', round: 4, playerCode: 9, minutes: 90 }),
+    ];
+    const result = runBacktest(rows, UNFITTED_PARAMS, scoringFor, {
+      evaluate: (r) => r.round === 4,
+    });
+    // Three prior rows, one of which was a real appearance... two, at rounds 2 and 4 — but round 4
+    // is the one being predicted, so only round 2 counts.
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].appearances).toBe(1);
+  });
+
+  it('cannot see an appearance from the round it is predicting', () => {
+    // The leak this counter exists to avoid: `appearanceCounts()` reads current state, so a squad
+    // built at round 1 of a past season would be told how often each player would GO ON to feature.
+    const rows = [1, 2, 3, 4, 5].map((r) =>
+      row({ season: '2024-25', round: r, playerCode: 9, minutes: 90 }),
+    );
+    const result = runBacktest(rows, UNFITTED_PARAMS, scoringFor, {
+      evaluate: () => true,
+    });
+    // Round 1 is scored with nothing behind it and is skipped for having no prior appearance; each
+    // later round sees exactly the rounds before it, never its own and never the season's total.
+    expect(result.rows.map((r) => `${r.round}:${r.appearances}`)).toEqual([
+      '2:1',
+      '3:2',
+      '4:3',
+      '5:4',
+    ]);
+  });
+});
+
 describe('the fit must not inherit the restriction', () => {
   const root = join(__dirname, '../../../..');
   const source = readFileSync(
