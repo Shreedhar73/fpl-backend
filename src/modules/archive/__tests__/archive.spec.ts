@@ -221,10 +221,27 @@ describe('expectedDefconCount', () => {
 });
 
 describe('the reconstructed scoring tables', () => {
-  it('covers 2025-26 and deliberately not the earlier seasons', () => {
-    expect(scoringForSeason('2025-26')).toBeDefined();
-    expect(scoringForSeason('2024-25')).toBeUndefined();
-    expect(scoringForSeason('2023-24')).toBeUndefined();
+  it('covers all three held seasons', () => {
+    for (const season of ['2023-24', '2024-25', '2025-26']) {
+      expect(scoringForSeason(season)).toBeDefined();
+    }
+  });
+
+  it('prices the defensive-contribution category at 0 before it existed', () => {
+    // Not cosmetic. Scoring 2023-24 and 2024-25 with the current table gives every player points for
+    // a category those seasons did not have, so the model learns to predict points that could not be
+    // scored — and the fit answers by shrinking the term in the one season where it is real. Found
+    // while fitting, in B-007 Phase 4.
+    for (const season of ['2023-24', '2024-25']) {
+      const t = scoringForSeason(season)!;
+      expect(t.scoring.defensive_contribution).toEqual({
+        GKP: 0,
+        DEF: 0,
+        MID: 0,
+        FWD: 0,
+      });
+    }
+    expect(scoringForSeason('2025-26')!.scoring.defensive_contribution.DEF).toBe(2);
   });
 
   it('says what each table was checked against', () => {

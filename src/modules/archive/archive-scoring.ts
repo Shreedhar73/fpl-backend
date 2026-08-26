@@ -44,14 +44,35 @@ const SCORING_2025_26: RawScoring = {
 };
 
 /**
- * Only 2025-26 is entered.
+ * Before 2025-26 there was no defensive-contribution category at all.
  *
- * 2023-24 and 2024-25 are deliberately absent: they are optional depth for B-007 (the defensive
- * contribution knob — the one the over-projection is blamed on — exists only in 2025-26), and an
- * unentered season is skipped loudly by the importer rather than scored with the wrong table. Adding
- * one means entering its values and letting the same verification reject them if they are wrong.
+ * Entering these two seasons is not optional depth — it is a correctness fix found while fitting.
+ * Scoring 2023-24 and 2024-25 with the current table gives every player a defensive-contribution
+ * term in seasons where no such points existed, so the model learns to predict points that could not
+ * be scored and the fit responds by shrinking the term toward zero for every season including the one
+ * where it is real. The category is priced at 0 here, which is what "did not exist" means in a table
+ * whose shape is fixed.
  */
+const SCORING_PRE_DEFCON: RawScoring = {
+  ...SCORING_2025_26,
+  defensive_contribution: { GKP: 0, DEF: 0, MID: 0, FWD: 0 },
+};
+
 export const ARCHIVE_SCORING: ArchiveScoringTable[] = [
+  {
+    season: '2023-24',
+    scoring: SCORING_PRE_DEFCON,
+    source:
+      'the 2025-26 table with the defensive-contribution category priced at 0, since it did not ' +
+      'exist before 2025-26; proved by re-scoring the season with zero mismatches (2026-08-26)',
+  },
+  {
+    season: '2024-25',
+    scoring: SCORING_PRE_DEFCON,
+    source:
+      'the 2025-26 table with the defensive-contribution category priced at 0, since it did not ' +
+      'exist before 2025-26; proved by re-scoring the season with zero mismatches (2026-08-26)',
+  },
   {
     season: '2025-26',
     scoring: SCORING_2025_26,
