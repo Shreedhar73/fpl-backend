@@ -15,7 +15,7 @@ Trained on 2023-24 + 2024-25 (2024-25 rounds 20+ reserved for choosing shape par
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 28905 | 1.086 | 2.006 | -0.002 | 1.152 | 1.153 |
+| this model | 28905 | 1.108 | 2.002 | 0.064 | 1.218 | 1.153 |
 | baseline: form | 28905 | 1.042 | 2.131 | 0.012 | 1.166 | 1.153 |
 
 **Does not beat `form` on MAE** (it does on RMSE).
@@ -24,7 +24,7 @@ Trained on 2023-24 + 2024-25 (2024-25 rounds 20+ reserved for choosing shape par
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 11965 | 1.725 | 2.637 | -0.098 | 1.868 | 1.966 |
+| this model | 11965 | 1.757 | 2.632 | 0.008 | 1.974 | 1.966 |
 | baseline: last season points/90 | 11965 | 3.152 | 3.665 | 1.939 | 3.905 | 1.966 |
 
 **Beats last season's points per 90 on MAE.**
@@ -35,10 +35,10 @@ The same two predictors on the rows that also carry a prior-season baseline — 
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 11648 | 1.718 | 2.632 | -0.093 | 1.868 | 1.961 |
+| this model | 11648 | 1.750 | 2.627 | 0.012 | 1.973 | 1.961 |
 | baseline: form | 11648 | 1.742 | 2.813 | 0.019 | 1.980 | 1.961 |
 
-**Beats `form` here**, on rows where it loses over the full field. The difference between the two populations is fringe players: rows where the outcome is usually zero, where a near-zero prediction is very hard to beat on MAE, and which a squad optimiser never chooses between. That is the case for reading MAE over the whole field as the wrong verdict (D-020) — measured rather than argued.
+**Does not beat `form` here either**, which removes the "MAE is dominated by fringe players" explanation for the headline. That explanation is D-020's, and this is the test of it.
 
 ### The same three on every row each could reach
 
@@ -46,7 +46,7 @@ Not a comparison — three different populations. Kept because it is what was re
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 29482 | 1.091 | 2.011 | -0.004 | 1.154 | 1.158 |
+| this model | 29482 | 1.114 | 2.007 | 0.062 | 1.220 | 1.158 |
 | baseline: form (trailing 4 rounds) | 28905 | 1.042 | 2.131 | 0.012 | 1.166 | 1.153 |
 | baseline: last season points/90 | 11965 | 3.152 | 3.665 | 1.939 | 3.905 | 1.966 |
 
@@ -78,10 +78,10 @@ The rows the `form` comparison had to leave out. A count invites the reader to a
 
 | Position | n | MAE | RMSE | bias |
 |---|---:|---:|---:|---:|
-| DEF | 9463 | 1.232 | 2.179 | -0.048 |
-| FWD | 3183 | 1.145 | 2.119 | -0.022 |
-| GKP | 3330 | 0.676 | 1.454 | 0.025 |
-| MID | 12929 | 1.069 | 1.968 | 0.030 |
+| DEF | 9463 | 1.269 | 2.174 | 0.054 |
+| FWD | 3183 | 1.147 | 2.118 | -0.016 |
+| GKP | 3330 | 0.695 | 1.454 | 0.059 |
+| MID | 12929 | 1.088 | 1.963 | 0.093 |
 
 ## By price band
 
@@ -89,11 +89,11 @@ A single mean hides a directional error, which is the kind that matters most to 
 
 | Band | n | MAE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|
-| ≤ £5.0m | 20111 | 0.795 | 0.041 | 0.800 | 0.758 |
-| £5.1–7.0m | 7550 | 1.626 | -0.060 | 1.817 | 1.877 |
-| £7.1–9.0m | 1025 | 2.380 | -0.381 | 2.647 | 3.028 |
-| £9.1–11.0m | 145 | 2.813 | -0.400 | 2.807 | 3.207 |
-| > £11.0m | 74 | 3.702 | 0.286 | 4.894 | 4.608 |
+| ≤ £5.0m | 20111 | 0.818 | 0.103 | 0.861 | 0.758 |
+| £5.1–7.0m | 7550 | 1.650 | 0.021 | 1.899 | 1.877 |
+| £7.1–9.0m | 1025 | 2.384 | -0.338 | 2.690 | 3.028 |
+| £9.1–11.0m | 145 | 2.807 | -0.331 | 2.876 | 3.207 |
+| > £11.0m | 74 | 3.706 | 0.296 | 4.904 | 4.608 |
 
 ## Calibration
 
@@ -101,13 +101,13 @@ Error says how far off a prediction is; calibration says whether the model means
 
 | Predicted band | n | mean predicted | mean actual |
 |---|---:|---:|---:|
-| 0–1 | 15382 | 0.234 | 0.157 |
-| 1–2 | 6641 | 1.508 | 1.508 |
-| 2–3 | 4309 | 2.422 | 2.717 |
-| 3–4 | 2176 | 3.411 | 3.503 |
-| 4–5 | 325 | 4.320 | 3.708 |
-| 5–6 | 59 | 5.435 | 5.508 |
-| 6–8 | 13 | 6.400 | 3.692 |
+| 0–1 | 15007 | 0.229 | 0.137 |
+| 1–2 | 6184 | 1.535 | 1.379 |
+| 2–3 | 4794 | 2.436 | 2.585 |
+| 3–4 | 2410 | 3.432 | 3.440 |
+| 4–5 | 430 | 4.329 | 3.905 |
+| 5–6 | 67 | 5.452 | 5.149 |
+| 6–8 | 13 | 6.431 | 3.692 |
 
 ## Rows not scored
 
@@ -143,7 +143,7 @@ Error says how far off a prediction is; calibration says whether the model means
   },
   "defcon": {
     "dispersion": 1.5,
-    "ratePer90ToMatch": 0.9
+    "ratePer90ToMatch": 1
   },
   "bonus": {
     "bonusPerBps": 0.04173248388494878,

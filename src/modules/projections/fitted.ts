@@ -195,7 +195,7 @@ export const FITTED_PARAMS: FittedParams = {
     goalsPerXg: 0.9890259541292118,
     assistsPerXa: 1.3951956123013418,
   },
-  defcon: { dispersion: 1.5, ratePer90ToMatch: 0.9 },
+  defcon: { dispersion: 1.5, ratePer90ToMatch: 1 },
   bonus: {
     bonusPerBps: 0.04173248388494878,
     bpsIntercept: -0.2839231900427406,
@@ -219,6 +219,7 @@ export const FITTED_PARAMS: FittedParams = {
       'strength.confidenceMatches reached the top of its search grid — the optimum is at or beyond 96, meaning held-out RMSE keeps improving as team strength is shrunk toward the league average.',
       'Both fixture elasticities fitted to 0 on single-gameweek RMSE. Team strength still drives clean sheets and goals conceded through lambda-against.',
       'xaFixtureElasticity: the grid was FLAT — every value from 1.0 to 2.0 scored 1.9497 and the whole grid spanned 0.0007 RMSE. A grid search returns a winner whether or not its objective can tell the candidates apart, so the search now takes the NULL candidate (no effect) when the spread is under 0.001, and says so. Without that rule this parameter would have shipped as 1.5 — a claim that the fixture moves assists by half again, on evidence of seven ten-thousandths of a point.',
+      'defcon.ratePer90ToMatch moved 0.9 -> 1.0 when the non-linear terms began integrating over the MINUTES distribution as well as the count (B-020). It had been absorbing part of that error: with the threshold evaluated once at average minutes, a lower rate was the least-bad compromise across nailed and rotated players. Any parameter fitted against a wrong shape is partly a correction for it.',
       'subIntercept/subSlope replace the scalar subAppearanceRate (B-019). Fitted on non-start rows only — the population the term is asked about at prediction time. subAppearanceRate is kept as the population rate the report quotes and as the flat-curve fallback.',
     ],
   },
