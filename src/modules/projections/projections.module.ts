@@ -2,15 +2,25 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { ProjectionsService } from './projections.service';
 import { ProjectionsRepository } from './projections.repository';
+import { ForecastService } from './forecast.service';
+import { ForecastRepository } from './forecast.repository';
 
 /**
- * The projection half of the recommendation engine (B-004): expected points per player per gameweek
- * from the synced public data. Reads Postgres, writes `projections`; no FPL calls, no HTTP endpoint
- * (the read API is B-006). Exports the service so the `pnpm project` CLI and the optimizer (B-005) use it.
+ * The projection half of the recommendation engine: expected points per player per gameweek, from the
+ * fitted model (B-007). Reads Postgres and the archive, writes `projections`; no FPL calls, no HTTP
+ * endpoint.
+ *
+ * It exports `ForecastRepository` because the calibration harness reads history through it — one
+ * definition of what history is, shared by the backtest and the thing being served.
  */
 @Module({
   imports: [PrismaModule],
-  providers: [ProjectionsService, ProjectionsRepository],
-  exports: [ProjectionsService],
+  providers: [
+    ProjectionsService,
+    ProjectionsRepository,
+    ForecastService,
+    ForecastRepository,
+  ],
+  exports: [ProjectionsService, ProjectionsRepository, ForecastRepository],
 })
 export class ProjectionsModule {}

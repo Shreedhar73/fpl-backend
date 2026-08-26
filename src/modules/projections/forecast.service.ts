@@ -1,12 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PositionCode } from '../fpl-sync/mappers';
-import { Scoring } from '../projections/scoring';
-import { FITTED_PARAMS } from '../projections/fitted';
-import { minutesDistribution, projectFixtureV2 } from '../projections/model-v2';
-import { CalibrationRepository } from './calibration.repository';
+import { Scoring } from './scoring';
+import { FITTED_PARAMS } from './fitted';
+import { minutesDistribution, projectFixtureV2 } from './model-v2';
 import { ForecastRepository } from './forecast.repository';
 import { HistoryRow, walkRounds } from './features';
-import { TRAIN_SEASONS, TEST_SEASON } from './calibration.service';
+
 
 /**
  * Projects a real, upcoming gameweek with the fitted model (B-007 Phase 4e).
@@ -52,10 +51,7 @@ export interface ForecastSummary {
 export class ForecastService {
   private readonly log = new Logger(ForecastService.name);
 
-  constructor(
-    private readonly repo: ForecastRepository,
-    private readonly calibration: CalibrationRepository,
-  ) {}
+  constructor(private readonly repo: ForecastRepository) {}
 
   async forecast(
     gameweekId?: number,
@@ -80,9 +76,9 @@ export class ForecastService {
   async forecastMany(
     gameweekIds: number[],
   ): Promise<{ summary: ForecastSummary; players: PlayerForecast[] }[]> {
-    const scoring = Scoring.from(await this.calibration.liveScoring());
+    const scoring = Scoring.from(await this.repo.liveScoring());
     const [archive, current, playerId] = await Promise.all([
-      this.calibration.history([...TRAIN_SEASONS, TEST_SEASON]),
+      this.repo.archiveHistory(),
       this.repo.currentSeasonHistory(),
       this.repo.playerIdByCode(),
     ]);

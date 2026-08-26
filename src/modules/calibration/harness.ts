@@ -4,7 +4,7 @@ import {
   minutesDistribution,
   projectFixtureV2,
 } from '../projections/model-v2';
-import { HistoryRow, walkRounds } from './features';
+import { HistoryRow, walkRounds } from '../projections/features';
 import { Observation } from './metrics';
 
 /**

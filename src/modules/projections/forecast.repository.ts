@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { PositionCode } from '../fpl-sync/mappers';
 import { HistoryRow } from './features';
+import { RawScoring } from './scoring';
+
+/** The completed seasons held in `archive_player_gameweek` (B-007 Phase 2b). */
+export const ARCHIVE_SEASONS = ['2023-24', '2024-25', '2025-26'];
 
 /**
  * Reads for the forward projection: this season's own rows in the same shape as the archive's, plus
@@ -18,6 +22,62 @@ export class ForecastRepository {
 
   /** The label this season's rows carry, matching the archive's format so they sort after them. */
   static readonly CURRENT_SEASON = '2026-27';
+
+  /**
+   * Every archive row, as history.
+   *
+   * Lives here rather than in the calibration module because the SERVING path needs it: a projection
+   * for this August rests almost entirely on previous seasons. The backtest reads it through the same
+   * method, so there is one definition of what history is.
+   */
+  async archiveHistory(
+    seasons: string[] = ARCHIVE_SEASONS,
+  ): Promise<HistoryRow[]> {
+    const rows = await this.prisma.archivePlayerGameweek.findMany({
+      where: { season: { in: seasons } },
+      orderBy: [{ season: 'asc' }, { round: 'asc' }],
+      select: {
+        season: true,
+        round: true,
+        fixture: true,
+        playerCode: true,
+        webName: true,
+        position: true,
+        teamCode: true,
+        opponentTeamCode: true,
+        wasHome: true,
+        minutes: true,
+        starts: true,
+        totalPoints: true,
+        goalsScored: true,
+        assists: true,
+        cleanSheets: true,
+        goalsConceded: true,
+        saves: true,
+        bonus: true,
+        bps: true,
+        defensiveContribution: true,
+        expectedGoals: true,
+        expectedAssists: true,
+        value: true,
+      },
+    });
+    return rows.map((r) => ({
+      ...r,
+      position: r.position as PositionCode,
+      expectedGoals: Number(r.expectedGoals),
+      expectedAssists: Number(r.expectedAssists),
+    }));
+  }
+
+  /** The current season's scoring table, which is what an upcoming gameweek is scored under. */
+  async liveScoring(): Promise<RawScoring> {
+    const row = await this.prisma.scoringConfig.findFirst({
+      orderBy: { season: 'desc' },
+    });
+    if (!row) throw new Error('no scoring_config — run `pnpm sync:fpl` first');
+    return row.scoring as unknown as RawScoring;
+  }
 
   /**
    * This season's finished gameweeks, as `HistoryRow`.

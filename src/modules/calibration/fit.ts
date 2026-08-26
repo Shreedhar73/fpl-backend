@@ -3,7 +3,7 @@ import { Scoring } from '../projections/scoring';
 import { DEFCON_THRESHOLD } from '../projections/points';
 import { thresholdProbability } from '../projections/distributions';
 import { FittedParams, UNFITTED_PARAMS } from '../projections/fitted';
-import { HistoryRow, walkRounds } from './features';
+import { HistoryRow, walkRounds } from '../projections/features';
 import { runBacktest } from './harness';
 import { errorStats } from './metrics';
 

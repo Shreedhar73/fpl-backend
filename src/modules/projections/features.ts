@@ -5,9 +5,9 @@ import {
   GoalRates,
   League,
   StrengthInputRow,
-} from '../projections/strength';
-import { FittedParams } from '../projections/fitted';
-import { PlayerRates } from '../projections/model-v2';
+} from './strength';
+import { FittedParams } from './fitted';
+import { PlayerRates } from './model-v2';
 
 /**
  * Turns a season's rows into the features a projection is allowed to have seen, and nothing else.
