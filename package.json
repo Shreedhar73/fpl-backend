@@ -29,7 +29,9 @@
     "prisma:migrate": "prisma migrate dev",
     "postinstall": "prisma generate",
     "openapi:emit": "nest build && node dist/scripts/emit-openapi.js",
-    "import:archive": "nest build && node dist/scripts/import-archive.js"
+    "import:archive": "nest build && node dist/scripts/import-archive.js",
+    "calibrate": "nest build && node dist/scripts/calibrate.js",
+    "fit:model": "nest build && node dist/scripts/fit-model.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
