@@ -125,6 +125,9 @@ describe('team strength', () => {
       opponentTeamCode,
       fixtureKey,
       expectedGoals,
+      goalsScored: 0,
+      ownGoals: 0,
+      round: 1,
     }));
 
   it("reads a team's xG against off its opponent's xG for, in the same fixture", () => {
@@ -147,6 +150,8 @@ describe('team strength', () => {
       homeAdvantage: 1.2,
       confidenceMatches: 4,
       leagueGoalsPerTeamMatch: 1.5,
+      goalsWeight: 0,
+      decayHalfLife: 0,
     });
     // Cold start: league average, lifted by home advantage only.
     expect(r.lambdaFor).toBeCloseTo(1.5 * 1.2, 6);
@@ -174,6 +179,7 @@ describe('the feature walk', () => {
     starts: 1,
     totalPoints: 5,
     goalsScored: 0,
+    ownGoals: 0,
     assists: 0,
     cleanSheets: 0,
     goalsConceded: 0,

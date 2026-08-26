@@ -50,6 +50,7 @@ export class ForecastRepository {
         starts: true,
         totalPoints: true,
         goalsScored: true,
+        ownGoals: true,
         assists: true,
         cleanSheets: true,
         goalsConceded: true,
@@ -64,7 +65,7 @@ export class ForecastRepository {
     });
     return rows.map((r) => ({
       ...r,
-      position: r.position as PositionCode,
+      position: r.position,
       expectedGoals: Number(r.expectedGoals),
       expectedAssists: Number(r.expectedAssists),
     }));
@@ -92,9 +93,17 @@ export class ForecastRepository {
         orderBy: [{ gameweekId: 'asc' }],
       }),
       this.prisma.player.findMany({
-        select: { id: true, code: true, webName: true, position: true, teamId: true },
+        select: {
+          id: true,
+          code: true,
+          webName: true,
+          position: true,
+          teamId: true,
+        },
       }),
-      this.prisma.team.findMany({ select: { id: true, fplId: true, code: true } }),
+      this.prisma.team.findMany({
+        select: { id: true, fplId: true, code: true },
+      }),
     ]);
 
     const player = new Map(players.map((p) => [p.id, p]));
@@ -121,7 +130,7 @@ export class ForecastRepository {
         fixture: numberFor(s.fixtureId),
         playerCode: p.code,
         webName: p.webName,
-        position: p.position as PositionCode,
+        position: p.position,
         teamCode: codeByTeamId.get(p.teamId) ?? null,
         opponentTeamCode: codeByTeamFplId.get(s.opponentTeamFplId) ?? null,
         wasHome: s.wasHome,
@@ -129,6 +138,7 @@ export class ForecastRepository {
         starts: s.starts,
         totalPoints: s.totalPoints,
         goalsScored: s.goalsScored,
+        ownGoals: s.ownGoals,
         assists: s.assists,
         cleanSheets: s.cleanSheets,
         goalsConceded: s.goalsConceded,
@@ -192,7 +202,7 @@ export class ForecastRepository {
             fixture: 10_000 + index,
             playerCode: p.code,
             webName: p.webName,
-            position: p.position as PositionCode,
+            position: p.position,
             teamCode: codeByTeamId.get(teamId) ?? null,
             opponentTeamCode: codeByTeamId.get(opponentId) ?? null,
             wasHome: isHome,
@@ -200,6 +210,7 @@ export class ForecastRepository {
             starts: 0,
             totalPoints: 0,
             goalsScored: 0,
+            ownGoals: 0,
             assists: 0,
             cleanSheets: 0,
             goalsConceded: 0,
@@ -226,7 +237,12 @@ export class ForecastRepository {
    */
   async availabilityByCode(
     gameweekId: number,
-  ): Promise<Map<number, { status: string; chance: number | null; fromSnapshot: boolean }>> {
+  ): Promise<
+    Map<
+      number,
+      { status: string; chance: number | null; fromSnapshot: boolean }
+    >
+  > {
     const [players, snapshots] = await Promise.all([
       this.prisma.player.findMany({
         select: {
