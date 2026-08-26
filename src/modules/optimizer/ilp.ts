@@ -32,21 +32,33 @@ function expr(parts: string[]): string {
 
 export function buildLp(candidates: Candidate[], rules: Rules): string {
   const clubs = [...new Set(candidates.map((c) => c.teamId))];
-  const inPos = (pos: PositionCode) => candidates.filter((c) => c.position === pos);
-  const inClub = (teamId: string) => candidates.filter((c) => c.teamId === teamId);
+  const inPos = (pos: PositionCode) =>
+    candidates.filter((c) => c.position === pos);
+  const inClub = (teamId: string) =>
+    candidates.filter((c) => c.teamId === teamId);
 
   const lines: string[] = [];
   lines.push('Maximize');
-  lines.push(' obj: ' + expr(candidates.map((c) => `${c.ep.toFixed(4)} ${c.key}`)));
+  lines.push(
+    ' obj: ' + expr(candidates.map((c) => `${c.ep.toFixed(4)} ${c.key}`)),
+  );
 
   lines.push('Subject To');
-  lines.push(` squad: ${expr(candidates.map((c) => c.key))} = ${rules.squadSize()}`);
+  lines.push(
+    ` squad: ${expr(candidates.map((c) => c.key))} = ${rules.squadSize()}`,
+  );
   for (const pos of POSITIONS) {
-    lines.push(` sel_${pos}: ${expr(inPos(pos).map((c) => c.key))} = ${rules.squadSelect(pos)}`);
+    lines.push(
+      ` sel_${pos}: ${expr(inPos(pos).map((c) => c.key))} = ${rules.squadSelect(pos)}`,
+    );
   }
-  lines.push(` budget: ${expr(candidates.map((c) => `${c.cost} ${c.key}`))} <= ${rules.budget()}`);
+  lines.push(
+    ` budget: ${expr(candidates.map((c) => `${c.cost} ${c.key}`))} <= ${rules.budget()}`,
+  );
   for (const teamId of clubs) {
-    lines.push(` club_${teamId}: ${expr(inClub(teamId).map((c) => c.key))} <= ${rules.clubLimit()}`);
+    lines.push(
+      ` club_${teamId}: ${expr(inClub(teamId).map((c) => c.key))} <= ${rules.clubLimit()}`,
+    );
   }
 
   lines.push('Binary');
@@ -74,15 +86,37 @@ export function pickBestXi(squad: Candidate[], rules: Rules): XiResult {
   const mid = byPos('MID');
   const fwd = byPos('FWD');
 
-  let best: { starters: Set<string>; formation: string; ep: number } | null = null;
-  for (let d = rules.minPlay('DEF'); d <= Math.min(rules.maxPlay('DEF'), def.length); d++) {
-    for (let m = rules.minPlay('MID'); m <= Math.min(rules.maxPlay('MID'), mid.length); m++) {
+  let best: { starters: Set<string>; formation: string; ep: number } | null =
+    null;
+  for (
+    let d = rules.minPlay('DEF');
+    d <= Math.min(rules.maxPlay('DEF'), def.length);
+    d++
+  ) {
+    for (
+      let m = rules.minPlay('MID');
+      m <= Math.min(rules.maxPlay('MID'), mid.length);
+      m++
+    ) {
       const f = rules.xiSize() - 1 - d - m; // outfield left for FWD
-      if (f < rules.minPlay('FWD') || f > Math.min(rules.maxPlay('FWD'), fwd.length)) continue;
-      const chosen = [...gk.slice(0, 1), ...def.slice(0, d), ...mid.slice(0, m), ...fwd.slice(0, f)];
+      if (
+        f < rules.minPlay('FWD') ||
+        f > Math.min(rules.maxPlay('FWD'), fwd.length)
+      )
+        continue;
+      const chosen = [
+        ...gk.slice(0, 1),
+        ...def.slice(0, d),
+        ...mid.slice(0, m),
+        ...fwd.slice(0, f),
+      ];
       const ep = chosen.reduce((s, c) => s + c.ep, 0);
       if (!best || ep > best.ep) {
-        best = { starters: new Set(chosen.map((c) => c.key)), formation: `${d}-${m}-${f}`, ep };
+        best = {
+          starters: new Set(chosen.map((c) => c.key)),
+          formation: `${d}-${m}-${f}`,
+          ep,
+        };
       }
     }
   }

@@ -325,8 +325,18 @@ model SquadPick {
   multiplier   Int     @default(1)
   isCaptain    Boolean @default(false)
   isViceCaptain Boolean @default(false)
-  /// what we would get back on a sale: purchase price + half the rise, rounded down
-  sellValue    Int
+  /// What we would get back on a sale: purchase price + half the rise, rounded down.
+  ///
+  /// NULLABLE, and null is the normal state for an imported squad. No public endpoint carries a
+  /// purchase or selling price — `entry/{id}/event/{gw}/picks/` has neither (verified against the
+  /// live API 2026-08-26), and both live in `my-team/{id}/`, which is 403 without authentication.
+  /// We never authenticate (D-013).
+  ///
+  /// Do NOT fill this with `nowCost` to avoid the null. Only the transfer planner (B-008) reads it,
+  /// and its entire job is that sell value differs from market price — an approximation here is a
+  /// wrong number consumed there with no tell, where a null is loud. B-008 reconstructs it by
+  /// replaying `entry/{id}/transfers/` against `player_price_history`.
+  sellValue    Int?
 
   squad  Squad  @relation(fields: [squadId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id])

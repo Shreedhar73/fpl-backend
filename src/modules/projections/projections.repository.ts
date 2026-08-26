@@ -197,8 +197,14 @@ export class ProjectionsRepository {
       const homeFpl = fplByCuid.get(f.homeTeamId);
       const awayFpl = fplByCuid.get(f.awayTeamId);
       if (homeFpl === undefined || awayFpl === undefined) continue;
-      add(f.homeTeamId, f.gameweekId, { fdr: f.homeDifficulty, opponentFplId: awayFpl });
-      add(f.awayTeamId, f.gameweekId, { fdr: f.awayDifficulty, opponentFplId: homeFpl });
+      add(f.homeTeamId, f.gameweekId, {
+        fdr: f.homeDifficulty,
+        opponentFplId: awayFpl,
+      });
+      add(f.awayTeamId, f.gameweekId, {
+        fdr: f.awayDifficulty,
+        opponentFplId: homeFpl,
+      });
     }
     return map;
   }
@@ -209,7 +215,12 @@ export class ProjectionsRepository {
       this.prisma.team.findMany({ select: { id: true, fplId: true } }),
       this.prisma.player.findMany({ select: { id: true, teamId: true } }),
       this.prisma.playerGameweekStat.findMany({
-        select: { playerId: true, fixtureId: true, opponentTeamFplId: true, expectedGoals: true },
+        select: {
+          playerId: true,
+          fixtureId: true,
+          opponentTeamFplId: true,
+          expectedGoals: true,
+        },
       }),
     ]);
     const fplByCuid = new Map(teams.map((t) => [t.id, t.fplId]));
@@ -225,7 +236,10 @@ export class ProjectionsRepository {
       if (teamFpl === undefined) continue;
       const xg = this.dec(s.expectedGoals);
       xgFor.set(teamFpl, (xgFor.get(teamFpl) ?? 0) + xg);
-      xgAgainst.set(s.opponentTeamFplId, (xgAgainst.get(s.opponentTeamFplId) ?? 0) + xg);
+      xgAgainst.set(
+        s.opponentTeamFplId,
+        (xgAgainst.get(s.opponentTeamFplId) ?? 0) + xg,
+      );
       const set = matches.get(teamFpl) ?? new Set<string>();
       set.add(s.fixtureId);
       matches.set(teamFpl, set);

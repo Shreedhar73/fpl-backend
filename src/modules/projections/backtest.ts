@@ -13,10 +13,16 @@ export interface TimeCutRow {
   dataChecked: boolean;
 }
 
-export function withinTimeCut(row: TimeCutRow, targetGameweek: number): boolean {
+export function withinTimeCut(
+  row: TimeCutRow,
+  targetGameweek: number,
+): boolean {
   return row.gameweekId < targetGameweek && row.dataChecked;
 }
 
-export function timeCut<T extends TimeCutRow>(rows: T[], targetGameweek: number): T[] {
+export function timeCut<T extends TimeCutRow>(
+  rows: T[],
+  targetGameweek: number,
+): T[] {
   return rows.filter((r) => withinTimeCut(r, targetGameweek));
 }

@@ -162,3 +162,58 @@ export interface ElementSummary {
   history: RawElementHistory[];
   history_past: RawSeasonHistory[];
 }
+
+// --- entry/{manager_id}/ — the public import surface (decision D-013). Read-only, no credential.
+//     Field lists verified against the live API on 2026-08-26; see the fpl-api-reference skill.
+
+export interface RawEntry {
+  id: number;
+  player_first_name: string;
+  player_last_name: string;
+  name?: string;
+  started_event: number;
+  /** The gameweek this manager is currently on. Null before their first one. */
+  current_event: number | null;
+  summary_overall_points: number | null;
+  summary_overall_rank: number | null;
+  /** tenths of a million */
+  last_deadline_bank?: number | null;
+  /** tenths of a million */
+  last_deadline_value?: number | null;
+}
+
+export interface RawEntryPick {
+  /** the player's FPL element id */
+  element: number;
+  /** 1–11 starting XI, 12–15 bench in substitution order */
+  position: number;
+  multiplier: number;
+  is_captain: boolean;
+  is_vice_captain: boolean;
+  element_type: number;
+}
+
+export interface RawEntryHistoryEvent {
+  event: number;
+  points: number;
+  total_points: number;
+  /** tenths of a million */
+  bank: number;
+  /** tenths of a million — squad value excluding the bank */
+  value: number;
+  event_transfers: number;
+  event_transfers_cost: number;
+  points_on_bench: number;
+}
+
+/**
+ * NOTE what is NOT here: `purchase_price` and `selling_price`. Neither exists on any public
+ * endpoint — both live in `my-team/{id}/`, which is 403 without authentication, and we never
+ * authenticate (D-013). That is why an imported SquadPick carries a null sellValue.
+ */
+export interface RawEntryPicks {
+  active_chip: string | null;
+  automatic_subs: unknown[];
+  entry_history: RawEntryHistoryEvent;
+  picks: RawEntryPick[];
+}

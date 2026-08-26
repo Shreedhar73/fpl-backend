@@ -3,7 +3,11 @@ import { Scoring, RawScoring } from '../scoring';
 import { projectFixture } from '../model';
 import { blendRates } from '../projections.service';
 import { withinTimeCut, timeCut } from '../backtest';
-import { effectiveDifficulty, leagueAverageXg, TeamRating } from '../team-strength';
+import {
+  effectiveDifficulty,
+  leagueAverageXg,
+  TeamRating,
+} from '../team-strength';
 import { PlayerRow, PriorAggregate } from '../projections.repository';
 
 /**
@@ -56,13 +60,23 @@ describe('projectFixture — scoring comes from config, not constants', () => {
   const rates = { xg90: 0.5, xa90: 0.3, defcon90: 0, saves90: 0 };
 
   it('scales the goals term with the config goal value (break-on-purpose)', () => {
-    const base = projectFixture('FWD', mins, rates, { attackDifficulty: 3, defenceDifficulty: 3 }, Scoring.from(SCORING), 0);
+    const base = projectFixture(
+      'FWD',
+      mins,
+      rates,
+      { attackDifficulty: 3, defenceDifficulty: 3 },
+      Scoring.from(SCORING),
+      0,
+    );
     const doubled = projectFixture(
       'FWD',
       mins,
       rates,
       { attackDifficulty: 3, defenceDifficulty: 3 },
-      Scoring.from({ ...SCORING, goals_scored: { ...SCORING.goals_scored, FWD: 8 } }),
+      Scoring.from({
+        ...SCORING,
+        goals_scored: { ...SCORING.goals_scored, FWD: 8 },
+      }),
       0,
     );
     // FWD goal value 4 -> 8 must roughly double the goals component. A hardcoded table would not move.
@@ -70,8 +84,22 @@ describe('projectFixture — scoring comes from config, not constants', () => {
   });
 
   it('gives a defender the position goal value, higher than a forward for the same xG', () => {
-    const def = projectFixture('DEF', mins, rates, { attackDifficulty: 3, defenceDifficulty: 3 }, Scoring.from(SCORING), 0);
-    const fwd = projectFixture('FWD', mins, rates, { attackDifficulty: 3, defenceDifficulty: 3 }, Scoring.from(SCORING), 0);
+    const def = projectFixture(
+      'DEF',
+      mins,
+      rates,
+      { attackDifficulty: 3, defenceDifficulty: 3 },
+      Scoring.from(SCORING),
+      0,
+    );
+    const fwd = projectFixture(
+      'FWD',
+      mins,
+      rates,
+      { attackDifficulty: 3, defenceDifficulty: 3 },
+      Scoring.from(SCORING),
+      0,
+    );
     expect(def.components.goals).toBeGreaterThan(fwd.components.goals); // DEF goal 6 > FWD 4
   });
 
@@ -88,8 +116,22 @@ describe('projectFixture — scoring comes from config, not constants', () => {
   });
 
   it('an easier fixture lifts the attacking return', () => {
-    const easy = projectFixture('FWD', mins, rates, { attackDifficulty: 2, defenceDifficulty: 2 }, Scoring.from(SCORING), 0);
-    const hard = projectFixture('FWD', mins, rates, { attackDifficulty: 5, defenceDifficulty: 5 }, Scoring.from(SCORING), 0);
+    const easy = projectFixture(
+      'FWD',
+      mins,
+      rates,
+      { attackDifficulty: 2, defenceDifficulty: 2 },
+      Scoring.from(SCORING),
+      0,
+    );
+    const hard = projectFixture(
+      'FWD',
+      mins,
+      rates,
+      { attackDifficulty: 5, defenceDifficulty: 5 },
+      Scoring.from(SCORING),
+      0,
+    );
     expect(easy.components.goals).toBeGreaterThan(hard.components.goals);
   });
 });
@@ -137,7 +179,7 @@ describe('blendRates — early-season shrinkage toward prior seasons', () => {
 
 describe('team-strength effective difficulty', () => {
   const leagueAvg = 1.4;
-  const K = 4; // confidence constant in the module
+  // The module's confidence constant is 4; `matches: 20` below is deliberately well past it.
   // A team with lots of matches so the xG signal is trusted, not shrunk back toward FDR.
   const played = (xgFor: number, xgAgainst: number): TeamRating => ({
     fplId: 1,
@@ -147,7 +189,11 @@ describe('team-strength effective difficulty', () => {
   });
 
   it('falls back to FDR when the opponent has no matches played yet', () => {
-    const d = effectiveDifficulty(4, { fplId: 1, matches: 0, xgForPerMatch: 0, xgAgainstPerMatch: 0 }, leagueAvg);
+    const d = effectiveDifficulty(
+      4,
+      { fplId: 1, matches: 0, xgForPerMatch: 0, xgAgainstPerMatch: 0 },
+      leagueAvg,
+    );
     expect(d.attackDifficulty).toBe(4);
     expect(d.defenceDifficulty).toBe(4);
   });
@@ -163,8 +209,16 @@ describe('team-strength effective difficulty', () => {
   });
 
   it('shrinks back toward FDR when few matches have been played (low confidence)', () => {
-    const thin = effectiveDifficulty(5, { fplId: 1, matches: 1, xgForPerMatch: 1.4, xgAgainstPerMatch: 3.0 }, leagueAvg);
-    const rich = effectiveDifficulty(5, { fplId: 1, matches: 20, xgForPerMatch: 1.4, xgAgainstPerMatch: 3.0 }, leagueAvg);
+    const thin = effectiveDifficulty(
+      5,
+      { fplId: 1, matches: 1, xgForPerMatch: 1.4, xgAgainstPerMatch: 3.0 },
+      leagueAvg,
+    );
+    const rich = effectiveDifficulty(
+      5,
+      { fplId: 1, matches: 20, xgForPerMatch: 1.4, xgAgainstPerMatch: 3.0 },
+      leagueAvg,
+    );
     // both point the same way (easier), but the one-match estimate stays closer to the FDR of 5.
     expect(thin.attackDifficulty).toBeGreaterThan(rich.attackDifficulty);
   });

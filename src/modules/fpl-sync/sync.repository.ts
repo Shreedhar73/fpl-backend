@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
-import { Prisma, Position } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import {
   MappedTeam,
   MappedPlayer,

@@ -20,10 +20,11 @@ export class ResponseEnvelopeInterceptor<T> implements NestInterceptor<
   ): Observable<ApiResponse<T>> {
     const started = Date.now();
     const http = ctx.switchToHttp();
-    const requestId =
-      http.getRequest<{ headers: Record<string, string> }>().headers[
-        'x-request-id'
-      ] ?? randomUUID();
+    const req = http.getRequest<{
+      headers: Record<string, string>;
+      dataAsOfGw?: number;
+    }>();
+    const requestId = req.headers['x-request-id'] ?? randomUUID();
 
     return next.handle().pipe(
       map((data) => ({
@@ -36,6 +37,12 @@ export class ResponseEnvelopeInterceptor<T> implements NestInterceptor<
           requestId,
           durationMs: Date.now() - started,
           generatedAt: new Date().toISOString(),
+          // Set by a controller through `markDataAsOf` when the response carries model output.
+          // Read here rather than in the handler because the gameweek is only known once the
+          // handler has run.
+          ...(req.dataAsOfGw === undefined
+            ? {}
+            : { dataAsOfGw: req.dataAsOfGw }),
         },
       })),
     );

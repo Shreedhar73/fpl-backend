@@ -16,9 +16,15 @@ import { SyncService, SyncRunSummary } from '../modules/fpl-sync/sync.service';
 async function main(): Promise<void> {
   const log = new Logger('sync');
   const args = process.argv.slice(2);
-  const mode = args.includes('--full') ? 'full' : args.includes('--live') ? 'live' : 'incremental';
+  const mode = args.includes('--full')
+    ? 'full'
+    : args.includes('--live')
+      ? 'live'
+      : 'incremental';
 
-  const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });
+  const app = await NestFactory.createApplicationContext(AppModule, {
+    logger: ['error', 'warn', 'log'],
+  });
   try {
     const sync = app.get(SyncService);
     let summaries: SyncRunSummary[];
@@ -33,7 +39,8 @@ async function main(): Promise<void> {
 
     for (const s of summaries) {
       const line = `${s.endpoint.padEnd(24)} ${s.status.padEnd(8)} ${s.rowsWritten} rows`;
-      if (s.status === 'failed') log.error(`${line}${s.error ? ` — ${s.error}` : ''}`);
+      if (s.status === 'failed')
+        log.error(`${line}${s.error ? ` — ${s.error}` : ''}`);
       else log.log(line);
     }
 
