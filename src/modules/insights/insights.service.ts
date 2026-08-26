@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Candidate } from '../optimizer/ilp';
+import { penalisedSquadEp, type Candidate } from '../optimizer/ilp';
+import { MIN_APPEARANCES } from '../optimizer/policy';
 import {
   arrangeSquad,
   OptimizerService,
@@ -75,10 +76,16 @@ export class InsightsService {
     const nextGw = universe.gameweekIds[0];
 
     const mine = this.candidatesFor(squad, universe);
-    const arranged = arrangeSquad(mine, universe.rules);
+    // The user's squad is arranged under the SAME penalised objective the recommendation was solved
+    // under, so the two XIs and the two captains mean the same thing.
+    const arranged = arrangeSquad(mine, universe.rules, universe.collisions);
 
     // A fresh optimal solve, unpersisted: this runs on every advice request purely to measure a
     // gap, and filling optimizer_runs with those would bury the solves a human asked for.
+    // The GUARDED optimum: what we would actually recommend, not a bigger and misleading gap against
+    // an optimum we would refuse to serve. The penalty totals that explain the difference are written
+    // to `optimizer_runs.reasoning` by the solve; surfacing them in the UI is B-009's territory, and
+    // this plan changes no DTO.
     const optimal = await this.optimizer.run({ persist: false });
     const optimalCandidates = this.byPlayerId(universe, optimal.squad);
     const optimalArranged = {
@@ -102,12 +109,31 @@ export class InsightsService {
     const horizonGap = round2(
       squadHorizonEp(optimalCandidates) - squadHorizonEp(mine),
     );
-    if (horizonGap < 0) {
-      // Not a user-facing case: the optimizer is optimal over the same universe, so this can only
-      // mean the two sides were built from different numbers.
+    // A negative RAW horizon gap is now a legitimate outcome, and this check had to stop treating it
+    // as a bug. Three things let a user squad out-score the recommendation on raw EP:
+    //
+    //   1. the appearance floor (B-010) — a squad may hold players the optimizer refuses to bet on;
+    //   2. the collision penalty (B-011) — the optimizer maximises `EP - lambda x pairs`, not `EP`;
+    //   3. pool pruning, which predates both and was always a (much smaller) hole in the old claim.
+    //
+    // What is still an invariant, and what is logged: over a squad the optimizer *could* have chosen
+    // — every player eligible and in the pool it solved over — the optimum must win on the PENALISED
+    // quantity. Both sides are computed here by the same function over the same universe numbers,
+    // never against the solver's objective value, which is built from rounded coefficients.
+    const eligibleForTheSolve = mine.every(
+      (c) => c.appearances >= MIN_APPEARANCES,
+    );
+    const minePenalised = penalisedSquadEp(mine, universe.collisions);
+    const optimalPenalised = penalisedSquadEp(
+      optimalCandidates,
+      universe.collisions,
+    );
+    if (eligibleForTheSolve && minePenalised > optimalPenalised + 1e-6) {
       this.log.error(
-        `negative horizon gap (${horizonGap}) for manager ${managerId ?? 'recommended'} — ` +
-          'the squad and the optimum were measured against different universes',
+        `a legal squad beat the optimum on penalised horizon EP ` +
+          `(${round2(minePenalised)} vs ${round2(optimalPenalised)}) for manager ` +
+          `${managerId ?? 'recommended'} — the two sides were built from different numbers, ` +
+          'or the pool pruned a player the optimum needed',
       );
     }
 
@@ -167,6 +193,7 @@ export class InsightsService {
         cost: pick.nowCost,
         ep: 0,
         pPlay: 0,
+        appearances: 0,
       };
     });
   }

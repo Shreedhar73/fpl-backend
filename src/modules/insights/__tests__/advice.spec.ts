@@ -11,6 +11,7 @@ const c = (playerId: string, ep: number): Candidate => ({
   cost: 50,
   ep,
   pPlay: 1,
+  appearances: 50,
 });
 
 const p = (playerId: string, role: SquadPlayer['role']): SquadPlayer => ({
