@@ -17,7 +17,7 @@ import { HistoryRow, walkRounds } from '../../projections/features';
 import { UNFITTED_PARAMS, FITTED_PARAMS } from '../../projections/fitted';
 import { minutesDistribution, projectFixtureV2 } from '../../projections/model-v2';
 import { Scoring, RawScoring } from '../../projections/scoring';
-import { calibrationCurve, errorStats } from '../metrics';
+import { calibrationCurve, errorStats, Observation } from '../metrics';
 
 /**
  * Tests for the model the archive made possible (B-007 Phases 3 and 4).
@@ -255,18 +255,38 @@ describe('projectFixtureV2', () => {
   });
 });
 
+/**
+ * An `Observation` with the identity fields filled in.
+ *
+ * They became required in B-012 because a mean is the only thing an anonymous observation supports —
+ * it cannot be ranked against its round, put in a squad, or named. These tests are about arithmetic,
+ * so the identity is scenery, but it is not optional scenery.
+ */
+function obs(over: Partial<Observation> & { predicted: number; actual: number }): Observation {
+  return {
+    position: 'MID',
+    value: 50,
+    season: 's',
+    round: 1,
+    playerCode: 1,
+    webName: 'Player',
+    teamCode: 1,
+    ...over,
+  };
+}
+
 describe('metrics', () => {
   it('reports bias with a sign, since direction is the whole diagnosis', () => {
     const over = errorStats([
-      { predicted: 3, actual: 1, position: 'MID', value: 70, season: 's', round: 1 },
+      obs({ predicted: 3, actual: 1, value: 70 }),
     ]);
     expect(over.bias).toBe(2);
   });
 
   it('buckets on fixed edges so two models can be compared row for row', () => {
     const curve = calibrationCurve([
-      { predicted: 0.5, actual: 1, position: 'MID', value: 50, season: 's', round: 1 },
-      { predicted: 5.5, actual: 4, position: 'MID', value: 50, season: 's', round: 1 },
+      obs({ predicted: 0.5, actual: 1 }),
+      obs({ predicted: 5.5, actual: 4 }),
     ]);
     expect(curve[0].n).toBe(1);
     expect(curve.find((b) => b.lower === 5)!.n).toBe(1);

@@ -6,14 +6,21 @@ import { FittedParams, FITTED_PARAMS, UNFITTED_PARAMS } from '../projections/fit
 import { scoringForSeason } from '../archive/archive-scoring';
 import { CalibrationRepository } from './calibration.repository';
 import { HistoryRow } from '../projections/features';
-import { runBacktest } from './harness';
+import {
+  commonRows,
+  excludedRows,
+  observationsFor,
+  runBacktest,
+} from './harness';
 import {
   byPosition,
   byPriceBand,
   calibrationCurve,
+  describePopulation,
   errorStats,
   ErrorStats,
   Observation,
+  PopulationSummary,
 } from './metrics';
 import { fitParams, FitReport } from './fit';
 
@@ -118,9 +125,19 @@ export class CalibrationService {
       evaluate: (row) => row.season === TEST_SEASON,
     });
 
-    const model = errorStats(result.model);
-    const baselineForm = errorStats(result.baselineForm);
-    const baselinePriorSeason = errorStats(result.baselinePriorSeason);
+    // Every comparison runs on the rows BOTH of its predictors could score, PAIRWISE (B-012
+    // invariant 3). Not a single three-way intersection: `priorSeason` needs 450 minutes last
+    // season, so intersecting all three at once shrinks the population to 11,648 of 29,482 and
+    // answers "does the model beat form" on a set of rows chosen by a third predictor that the
+    // question does not involve. Pairwise gives each comparison the largest population that is
+    // genuinely common to it.
+    const vsForm = commonRows(result.rows, ['model', 'form']);
+    const vsPrior = commonRows(result.rows, ['model', 'priorSeason']);
+    const model = errorStats(observationsFor(vsForm, 'model'));
+    const baselineForm = errorStats(observationsFor(vsForm, 'form'));
+    const baselinePriorSeason = errorStats(
+      observationsFor(vsPrior, 'priorSeason'),
+    );
 
     const path = await this.writeReport(label, params, result, rows);
 
@@ -139,7 +156,9 @@ export class CalibrationService {
       baselineForm,
       baselinePriorSeason,
       beatsForm: model.mae < baselineForm.mae,
-      beatsPriorSeason: model.mae < baselinePriorSeason.mae,
+      beatsPriorSeason:
+        errorStats(observationsFor(vsPrior, 'model')).mae <
+        baselinePriorSeason.mae,
       path,
     };
   }
@@ -182,9 +201,25 @@ export class CalibrationService {
     result: ReturnType<typeof runBacktest>,
     rows: HistoryRow[],
   ): Promise<string> {
-    const model = errorStats(result.model);
-    const form = errorStats(result.baselineForm);
-    const prior = errorStats(result.baselinePriorSeason);
+    // Pairwise, not a single three-way intersection — see `evaluate`.
+    const vsForm = commonRows(result.rows, ['model', 'form']);
+    const vsPrior = commonRows(result.rows, ['model', 'priorSeason']);
+    const common = vsForm;
+    const excluded = excludedRows(result.rows, ['model', 'form']);
+    const model = errorStats(observationsFor(vsForm, 'model'));
+    const form = errorStats(observationsFor(vsForm, 'form'));
+    const modelVsPrior = errorStats(observationsFor(vsPrior, 'model'));
+    // `form` and the model on the rows that ALSO carry a prior-season baseline — i.e. players with
+    // 450+ minutes last season. Same comparison, different population, and the contrast is the point.
+    const established = commonRows(result.rows, ['model', 'form', 'priorSeason']);
+    const prior = errorStats(observationsFor(vsPrior, 'priorSeason'));
+
+    // The same three on every row each predictor could reach, which is what B-007 reported and what
+    // made its headline gap partly bookkeeping. Kept beside the headline so the difference between
+    // the two tables IS the finding, rather than something a reader has to be told about.
+    const modelAll = errorStats(observationsFor(result.rows, 'model'));
+    const formAll = errorStats(observationsFor(result.rows, 'form'));
+    const priorAll = errorStats(observationsFor(result.rows, 'priorSeason'));
 
     const lines: string[] = [];
     const w = (s = '') => lines.push(s);
@@ -209,17 +244,105 @@ export class CalibrationService {
     w();
     w(`## Headline`);
     w();
+    w(
+      `**Each comparison runs on the rows both of its predictors could score.** That restriction is ` +
+        `B-012's, and it changes the answer: a baseline scored over a different population is not a ` +
+        `comparison. \`form\` produces no number for a player with no trailing round — a season debut, ` +
+        `a return from a long injury, a new signing — and those are the hardest rows in the corpus, ` +
+        `so leaving them on one side of the comparison only made part of the gap bookkeeping.`,
+    );
+    w();
+    w(
+      `**Pairwise rather than one three-way intersection**, because \`priorSeason\` needs 450 minutes ` +
+        `last season and intersecting all three at once would answer "does this model beat \`form\`" ` +
+        `on a population chosen by a third predictor the question does not involve.`,
+    );
+    w();
+    w(`### Against \`form\` — trailing 4 rounds`);
+    w();
     w(`| Model | n | MAE | RMSE | bias | mean predicted | mean actual |`);
     w(`|---|---:|---:|---:|---:|---:|---:|`);
     w(row('this model', model));
-    w(row('baseline: form (trailing 4 rounds)', form));
+    w(row('baseline: form', form));
+    w();
+    w(
+      model.mae < form.mae
+        ? `**Beats \`form\` on MAE** (and ${model.rmse < form.rmse ? 'on' : 'not on'} RMSE).`
+        : `**Does not beat \`form\` on MAE** (${model.rmse < form.rmse ? 'it does on RMSE' : 'nor on RMSE'}).`,
+    );
+    w();
+    w(`### Against last season's points per 90`);
+    w();
+    w(`| Model | n | MAE | RMSE | bias | mean predicted | mean actual |`);
+    w(`|---|---:|---:|---:|---:|---:|---:|`);
+    w(row('this model', modelVsPrior));
     w(row('baseline: last season points/90', prior));
     w();
     w(
-      model.mae < form.mae && model.mae < prior.mae
-        ? `**Beats both baselines on MAE.**`
-        : `**Does NOT beat both baselines on MAE.** Recorded as it stands; the model version is not ` +
-            `bumped on a negative result (B-007, maintainer decision 2026-08-26).`,
+      modelVsPrior.mae < prior.mae
+        ? `**Beats last season's points per 90 on MAE.**`
+        : `**Does not beat last season's points per 90 on MAE.**`,
+    );
+    w();
+    w(`### Against \`form\`, restricted to established players`);
+    w();
+    w(
+      `The same two predictors on the rows that also carry a prior-season baseline — which is a ` +
+        `filter for **450+ minutes last season**, so it is a filter for players who actually play. ` +
+        `This is not a third baseline; it is the same \`form\` comparison on a different population, ` +
+        `and the gap between this table and the one above is the most useful number in the report.`,
+    );
+    w();
+    w(`| Model | n | MAE | RMSE | bias | mean predicted | mean actual |`);
+    w(`|---|---:|---:|---:|---:|---:|---:|`);
+    w(row('this model', errorStats(observationsFor(established, 'model'))));
+    w(row('baseline: form', errorStats(observationsFor(established, 'form'))));
+    w();
+    {
+      const m = errorStats(observationsFor(established, 'model'));
+      const b = errorStats(observationsFor(established, 'form'));
+      w(
+        m.mae < b.mae
+          ? `**Beats \`form\` here**, on rows where it loses over the full field. The difference ` +
+              `between the two populations is fringe players: rows where the outcome is usually ` +
+              `zero, where a near-zero prediction is very hard to beat on MAE, and which a squad ` +
+              `optimiser never chooses between. That is the case for reading MAE over the whole ` +
+              `field as the wrong verdict (D-020) — measured rather than argued.`
+          : `**Does not beat \`form\` here either**, which removes the "MAE is dominated by fringe ` +
+              `players" explanation for the headline. That explanation is D-020's, and this is the ` +
+              `test of it.`,
+      );
+    }
+    w();
+    w(`### The same three on every row each could reach`);
+    w();
+    w(
+      `Not a comparison — three different populations. Kept because it is what was reported before ` +
+        `B-012, so the effect of the restriction is visible rather than described.`,
+    );
+    w();
+    w(`| Model | n | MAE | RMSE | bias | mean predicted | mean actual |`);
+    w(`|---|---:|---:|---:|---:|---:|---:|`);
+    w(row('this model', modelAll));
+    w(row('baseline: form (trailing 4 rounds)', formAll));
+    w(row('baseline: last season points/90', priorAll));
+    w();
+    w(`### The rows the restriction costs`);
+    w();
+    w(
+      `The rows the \`form\` comparison had to leave out. A count invites the reader to assume they ` +
+        `were unremarkable; they are not — they are the players nobody had a trailing number for.`,
+    );
+    w();
+    w(population(describePopulation(excluded)));
+    w();
+    w(
+      `**MAE over the whole field is not the verdict** (D-020, and B-012 replaces it). It is ` +
+        `minimised by the conditional median, and most rows are players who barely feature, so a ` +
+        `predictor that says near-zero for everyone wins it while telling a squad optimiser nothing. ` +
+        `The decision metrics — ordering, XI and captain choice, a simulated season — live in ` +
+        `\`reports/decision-quality.md\`. Whatever this file says, the model version is not bumped on ` +
+        `a negative result there, and the serving version is not deleted until its successor beats it.`,
     );
     w();
     w(`### Baseline availability`);
@@ -235,7 +358,7 @@ export class CalibrationService {
     w();
     w(`| Position | n | MAE | RMSE | bias |`);
     w(`|---|---:|---:|---:|---:|`);
-    for (const p of byPosition(result.model)) {
+    for (const p of byPosition(observationsFor(common, 'model'))) {
       w(
         `| ${p.label} | ${p.stats.n} | ${f(p.stats.mae)} | ${f(p.stats.rmse)} | ${f(p.stats.bias)} |`,
       );
@@ -244,13 +367,16 @@ export class CalibrationService {
     w(`## By price band`);
     w();
     w(
-      `The known defect is head-specific — the premium head read 2–4× \`ep_next\` (archive B-004, ` +
-        `finding 1) — so a single mean would hide exactly the thing this exists to measure.`,
+      `A single mean hides a directional error, which is the kind that matters most to an optimiser ` +
+        `— every comparison it makes is skewed the same way. B-004's finding 1 said the premium head ` +
+        `read 2–4× \`ep_next\`; **that was measured against FPL's own model rather than against ` +
+        `realised points, and against realised points it is false** (D-020). The bands below are the ` +
+        `record of what the error actually is.`,
     );
     w();
     w(`| Band | n | MAE | bias | mean predicted | mean actual |`);
     w(`|---|---:|---:|---:|---:|---:|`);
-    for (const b of byPriceBand(result.model)) {
+    for (const b of byPriceBand(observationsFor(common, 'model'))) {
       w(
         `| ${b.label} | ${b.stats.n} | ${f(b.stats.mae)} | ${f(b.stats.bias)} | ` +
           `${f(b.stats.meanPredicted)} | ${f(b.stats.meanActual)} |`,
@@ -267,7 +393,7 @@ export class CalibrationService {
     w();
     w(`| Predicted band | n | mean predicted | mean actual |`);
     w(`|---|---:|---:|---:|`);
-    for (const b of calibrationCurve(result.model)) {
+    for (const b of calibrationCurve(observationsFor(common, 'model'))) {
       if (b.n === 0) continue;
       const upper = b.upper === Infinity ? '∞' : b.upper.toFixed(0);
       w(
@@ -313,6 +439,27 @@ function row(label: string, s: ErrorStats): string {
 
 function f(x: number): string {
   return x.toFixed(3);
+}
+
+/** Renders an excluded/included population as a small markdown block. */
+function population(p: PopulationSummary): string {
+  if (p.n === 0) return 'None — every predictor scored every row.';
+  const lines: string[] = [];
+  lines.push(
+    `**${p.n} rows**, mean actual **${f(p.meanActual)}**, ` +
+      `**${(p.blankShare * 100).toFixed(1)}%** of them zero minutes.`,
+  );
+  lines.push('');
+  lines.push('| Split | n | mean actual |');
+  lines.push('|---|---:|---:|');
+  for (const r of p.byPosition) {
+    lines.push(`| ${r.label} | ${r.n} | ${f(r.meanActual)} |`);
+  }
+  for (const r of p.byPriceBand) {
+    if (r.n === 0) continue;
+    lines.push(`| ${r.label} | ${r.n} | ${f(r.meanActual)} |`);
+  }
+  return lines.join('\n');
 }
 
 export { UNFITTED_PARAMS, FITTED_PARAMS };

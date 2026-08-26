@@ -20,6 +20,14 @@ export interface Observation {
   value: number;
   season: string;
   round: number;
+  /**
+   * Who this is about. An observation without an identity supports a mean and nothing else — it
+   * cannot be ranked against its round's other players, put in a squad, or named in a report. That
+   * was the shape until B-012, and it is why the project could measure error and not ordering.
+   */
+  playerCode: number;
+  webName: string;
+  teamCode: number | null;
 }
 
 export interface ErrorStats {
@@ -129,4 +137,45 @@ export function byPosition(
     label: p,
     stats: errorStats(rows.filter((r) => r.position === p)),
   }));
+}
+
+/**
+ * What a population of rows looks like, for describing the rows a comparison had to leave out.
+ *
+ * A count is not a description. B-012's restriction to common rows drops the rows `form` cannot
+ * score — debuts, returns from injury, new signings — and those score differently from the rest of
+ * the corpus. Reporting "577 rows excluded" invites the reader to assume they were unremarkable; the
+ * whole point is that they are not.
+ */
+export interface PopulationSummary {
+  n: number;
+  meanActual: number;
+  /** share of rows where the player did not feature at all */
+  blankShare: number;
+  byPosition: { label: string; n: number; meanActual: number }[];
+  byPriceBand: { label: string; n: number; meanActual: number }[];
+}
+
+export function describePopulation(
+  rows: { actual: number; minutes: number; position: string; value: number }[],
+): PopulationSummary {
+  const mean = (xs: { actual: number }[]) =>
+    xs.length === 0 ? 0 : xs.reduce((s, r) => s + r.actual, 0) / xs.length;
+  const positions = [...new Set(rows.map((r) => r.position))].sort();
+  return {
+    n: rows.length,
+    meanActual: mean(rows),
+    blankShare:
+      rows.length === 0
+        ? 0
+        : rows.filter((r) => r.minutes === 0).length / rows.length,
+    byPosition: positions.map((p) => {
+      const sub = rows.filter((r) => r.position === p);
+      return { label: p, n: sub.length, meanActual: mean(sub) };
+    }),
+    byPriceBand: PRICE_BANDS.map((b) => {
+      const sub = rows.filter((r) => r.value >= b.min && r.value <= b.max);
+      return { label: b.label, n: sub.length, meanActual: mean(sub) };
+    }),
+  };
 }
