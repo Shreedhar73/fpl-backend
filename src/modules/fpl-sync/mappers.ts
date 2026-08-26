@@ -25,6 +25,12 @@ export interface MappedTeam {
   name: string;
   shortName: string;
   strength: number;
+  strengthOverallHome: number;
+  strengthOverallAway: number;
+  strengthAttackHome: number;
+  strengthAttackAway: number;
+  strengthDefenceHome: number;
+  strengthDefenceAway: number;
 }
 
 export interface MappedPlayer {
@@ -160,6 +166,12 @@ export function mapTeam(t: RawTeam): MappedTeam {
     shortName: t.short_name,
     // `strength` is null in preseason payloads; the column is non-null. 0 = "not yet rated".
     strength: t.strength ?? 0,
+    strengthOverallHome: t.strength_overall_home,
+    strengthOverallAway: t.strength_overall_away,
+    strengthAttackHome: t.strength_attack_home,
+    strengthAttackAway: t.strength_attack_away,
+    strengthDefenceHome: t.strength_defence_home,
+    strengthDefenceAway: t.strength_defence_away,
   };
 }
 

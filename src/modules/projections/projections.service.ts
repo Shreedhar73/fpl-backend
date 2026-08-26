@@ -8,6 +8,7 @@ import {
 import { Scoring } from './scoring';
 import { minutesModel } from './minutes';
 import { projectFixture, RateInputs } from './model';
+import { effectiveDifficulty, leagueAverageXg } from './team-strength';
 
 export const MODEL_VERSION = 'v1-fdr-blend';
 const HORIZON = 5;
@@ -50,7 +51,9 @@ export class ProjectionsService {
     const gwIds = await this.repo.horizonGameweeks(HORIZON);
     if (gwIds.length === 0)
       throw new Error('no upcoming gameweeks — nothing to project');
-    const diffs = await this.repo.fixtureDifficulties(gwIds);
+    const contexts = await this.repo.fixtureContexts(gwIds);
+    const ratings = await this.repo.loadTeamRatings();
+    const leagueAvgXg = leagueAverageXg(ratings.values());
     const finishedGames = await this.repo.finishedGameweekCount();
     const nextGw = gwIds[0];
 
@@ -75,15 +78,16 @@ export class ProjectionsService {
       let nextGwEp = 0;
       for (let i = 0; i < gwIds.length; i++) {
         const gwId = gwIds[i];
-        const teamDiffs = diffs.get(player.teamId)?.get(gwId) ?? []; // [] = blank gameweek
+        const teamFixtures = contexts.get(player.teamId)?.get(gwId) ?? []; // [] = blank gameweek
         let gwEp = 0;
         const components: Record<string, number> = {};
-        for (const d of teamDiffs) {
+        for (const fx of teamFixtures) {
+          const diff = effectiveDifficulty(fx.fdr, ratings.get(fx.opponentFplId), leagueAvgXg);
           const fp = projectFixture(
             player.position,
             mins,
             rates,
-            { difficulty: d },
+            { attackDifficulty: diff.attackDifficulty, defenceDifficulty: diff.defenceDifficulty },
             scoring,
             expectedBonus,
           );
@@ -91,14 +95,14 @@ export class ProjectionsService {
           for (const [k, v] of Object.entries(fp.components))
             components[k] = (components[k] ?? 0) + v;
         }
-        components.fixtures = teamDiffs.length;
+        components.fixtures = teamFixtures.length;
         rows.push({
           playerId: player.id,
           gameweekId: gwId,
           modelVersion: MODEL_VERSION,
           expectedPoints: round2(gwEp),
           expectedMinutes: round2(
-            mins.pPlay * mins.eMinutesIfPlay * teamDiffs.length,
+            mins.pPlay * mins.eMinutesIfPlay * teamFixtures.length,
           ),
           playProbability: round3(mins.pPlay),
           components: roundComponents(components),

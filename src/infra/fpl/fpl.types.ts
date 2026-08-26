@@ -14,6 +14,12 @@ export interface RawTeam {
   name: string;
   short_name: string;
   strength: number | null;
+  strength_overall_home: number;
+  strength_overall_away: number;
+  strength_attack_home: number;
+  strength_attack_away: number;
+  strength_defence_home: number;
+  strength_defence_away: number;
 }
 
 export interface RawElementType {

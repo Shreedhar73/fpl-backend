@@ -20,8 +20,10 @@ export interface RateInputs {
 }
 
 export interface FixtureContext {
-  /** opponent difficulty for THIS player's team, 1 (easy) … 5 (hard). */
-  difficulty: number;
+  /** difficulty of SCORING (from the opponent's defence), 1 (easy) … 5 (hard). */
+  attackDifficulty: number;
+  /** difficulty of keeping a clean sheet / not conceding (from the opponent's attack), 1 … 5. */
+  defenceDifficulty: number;
 }
 
 export interface FixtureProjection {
@@ -47,7 +49,7 @@ export function projectFixture(
 ): FixtureProjection {
   const { pPlay, eMinutesIfPlay, pStart } = minutes;
   const minShare = (pPlay * eMinutesIfPlay) / 90; // expected 90-minute shares played
-  const attackAdj = attackMultiplier(fixture.difficulty);
+  const attackAdj = attackMultiplier(fixture.attackDifficulty);
 
   // Appearance: 60+ earns long_play, 1–59 earns short_play.
   const appearance =
@@ -58,13 +60,17 @@ export function projectFixture(
 
   // Clean sheet only counts for a 60+ player; approximate that population with P(start).
   const cs =
-    pStart * cleanSheetProb(fixture.difficulty) * scoring.cleanSheet(position);
+    pStart *
+    cleanSheetProb(fixture.defenceDifficulty) *
+    scoring.cleanSheet(position);
 
   // Goals conceded: −1 per 2 conceded for GKP/DEF (0 for others via config). 60+ player → P(start).
   const concededPts = scoring.goalsConceded(position);
   const conceded =
     concededPts !== 0
-      ? pStart * (expectedGoalsConceded(fixture.difficulty) / 2) * concededPts
+      ? pStart *
+        (expectedGoalsConceded(fixture.defenceDifficulty) / 2) *
+        concededPts
       : 0;
 
   // Defensive contribution: +2 at the per-match threshold (0 for GKP via config).

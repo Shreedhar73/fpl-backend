@@ -34,6 +34,14 @@ model Team {
   name      String
   shortName String
   strength  Int
+  /// FPL's own team-strength ratings, home/away split. Often 0 early season (uncalibrated) — the
+  /// team-strength model treats a 0 as "no signal" and leans on rolling xG + FDR instead.
+  strengthOverallHome  Int @default(0)
+  strengthOverallAway  Int @default(0)
+  strengthAttackHome   Int @default(0)
+  strengthAttackAway   Int @default(0)
+  strengthDefenceHome  Int @default(0)
+  strengthDefenceAway  Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

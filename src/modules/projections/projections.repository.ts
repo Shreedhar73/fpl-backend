@@ -2,6 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 import { PositionCode } from '../fpl-sync/mappers';
+import { TeamRating } from './team-strength';
+
+/** A fixture from one team's perspective: its FDR and who it faces. */
+export interface FixtureContextRow {
+  fdr: number;
+  opponentFplId: number;
+}
 
 /** A player's current-state row plus the season-to-date per-90 rates, as the model needs them. */
 export interface PlayerRow {
@@ -159,35 +166,82 @@ export class ProjectionsRepository {
     return this.prisma.gameweek.count({ where: { finished: true } });
   }
 
-  /** For each gameweek in `gwIds`, a map from teamId to the difficulties it faces (one per fixture). */
-  async fixtureDifficulties(
+  /** For each gameweek in `gwIds`, per team (cuid), the fixtures it plays — FDR and opponent fpl id. */
+  async fixtureContexts(
     gwIds: number[],
-  ): Promise<Map<string, Map<number, number[]>>> {
-    const rows = await this.prisma.fixture.findMany({
-      where: { gameweekId: { in: gwIds } },
-      select: {
-        gameweekId: true,
-        homeTeamId: true,
-        awayTeamId: true,
-        homeDifficulty: true,
-        awayDifficulty: true,
-      },
-    });
-    // teamId -> (gwId -> [difficulty, ...])
-    const map = new Map<string, Map<number, number[]>>();
-    const add = (teamId: string, gw: number, diff: number) => {
-      const byGw = map.get(teamId) ?? new Map<number, number[]>();
+  ): Promise<Map<string, Map<number, FixtureContextRow[]>>> {
+    const [rows, teams] = await Promise.all([
+      this.prisma.fixture.findMany({
+        where: { gameweekId: { in: gwIds } },
+        select: {
+          gameweekId: true,
+          homeTeamId: true,
+          awayTeamId: true,
+          homeDifficulty: true,
+          awayDifficulty: true,
+        },
+      }),
+      this.prisma.team.findMany({ select: { id: true, fplId: true } }),
+    ]);
+    const fplByCuid = new Map(teams.map((t) => [t.id, t.fplId]));
+    const map = new Map<string, Map<number, FixtureContextRow[]>>();
+    const add = (teamId: string, gw: number, row: FixtureContextRow) => {
+      const byGw = map.get(teamId) ?? new Map<number, FixtureContextRow[]>();
       const list = byGw.get(gw) ?? [];
-      list.push(diff);
+      list.push(row);
       byGw.set(gw, list);
       map.set(teamId, byGw);
     };
     for (const f of rows) {
       if (f.gameweekId === null) continue;
-      add(f.homeTeamId, f.gameweekId, f.homeDifficulty);
-      add(f.awayTeamId, f.gameweekId, f.awayDifficulty);
+      const homeFpl = fplByCuid.get(f.homeTeamId);
+      const awayFpl = fplByCuid.get(f.awayTeamId);
+      if (homeFpl === undefined || awayFpl === undefined) continue;
+      add(f.homeTeamId, f.gameweekId, { fdr: f.homeDifficulty, opponentFplId: awayFpl });
+      add(f.awayTeamId, f.gameweekId, { fdr: f.awayDifficulty, opponentFplId: homeFpl });
     }
     return map;
+  }
+
+  /** Rolling team attack/defence from `player_gameweek_stats` xG: for and against, per match played. */
+  async loadTeamRatings(): Promise<Map<number, TeamRating>> {
+    const [teams, players, stats] = await Promise.all([
+      this.prisma.team.findMany({ select: { id: true, fplId: true } }),
+      this.prisma.player.findMany({ select: { id: true, teamId: true } }),
+      this.prisma.playerGameweekStat.findMany({
+        select: { playerId: true, fixtureId: true, opponentTeamFplId: true, expectedGoals: true },
+      }),
+    ]);
+    const fplByCuid = new Map(teams.map((t) => [t.id, t.fplId]));
+    const teamFplByPlayer = new Map(
+      players.map((p) => [p.id, fplByCuid.get(p.teamId)]),
+    );
+
+    const xgFor = new Map<number, number>();
+    const xgAgainst = new Map<number, number>();
+    const matches = new Map<number, Set<string>>();
+    for (const s of stats) {
+      const teamFpl = teamFplByPlayer.get(s.playerId);
+      if (teamFpl === undefined) continue;
+      const xg = this.dec(s.expectedGoals);
+      xgFor.set(teamFpl, (xgFor.get(teamFpl) ?? 0) + xg);
+      xgAgainst.set(s.opponentTeamFplId, (xgAgainst.get(s.opponentTeamFplId) ?? 0) + xg);
+      const set = matches.get(teamFpl) ?? new Set<string>();
+      set.add(s.fixtureId);
+      matches.set(teamFpl, set);
+    }
+
+    const out = new Map<number, TeamRating>();
+    for (const t of teams) {
+      const m = matches.get(t.fplId)?.size ?? 0;
+      out.set(t.fplId, {
+        fplId: t.fplId,
+        matches: m,
+        xgForPerMatch: m > 0 ? (xgFor.get(t.fplId) ?? 0) / m : 0,
+        xgAgainstPerMatch: m > 0 ? (xgAgainst.get(t.fplId) ?? 0) / m : 0,
+      });
+    }
+    return out;
   }
 
   async loadScoring(): Promise<unknown> {
