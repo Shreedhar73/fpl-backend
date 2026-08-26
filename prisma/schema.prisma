@@ -1,0 +1,323 @@
+// Data model for the FPL manager. The reasoning behind every choice here lives in the
+// `fpl-data-model` skill — read it before changing anything in this file.
+//
+// The organising idea: SNAPSHOT tables mirror upstream's current state and are upserted every
+// sync; HISTORY tables are append-only and are the only record of things upstream does not keep
+// (price moves, ownership over time, our own projections and solves).
+//
+// Money is ALWAYS an integer in tenths of a million. 55 == £5.5m. Never a float.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7: the connection URL lives in prisma.config.ts, not here. The client is constructed
+// with a driver adapter (see src/infra/prisma/prisma.service.ts).
+datasource db {
+  provider = "postgresql"
+}
+
+enum Position {
+  GKP
+  DEF
+  MID
+  FWD
+}
+
+/// SNAPSHOT. `fplId` is 1-20 and alphabetical, so it shifts on promotion/relegation —
+/// `code` is the stable cross-season identifier. Join on fplId, persist code.
+model Team {
+  id        String   @id @default(cuid())
+  fplId     Int      @unique
+  code      Int      @unique
+  name      String
+  shortName String
+  strength  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  players       Player[]
+  homeFixtures  Fixture[] @relation("HomeTeam")
+  awayFixtures  Fixture[] @relation("AwayTeam")
+
+  @@map("teams")
+}
+
+/// SNAPSHOT of the current player state. Anything here whose past matters also has a history table.
+model Player {
+  id          String   @id @default(cuid())
+  fplId       Int      @unique
+  code        Int      @unique
+  firstName   String
+  secondName  String
+  webName     String
+  position    Position
+  teamId      String
+  /// tenths of a million
+  nowCost     Int
+  /// a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad. Only 'a' is safe to start.
+  status      String
+  /// null means FULLY FIT, not unknown. Treating null as 0 benches every healthy player.
+  chanceOfPlayingNextRound Int?
+  news        String?
+  newsAddedAt DateTime?
+  removed     Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+
+  team             Team                      @relation(fields: [teamId], references: [id])
+  gameweekStats    PlayerGameweekStat[]
+  priceHistory     PlayerPriceHistory[]
+  ownershipHistory PlayerOwnershipHistory[]
+  projections      Projection[]
+  squadPicks       SquadPick[]
+
+  @@index([teamId])
+  @@index([position])
+  @@index([status])
+  @@map("players")
+}
+
+/// SNAPSHOT. `deadlineTime` is UTC. `finished` is NOT final — bonus and stat corrections land
+/// afterwards, and only `dataChecked` means the numbers stopped moving. Backtests filter on it.
+model Gameweek {
+  id           Int      @id
+  name         String
+  deadlineTime DateTime @db.Timestamptz(3)
+  finished     Boolean  @default(false)
+  dataChecked  Boolean  @default(false)
+  isCurrent    Boolean  @default(false)
+  isNext       Boolean  @default(false)
+  averageScore Int?
+  highestScore Int?
+  updatedAt    DateTime @updatedAt
+
+  fixtures    Fixture[]
+  playerStats PlayerGameweekStat[]
+  projections Projection[]
+  squads      Squad[]
+
+  @@map("gameweeks")
+}
+
+/// SNAPSHOT. `event` and `kickoffTime` are nullable — an unscheduled or unassigned fixture is
+/// normal upstream, and both break a naive sort.
+model Fixture {
+  id           String    @id @default(cuid())
+  fplId        Int       @unique
+  gameweekId   Int?
+  kickoffTime  DateTime? @db.Timestamptz(3)
+  homeTeamId   String
+  awayTeamId   String
+  homeScore    Int?
+  awayScore    Int?
+  homeDifficulty Int
+  awayDifficulty Int
+  started      Boolean   @default(false)
+  finished     Boolean   @default(false)
+  updatedAt    DateTime  @updatedAt
+
+  gameweek Gameweek? @relation(fields: [gameweekId], references: [id])
+  homeTeam Team      @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam Team      @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  stats    PlayerGameweekStat[]
+
+  @@index([gameweekId])
+  @@index([homeTeamId, gameweekId])
+  @@index([awayTeamId, gameweekId])
+  @@map("fixtures")
+}
+
+/// HISTORY, and the fact table everything models on. Fixture is part of the key because
+/// double gameweeks are real: one player, one gameweek, two fixtures, two rows.
+model PlayerGameweekStat {
+  id         String @id @default(cuid())
+  playerId   String
+  gameweekId Int
+  fixtureId  String
+  wasHome    Boolean
+  opponentTeamFplId Int
+
+  minutes        Int @default(0)
+  starts         Int @default(0)
+  totalPoints    Int @default(0)
+  goalsScored    Int @default(0)
+  assists        Int @default(0)
+  cleanSheets    Int @default(0)
+  goalsConceded  Int @default(0)
+  ownGoals       Int @default(0)
+  penaltiesSaved Int @default(0)
+  penaltiesMissed Int @default(0)
+  yellowCards    Int @default(0)
+  redCards       Int @default(0)
+  saves          Int @default(0)
+  bonus          Int @default(0)
+  bps            Int @default(0)
+  /// the 2025/26 scoring category: DEF/MID/FWD earn +2 at the threshold
+  defensiveContribution Int @default(0)
+
+  /// upstream sends these as decimal STRINGS; parsed at the sync boundary, stored as Decimal
+  expectedGoals         Decimal @default(0) @db.Decimal(6, 2)
+  expectedAssists       Decimal @default(0) @db.Decimal(6, 2)
+  expectedGoalsConceded Decimal @default(0) @db.Decimal(6, 2)
+  ictIndex              Decimal @default(0) @db.Decimal(6, 1)
+
+  /// tenths of a million, the player's price at that gameweek
+  value      Int
+  selectedBy Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  gameweek Gameweek @relation(fields: [gameweekId], references: [id])
+  fixture  Fixture  @relation(fields: [fixtureId], references: [id])
+
+  @@unique([playerId, gameweekId, fixtureId])
+  @@index([playerId, gameweekId])
+  @@index([gameweekId])
+  @@map("player_gameweek_stats")
+}
+
+/// HISTORY. Upstream serves NO price history — `now_cost` is a scalar snapshot. This table is
+/// the only place the series exists, which is why a database reset loses it permanently.
+model PlayerPriceHistory {
+  id         String   @id @default(cuid())
+  playerId   String
+  /// tenths of a million
+  cost       Int
+  recordedAt DateTime @db.Timestamptz(3)
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, recordedAt])
+  @@index([playerId, recordedAt(sort: Desc)])
+  @@map("player_price_history")
+}
+
+/// HISTORY. Same reason: upstream serves ownership for the current event only.
+model PlayerOwnershipHistory {
+  id                String   @id @default(cuid())
+  playerId          String
+  selectedByPercent Decimal  @db.Decimal(5, 2)
+  transfersInEvent  Int      @default(0)
+  transfersOutEvent Int      @default(0)
+  recordedAt        DateTime @db.Timestamptz(3)
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, recordedAt])
+  @@index([playerId, recordedAt(sort: Desc)])
+  @@map("player_ownership_history")
+}
+
+/// HISTORY, append-only. NEVER overwrite a projection: the backtest is the whole point of
+/// keeping them, and it needs what the model said at the time, not what it would say now.
+model Projection {
+  id           String  @id @default(cuid())
+  playerId     String
+  gameweekId   Int
+  modelVersion String
+
+  expectedPoints  Decimal @db.Decimal(6, 2)
+  expectedMinutes Decimal @db.Decimal(6, 2)
+  /// P(the player features at all) — the term that dominates every other one
+  playProbability Decimal @db.Decimal(4, 3)
+  /// per-term breakdown + the inputs, so the UI can show WHY and the run can be reconstructed
+  components      Json
+  createdAt       DateTime @default(now())
+
+  player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  gameweek Gameweek @relation(fields: [gameweekId], references: [id])
+
+  @@unique([playerId, gameweekId, modelVersion])
+  @@index([gameweekId, modelVersion, expectedPoints(sort: Desc)])
+  @@map("projections")
+}
+
+/// HISTORY. The user's squad per gameweek, including planned future squads.
+model Squad {
+  id         String   @id @default(cuid())
+  managerId  Int
+  gameweekId Int
+  /// tenths of a million
+  bank       Int
+  teamValue  Int
+  activeChip String?
+  isPlanned  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  gameweek Gameweek    @relation(fields: [gameweekId], references: [id])
+  picks    SquadPick[]
+
+  @@unique([managerId, gameweekId, isPlanned])
+  @@map("squads")
+}
+
+model SquadPick {
+  id           String  @id @default(cuid())
+  squadId      String
+  playerId     String
+  /// 1-11 starting XI, 12-15 bench in substitution order — bench order is a real decision
+  position     Int
+  multiplier   Int     @default(1)
+  isCaptain    Boolean @default(false)
+  isViceCaptain Boolean @default(false)
+  /// what we would get back on a sale: purchase price + half the rise, rounded down
+  sellValue    Int
+
+  squad  Squad  @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id])
+
+  @@unique([squadId, position])
+  @@index([playerId])
+  @@map("squad_picks")
+}
+
+/// HISTORY. One row per solve. A recommendation you cannot reconstruct is one you cannot debug,
+/// and the UI's "why" panel reads straight out of here.
+model OptimizerRun {
+  id             String   @id @default(cuid())
+  gameweekId     Int
+  modelVersion   String
+  horizon        Int
+  freeTransfers  Int
+  hitsTaken      Int
+  objectiveValue Decimal  @db.Decimal(8, 2)
+  inputs         Json
+  result         Json
+  reasoning      Json
+  durationMs     Int
+  createdAt      DateTime @default(now())
+
+  @@index([gameweekId, createdAt(sort: Desc)])
+  @@map("optimizer_runs")
+}
+
+/// HISTORY. The first place to look when the data looks wrong: what ran, what it wrote, and
+/// whether the upstream payload had actually changed.
+model SyncRun {
+  id          String    @id @default(cuid())
+  endpoint    String
+  mode        String
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  rowsWritten Int       @default(0)
+  status      String    @default("running")
+  payloadHash String?
+  error       String?
+
+  @@index([endpoint, startedAt(sort: Desc)])
+  @@map("sync_runs")
+}
+
+/// SNAPSHOT of upstream's own `game_config.scoring` / `.rules`. The points engine reads THESE,
+/// never constants — FPL changed goalkeeper goal scoring and added a whole scoring category
+/// within two seasons, and a hardcoded table is silently wrong the day it changes.
+model ScoringConfig {
+  id        String   @id @default(cuid())
+  season    String   @unique
+  scoring   Json
+  rules     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("scoring_config")
+}
