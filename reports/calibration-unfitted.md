@@ -3,7 +3,7 @@
 Test season: **2025-26**, held out of the fit.
 Trained on 2023-24 + 2024-25 (2024-25 rounds 20+ reserved for choosing shape parameters). Live 2026/27 is not touched here at all.
 
-**The defensive-contribution term is the exception.** That category exists only in 2025-26, so it was fitted on rounds 1–19 of this very season. Its contribution to the headline below is therefore not held out, and no reading of this report should treat it as though it were.
+**The defensive-contribution parameters are the one exception to the holdout.** That category exists only in 2025-26, so its dispersion was fitted on rounds 1–12 of this very season and its rate parameter chosen on rounds 13–19. Those rows are passed to the fit separately and **no other parameter reads them**. Rounds 20–38 are untouched by the fit entirely. The defcon term's contribution to the headline below is therefore not held out; everything else is.
 
 ## Headline
 

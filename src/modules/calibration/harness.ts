@@ -25,10 +25,10 @@ export interface RunOptions {
   /** rows to predict; anything outside is history the model may read but is never scored on */
   evaluate: (row: HistoryRow) => boolean;
   /**
-   * Rows the model may not read at all. Used to hold a season out of the FIT while still letting the
-   * harness score it — without this, "fit on 2023-24 and evaluate on 2025-26" silently lets 2024-25's
-   * second half inform a 2025-26 prediction, which is legitimate, and lets the evaluated season inform
-   * itself, which is not.
+   * The injury/doubt multiplier, 0 to 1. Defaults to 1 — fully available — because the archive
+   * carries no per-gameweek `status` or `chance_of_playing`. That is the honest ceiling of an archive
+   * backtest, and the hook exists so a live run can supply the real thing once
+   * `player_deadline_snapshot` has gameweeks in it.
    */
   availability?: (row: HistoryRow) => number;
 }

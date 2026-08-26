@@ -122,19 +122,19 @@ export const UNFITTED_PARAMS: FittedParams = {
  *
  * | knob | v1 guess | fitted | what the data said |
  * |---|---|---|---|
- * | `subAppearanceRate` | 0.35 | 0.157 | a benched player appears less than half as often as assumed |
- * | `sixtyGivenStart` | 0.85 | 0.932 | a starter sees the hour more often than assumed |
- * | `sixtyGivenSub` | 0.05 | 0.015 | a substitute almost never does |
- * | `minutesGivenSub` | 25 | 18.3 | substitutes get less than assumed |
- * | `startSlope` | 1 (identity) | 0.467 | **the opposite of the expected direction** |
- * | `homeAdvantage` | 1.15 | 1.123 | close to the guess |
- * | `assistsPerXa` | 1 | 1.415 | assists land well above expected assists |
+ * | `subAppearanceRate` | 0.35 | 0.154 | a benched player appears less than half as often as assumed |
+ * | `sixtyGivenStart` | 0.85 | 0.934 | a starter sees the hour more often than assumed |
+ * | `sixtyGivenSub` | 0.05 | 0.013 | a substitute almost never does |
+ * | `minutesGivenSub` | 25 | 18.2 | substitutes get less than assumed |
+ * | `startSlope` | 1 (identity) | 0.485 | **the opposite of the expected direction** |
+ * | `homeAdvantage` | 1.15 | 1.119 | close to the guess |
+ * | `assistsPerXa` | 1 | 1.395 | assists land well above expected assists |
  * | `defcon.dispersion` | 1 (Poisson) | 1.5 | defensive actions cluster, as suspected |
  * | `xgFixtureElasticity` | 1 | **0** | see below |
  *
  * Two results worth reading before trusting anything built on this:
  *
- * - **`startSlope` 0.467, not 1.** v1 used a player's lagged start rate directly as P(start). The
+ * - **`startSlope` 0.485, not 1.** v1 used a player's lagged start rate directly as P(start). The
  *   fitted curve is much flatter: a player who started every recent match is *not* a certainty, and
  *   one who started none is not hopeless. The first attempt at this fit returned a slope of 7.3e8 —
  *   complete separation running away to a step function — which is why the fit now carries a ridge
@@ -148,43 +148,45 @@ export const UNFITTED_PARAMS: FittedParams = {
  */
 export const FITTED_PARAMS: FittedParams = {
   strength: {
-    homeAdvantage: 1.1233471839072462,
+    homeAdvantage: 1.1186408380003194,
     confidenceMatches: 96,
-    leagueGoalsPerTeamMatch: 1.5127213352684714,
+    leagueGoalsPerTeamMatch: 1.5486291739894333,
   },
   minutes: {
-    startIntercept: -0.2022931365788607,
-    startSlope: 0.46737973110430747,
-    subAppearanceRate: 0.15655447298494243,
-    sixtyGivenStart: 0.932378941812904,
-    sixtyGivenSub: 0.014674681753889675,
-    minutesGivenStart: 82.68637023354005,
-    minutesGivenSub: 18.337871287128714,
+    startIntercept: -0.18790070079541765,
+    startSlope: 0.4849268629262438,
+    subAppearanceRate: 0.15435726210350584,
+    sixtyGivenStart: 0.9339351334078926,
+    sixtyGivenSub: 0.013411204845338524,
+    minutesGivenStart: 82.83320019172392,
+    minutesGivenSub: 18.151633138654553,
   },
   attack: {
     xgFixtureElasticity: 0,
     xaFixtureElasticity: 0,
-    goalsPerXg: 0.9877526348865678,
-    assistsPerXa: 1.4152728373573016,
+    goalsPerXg: 0.9890259541292118,
+    assistsPerXa: 1.3951956123013418,
   },
   defcon: { dispersion: 1.5, ratePer90ToMatch: 0.9 },
   bonus: {
-    bonusPerBps: 0.04146475197005556,
-    bpsIntercept: -0.2790571016939038,
+    bonusPerBps: 0.04173248388494878,
+    bpsIntercept: -0.2839231900427406,
     maxBonus: 3,
   },
   provenance: {
     fittedOn: ['2023-24', '2024-25'],
-    rows: 51286,
+    rows: 42468,
     date: '2026-08-26',
     objective:
       'frequencies measured directly; shape parameters by RMSE on held-out 2024-25 rounds 20+ ' +
       '(14,540 rows). RMSE deliberately, not MAE: MAE is minimised by the conditional median and ' +
       'this corpus is mostly near-zero rows, so an MAE search shrank every parameter toward ' +
       'predicting nobody scores.',
-    heldOut: '2025-26 (whole season, 29,747 rows), live 2026/27 (untouched)',
+    heldOut:
+      '2025-26 rounds 13-38 entirely; rounds 1-12 (8,818 rows) are read by the defensive-contribution ' +
+      'parameters and by nothing else. Live 2026/27 untouched.',
     notes: [
-      'The defensive-contribution term is NOT held out across seasons — the category exists only in 2025-26. It is fitted on rounds 1-12 of that season and its shape parameter chosen on rounds 13-19, leaving 20-38 unused by it.',
+      'The defensive-contribution parameters are the ONE exception to the holdout: that category exists only in 2025-26, so dispersion is fitted on rounds 1-12 and ratePer90ToMatch chosen on 13-19. Those rows are passed separately and no other parameter reads them — an earlier version folded them into the training set, where the frequency measurements iterated them too, so a quarter of the test season silently informed the whole fit while this note claimed otherwise.',
       'The availability multiplier is NOT fitted: the archive carries no per-gameweek status or chance_of_playing. It waits on player_deadline_snapshot (B-007 Phase 2) accumulating live gameweeks.',
       'strength.confidenceMatches reached the top of its search grid — the optimum is at or beyond 96, meaning held-out RMSE keeps improving as team strength is shrunk toward the league average.',
       'Both fixture elasticities fitted to 0 on single-gameweek RMSE. Team strength still drives clean sheets and goals conceded through lambda-against.',
