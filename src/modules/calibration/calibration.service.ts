@@ -5,7 +5,7 @@ import { Scoring } from '../projections/scoring';
 import { FittedParams, FITTED_PARAMS, UNFITTED_PARAMS } from '../projections/fitted';
 import { scoringForSeason } from '../archive/archive-scoring';
 import { CalibrationRepository } from './calibration.repository';
-import { HistoryRow } from './features';
+import { HistoryRow } from '../projections/features';
 import { runBacktest } from './harness';
 import {
   byPosition,

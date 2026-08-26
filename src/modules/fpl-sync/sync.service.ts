@@ -12,6 +12,7 @@ import {
   mapSeasonHistory,
   mapPositionQuotas,
   seasonLabel,
+  MappedPlayer,
 } from './mappers';
 import { ElementSummary } from '../../infra/fpl/fpl.types';
 
@@ -31,6 +32,16 @@ export interface SyncRunSummary {
  * A pass over an endpoint whose payload hash matches the last good run is recorded as `skipped`
  * with 0 rows — the upserts would be no-ops anyway, and skipping saves the work.
  */
+/**
+ * How close a deadline must be for a sync to record a snapshot.
+ *
+ * 36 hours rather than 24: syncs are run by hand, and a Friday-morning deadline with the last sync on
+ * Wednesday evening would fall outside a 24-hour window and be captured not at all. The row carries
+ * `hoursToDeadline` so a distant capture is visible as one rather than being silently equal to a late
+ * one.
+ */
+const SNAPSHOT_WINDOW_HOURS = 36;
+
 @Injectable()
 export class SyncService {
   private readonly log = new Logger(SyncService.name);
@@ -41,6 +52,16 @@ export class SyncService {
   ) {}
 
   /** Default mode: `bootstrap-static/` (teams, players, gameweeks, config, price+ownership) + `fixtures/`. */
+  /**
+   * Force the pre-deadline snapshot on the next run regardless of how far away the deadline is.
+   *
+   * `pnpm sync:fpl -- --snapshot`. The window exists so an ordinary sync does not record a snapshot
+   * three weeks out and call it evidence; this exists because the person running the sync sometimes
+   * knows better — a deliberate capture before a deadline that has not yet entered the window, or a
+   * re-capture after late team news.
+   */
+  forceSnapshot = false;
+
   async runIncremental(): Promise<SyncRunSummary[]> {
     const bootstrap = await this.syncBootstrap();
     const fixtures = await this.syncFixtures();
@@ -95,8 +116,14 @@ export class SyncService {
         run.startedAt,
       );
 
+      const snapshotRows = await this.captureDeadlineSnapshotIfDue(
+        players,
+        playerId,
+        run.startedAt,
+      );
+
       const rowsWritten =
-        teamRows + gwRows + playerRows + priceRows + ownershipRows;
+        teamRows + gwRows + playerRows + priceRows + ownershipRows + snapshotRows;
       await this.repo.finishRun(run.id, {
         rowsWritten,
         status: 'success',
@@ -104,7 +131,8 @@ export class SyncService {
       });
       this.log.log(
         `bootstrap: ${teamRows} teams, ${gwRows} gameweeks, ${playerRows} players, ` +
-          `${priceRows} price rows, ${ownershipRows} ownership rows`,
+          `${priceRows} price rows, ${ownershipRows} ownership rows` +
+          (snapshotRows > 0 ? `, ${snapshotRows} deadline-snapshot rows` : ''),
       );
       return { endpoint, mode: 'incremental', status: 'success', rowsWritten };
     } catch (err) {
@@ -284,6 +312,57 @@ export class SyncService {
         },
       ];
     }
+  }
+
+  /**
+   * Capture the pre-deadline snapshot when a deadline is close enough for it to mean something.
+   *
+   * **Why this is inside the ordinary sync rather than a job of its own.** The thing being captured is
+   * the bootstrap payload this sync has just fetched; a separate job would fetch it a second time to
+   * record what we already had. And a capture that has to be remembered is a capture that will be
+   * missed once — after which that gameweek's `status`, `chance_of_playing` and `ep_next` are gone
+   * from every source there is (D-016: the community archive has none of them either).
+   *
+   * The window is generous on purpose. A snapshot at 20 hours is weaker evidence about a late fitness
+   * call than one at two hours, but it is enormously better than nothing, and `hoursToDeadline` on the
+   * row lets the fit tell them apart rather than forcing a choice now.
+   *
+   * Returns 0 outside the window, and 0 after the last deadline of a season — both normal.
+   */
+  private async captureDeadlineSnapshotIfDue(
+    players: MappedPlayer[],
+    playerId: Map<number, string>,
+    capturedAt: Date,
+  ): Promise<number> {
+    const next = await this.repo.nextDeadline(capturedAt);
+    if (!next) {
+      this.log.log('no upcoming deadline — no snapshot to take');
+      return 0;
+    }
+
+    const hours =
+      (next.deadlineTime.getTime() - capturedAt.getTime()) / 3_600_000;
+    if (hours > SNAPSHOT_WINDOW_HOURS && !this.forceSnapshot) {
+      this.log.log(
+        `next deadline (GW${next.gameweekId}) is ${hours.toFixed(1)}h away — ` +
+          `outside the ${SNAPSHOT_WINDOW_HOURS}h snapshot window`,
+      );
+      return 0;
+    }
+
+    const rows = await this.repo.captureDeadlineSnapshot(
+      players,
+      playerId,
+      next.gameweekId,
+      next.deadlineTime,
+      capturedAt,
+    );
+    this.log.log(
+      `deadline snapshot: ${rows} players captured for GW${next.gameweekId}, ` +
+        `${hours.toFixed(1)}h before the deadline` +
+        (hours > SNAPSHOT_WINDOW_HOURS ? ' (forced, outside the window)' : ''),
+    );
+    return rows;
   }
 
   /**

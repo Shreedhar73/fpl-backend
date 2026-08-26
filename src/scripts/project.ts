@@ -1,10 +1,14 @@
 /**
  * CLI for `pnpm project`: compute and persist projections for the upcoming gameweeks, then print the
- * top expected-points players with `ep_next` (FPL's own number) alongside, and the MAE against it —
- * the baseline the model has to beat (`fpl-optimizer` honesty rules).
+ * top expected-points players.
+ *
+ * This is the ONLY thing that writes projections. It used to run a v1 heuristic while a separate
+ * `pnpm forecast` wrote the fitted model, and serving picks by `createdAt desc` — so whichever ran
+ * last silently became the model the whole app served. `pnpm forecast` is gone and this runs the
+ * fitted path (B-007 Phase 4e).
  *
  * Compiled-run pattern, like `sync:fpl` (the Prisma 7 client uses ESM specifiers ts-node CJS cannot
- * resolve). Reads Postgres only; no FPL calls.
+ * resolve). Reads Postgres and the archive; no FPL calls.
  */
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
@@ -18,25 +22,32 @@ async function main(): Promise<void> {
     logger: ['error', 'warn', 'log'],
   });
   try {
-    const summary = await app.get(ProjectionsService).run();
+    const s = await app.get(ProjectionsService).run();
+
     log.log(
-      `projected ${summary.playersProjected} players over gameweeks ` +
-        `${summary.gameweekIds.join(', ')} — ${summary.rowsWritten} rows written`,
+      `${s.modelVersion}: ${s.rowsWritten} rows for ${s.playersProjected} players over ` +
+        `GW${s.gameweekIds.join(', GW')}`,
     );
-    if (summary.baselineMaeVsEpNext !== null) {
-      log.log(
-        `next-GW baseline: MAE vs ep_next = ${summary.baselineMaeVsEpNext}`,
+    log.log(
+      `GW${s.nextGameweek}: ${s.fromSnapshot} players priced off a captured deadline snapshot, ` +
+        `${s.withoutHistory} with no prior history`,
+    );
+    if (s.fromSnapshot === 0) {
+      log.warn(
+        `no deadline snapshot for GW${s.nextGameweek} — availability came from the live players row, ` +
+          `which is overwritten as news changes. Run \`pnpm sync:fpl\` inside 36h of the deadline ` +
+          `(or with --snapshot) so this gameweek is recorded before it happens.`,
       );
     }
-    log.log(
-      `top expected points for GW${summary.nextGameweek} (ours | ep_next | horizon):`,
-    );
-    for (const t of summary.top) {
+
+    log.log('top expected points (next GW | 5-GW horizon):');
+    for (const t of s.top) {
       log.log(
-        `  ${t.webName.padEnd(18)} ${t.nextGwEp.toFixed(2).padStart(6)} | ` +
-          `${(t.epNext ?? 0).toFixed(2).padStart(6)} | ${t.horizonEp.toFixed(2).padStart(6)}`,
+        `  ${t.webName.padEnd(18)} ${t.position} £${(t.nowCost / 10).toFixed(1).padStart(5)}m  ` +
+          `${t.nextGwEp.toFixed(2).padStart(6)} | ${t.horizonEp.toFixed(2).padStart(6)}`,
       );
     }
+
     await app.close();
     process.exit(0);
   } catch (err) {

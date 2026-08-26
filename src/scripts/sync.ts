@@ -6,6 +6,7 @@
  *   pnpm sync:fpl              # incremental: bootstrap-static + fixtures
  *   pnpm sync:fpl -- --full    # + per-player history backfill (hundreds of requests, minutes)
  *   pnpm sync:fpl -- --live    # not implemented in this pass (B-003 follow-up)
+ *   pnpm sync:fpl -- --snapshot # force the pre-deadline snapshot even outside its window
  */
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
@@ -27,6 +28,9 @@ async function main(): Promise<void> {
   });
   try {
     const sync = app.get(SyncService);
+    // The snapshot normally fires only inside its window. This is for a deliberate capture the
+    // window would miss — the state it records exists in no archive once the deadline passes.
+    sync.forceSnapshot = args.includes('--snapshot');
     let summaries: SyncRunSummary[];
     if (mode === 'full') {
       summaries = await sync.runFull();

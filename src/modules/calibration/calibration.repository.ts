@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { PositionCode } from '../fpl-sync/mappers';
 import { RawScoring } from '../projections/scoring';
-import { HistoryRow } from './features';
+import { HistoryRow } from '../projections/features';
+import { ForecastRepository } from '../projections/forecast.repository';
 
 /**
  * Reads for the calibration harness. Reads only — the harness writes no projection anywhere
@@ -10,7 +11,10 @@ import { HistoryRow } from './features';
  */
 @Injectable()
 export class CalibrationRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly forecast: ForecastRepository,
+  ) {}
 
   /**
    * Every archive row for the given seasons, as history.
@@ -19,43 +23,9 @@ export class CalibrationRepository {
    * them in round order anyway. If a season is ever added that makes this uncomfortable, the fix is
    * to page by season, not to sample — a sampled backtest measures a different model.
    */
+  /** Delegates to the serving path's reader, so backtest and forecast share one definition. */
   async history(seasons: string[]): Promise<HistoryRow[]> {
-    const rows = await this.prisma.archivePlayerGameweek.findMany({
-      where: { season: { in: seasons } },
-      orderBy: [{ season: 'asc' }, { round: 'asc' }],
-      select: {
-        season: true,
-        round: true,
-        fixture: true,
-        playerCode: true,
-        webName: true,
-        position: true,
-        teamCode: true,
-        opponentTeamCode: true,
-        wasHome: true,
-        minutes: true,
-        starts: true,
-        totalPoints: true,
-        goalsScored: true,
-        assists: true,
-        cleanSheets: true,
-        goalsConceded: true,
-        saves: true,
-        bonus: true,
-        bps: true,
-        defensiveContribution: true,
-        expectedGoals: true,
-        expectedAssists: true,
-        value: true,
-      },
-    });
-
-    return rows.map((r) => ({
-      ...r,
-      position: r.position as PositionCode,
-      expectedGoals: Number(r.expectedGoals),
-      expectedAssists: Number(r.expectedAssists),
-    }));
+    return this.forecast.archiveHistory(seasons);
   }
 
   /**

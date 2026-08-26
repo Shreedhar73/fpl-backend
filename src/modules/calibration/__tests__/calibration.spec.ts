@@ -13,7 +13,7 @@ import {
   seasonRoundCut,
   withinSeasonRoundCut,
 } from '../../projections/backtest';
-import { HistoryRow, walkRounds } from '../features';
+import { HistoryRow, walkRounds } from '../../projections/features';
 import { UNFITTED_PARAMS, FITTED_PARAMS } from '../../projections/fitted';
 import { minutesDistribution, projectFixtureV2 } from '../../projections/model-v2';
 import { Scoring, RawScoring } from '../../projections/scoring';
