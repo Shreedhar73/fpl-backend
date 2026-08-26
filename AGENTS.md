@@ -2,7 +2,7 @@
 
 NestJS API for the FPL AI manager. **Owns everything that is not UI**: the sync from the official
 Fantasy Premier League API, the Postgres database, the expected-points model, and the squad
-optimizer. Runs on **:5001**. The Next.js frontend in `../fpl-frontend` (:5000) is a typed shell
+optimizer. Runs on **:5001**. The Next.js frontend in `../fpl-frontend` (:4000) is a typed shell
 over it and talks to nothing else.
 
 Postgres 16 + Prisma 7. `pnpm start:dev` serves on :5001; health is at `/health`, everything else is

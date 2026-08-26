@@ -9,7 +9,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api', { exclude: ['health'] });
   app.enableCors({
-    origin: (process.env.CORS_ORIGIN ?? 'http://localhost:5000').split(','),
+    origin: (process.env.CORS_ORIGIN ?? 'http://localhost:4000').split(','),
     credentials: true,
   });
   app.useGlobalPipes(
