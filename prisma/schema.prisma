@@ -63,12 +63,34 @@ model Player {
   news        String?
   newsAddedAt DateTime?
   removed     Boolean  @default(false)
+
+  // --- Projection inputs, from the bootstrap element (season-to-date). Snapshot: upserted each sync.
+  //     `ep*`/`form` are decimal STRINGS upstream, parsed at the boundary. Nullable = absent preseason.
+  form         Decimal? @db.Decimal(6, 2)
+  pointsPerGame Decimal? @db.Decimal(6, 2)
+  /// FPL's own expected points for the next / current gameweek — the baseline the model must beat.
+  epNext       Decimal? @db.Decimal(6, 2)
+  epThis       Decimal? @db.Decimal(6, 2)
+  expectedGoalsPer90          Decimal @default(0) @db.Decimal(6, 2)
+  expectedAssistsPer90        Decimal @default(0) @db.Decimal(6, 2)
+  expectedGoalsConcededPer90  Decimal @default(0) @db.Decimal(6, 2)
+  defensiveContributionPer90  Decimal @default(0) @db.Decimal(6, 2)
+  savesPer90                  Decimal @default(0) @db.Decimal(6, 2)
+  startsPer90                 Decimal @default(0) @db.Decimal(5, 3)
+  /// set-piece duty — null means not a taker. A large, cheap rate signal.
+  penaltiesOrder       Int?
+  directFreekicksOrder Int?
+  cornersOrder         Int?
+  seasonMinutes Int @default(0)
+  seasonStarts  Int @default(0)
+
   updatedAt   DateTime @updatedAt
 
   team             Team                      @relation(fields: [teamId], references: [id])
   gameweekStats    PlayerGameweekStat[]
   priceHistory     PlayerPriceHistory[]
   ownershipHistory PlayerOwnershipHistory[]
+  seasonHistory    PlayerSeasonHistory[]
   projections      Projection[]
   squadPicks       SquadPick[]
 
@@ -76,6 +98,40 @@ model Player {
   @@index([position])
   @@index([status])
   @@map("players")
+}
+
+/// HISTORY (per prior season, from element-summary `history_past`). One row per (player, season) of
+/// SEASON TOTALS — the public API exposes no per-gameweek detail for finished seasons. The model uses
+/// the last two as an early-season prior, and last season's points as a baseline.
+model PlayerSeasonHistory {
+  id           String @id @default(cuid())
+  playerId     String
+  /// e.g. "2024/25"
+  season       String
+  totalPoints  Int
+  minutes      Int
+  starts       Int    @default(0)
+  goalsScored  Int    @default(0)
+  assists      Int    @default(0)
+  cleanSheets  Int    @default(0)
+  goalsConceded Int   @default(0)
+  saves        Int    @default(0)
+  bonus        Int    @default(0)
+  bps          Int    @default(0)
+  defensiveContribution Int @default(0)
+  expectedGoals         Decimal @default(0) @db.Decimal(7, 2)
+  expectedAssists       Decimal @default(0) @db.Decimal(7, 2)
+  expectedGoalsConceded Decimal @default(0) @db.Decimal(7, 2)
+  /// tenths of a million
+  startCost Int
+  endCost   Int
+  updatedAt DateTime @updatedAt
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, season])
+  @@index([playerId])
+  @@map("player_season_history")
 }
 
 /// SNAPSHOT. `deadlineTime` is UTC. `finished` is NOT final — bonus and stat corrections land

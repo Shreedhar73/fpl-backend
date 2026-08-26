@@ -8,6 +8,7 @@ import {
   MappedFixture,
   MappedOwnership,
   MappedGameweekStat,
+  MappedSeasonHistory,
 } from './mappers';
 
 /**
@@ -25,22 +26,29 @@ export class SyncRepository {
 
   private chunk<T>(items: T[], size = 200): T[][] {
     const out: T[][] = [];
-    for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+    for (let i = 0; i < items.length; i += size)
+      out.push(items.slice(i, i + size));
     return out;
   }
 
   async teamIdByFplId(): Promise<Map<number, string>> {
-    const rows = await this.prisma.team.findMany({ select: { fplId: true, id: true } });
+    const rows = await this.prisma.team.findMany({
+      select: { fplId: true, id: true },
+    });
     return new Map(rows.map((r) => [r.fplId, r.id]));
   }
 
   async playerIdByFplId(): Promise<Map<number, string>> {
-    const rows = await this.prisma.player.findMany({ select: { fplId: true, id: true } });
+    const rows = await this.prisma.player.findMany({
+      select: { fplId: true, id: true },
+    });
     return new Map(rows.map((r) => [r.fplId, r.id]));
   }
 
   async fixtureIdByFplId(): Promise<Map<number, string>> {
-    const rows = await this.prisma.fixture.findMany({ select: { fplId: true, id: true } });
+    const rows = await this.prisma.fixture.findMany({
+      select: { fplId: true, id: true },
+    });
     return new Map(rows.map((r) => [r.fplId, r.id]));
   }
 
@@ -51,7 +59,12 @@ export class SyncRepository {
           this.prisma.team.upsert({
             where: { fplId: t.fplId },
             create: t,
-            update: { code: t.code, name: t.name, shortName: t.shortName, strength: t.strength },
+            update: {
+              code: t.code,
+              name: t.name,
+              shortName: t.shortName,
+              strength: t.strength,
+            },
           }),
         ),
       );
@@ -59,7 +72,10 @@ export class SyncRepository {
     return teams.length;
   }
 
-  async upsertPlayers(players: MappedPlayer[], teamId: Map<number, string>): Promise<number> {
+  async upsertPlayers(
+    players: MappedPlayer[],
+    teamId: Map<number, string>,
+  ): Promise<number> {
     let written = 0;
     for (const batch of this.chunk(players)) {
       const ops: Prisma.PrismaPromise<unknown>[] = [];
@@ -71,13 +87,28 @@ export class SyncRepository {
           firstName: p.firstName,
           secondName: p.secondName,
           webName: p.webName,
-          position: p.position as Position,
+          position: p.position,
           teamId: tid,
           nowCost: p.nowCost,
           status: p.status,
           chanceOfPlayingNextRound: p.chanceOfPlayingNextRound,
           news: p.news,
           newsAddedAt: p.newsAddedAt,
+          form: p.form,
+          pointsPerGame: p.pointsPerGame,
+          epNext: p.epNext,
+          epThis: p.epThis,
+          expectedGoalsPer90: p.expectedGoalsPer90,
+          expectedAssistsPer90: p.expectedAssistsPer90,
+          expectedGoalsConcededPer90: p.expectedGoalsConcededPer90,
+          defensiveContributionPer90: p.defensiveContributionPer90,
+          savesPer90: p.savesPer90,
+          startsPer90: p.startsPer90,
+          penaltiesOrder: p.penaltiesOrder,
+          directFreekicksOrder: p.directFreekicksOrder,
+          cornersOrder: p.cornersOrder,
+          seasonMinutes: p.seasonMinutes,
+          seasonStarts: p.seasonStarts,
         };
         ops.push(
           this.prisma.player.upsert({
@@ -98,14 +129,21 @@ export class SyncRepository {
       await this.prisma.$transaction(
         batch.map((g) => {
           const { id, ...rest } = g;
-          return this.prisma.gameweek.upsert({ where: { id }, create: g, update: rest });
+          return this.prisma.gameweek.upsert({
+            where: { id },
+            create: g,
+            update: rest,
+          });
         }),
       );
     }
     return gws.length;
   }
 
-  async upsertFixtures(fixtures: MappedFixture[], teamId: Map<number, string>): Promise<number> {
+  async upsertFixtures(
+    fixtures: MappedFixture[],
+    teamId: Map<number, string>,
+  ): Promise<number> {
     let written = 0;
     for (const batch of this.chunk(fixtures)) {
       const ops: Prisma.PrismaPromise<unknown>[] = [];
@@ -139,7 +177,11 @@ export class SyncRepository {
     return written;
   }
 
-  async upsertScoringConfig(season: string, scoring: unknown, rules: unknown): Promise<void> {
+  async upsertScoringConfig(
+    season: string,
+    scoring: unknown,
+    rules: unknown,
+  ): Promise<void> {
     await this.prisma.scoringConfig.upsert({
       where: { season },
       create: { season, scoring: scoring as object, rules: rules as object },
@@ -167,7 +209,10 @@ export class SyncRepository {
       rows.push({ playerId: pid, cost: p.nowCost, recordedAt });
     }
     if (rows.length) {
-      await this.prisma.playerPriceHistory.createMany({ data: rows, skipDuplicates: true });
+      await this.prisma.playerPriceHistory.createMany({
+        data: rows,
+        skipDuplicates: true,
+      });
     }
     return rows.length;
   }
@@ -215,7 +260,10 @@ export class SyncRepository {
       });
     }
     if (rows.length) {
-      await this.prisma.playerOwnershipHistory.createMany({ data: rows, skipDuplicates: true });
+      await this.prisma.playerOwnershipHistory.createMany({
+        data: rows,
+        skipDuplicates: true,
+      });
     }
     return rows.length;
   }
@@ -268,7 +316,12 @@ export class SyncRepository {
                 fixtureId: fid,
               },
             },
-            create: { playerId: pid, gameweekId: s.gameweekId, fixtureId: fid, ...data },
+            create: {
+              playerId: pid,
+              gameweekId: s.gameweekId,
+              fixtureId: fid,
+              ...data,
+            },
             update: data,
           }),
         );
@@ -279,9 +332,52 @@ export class SyncRepository {
     return written;
   }
 
+  /** Upsert a player's prior-season totals on (playerId, season). Idempotent. */
+  async upsertSeasonHistory(
+    entries: { playerId: string; seasons: MappedSeasonHistory[] }[],
+  ): Promise<number> {
+    let written = 0;
+    const flat = entries.flatMap((e) =>
+      e.seasons.map((s) => ({ playerId: e.playerId, s })),
+    );
+    for (const batch of this.chunk(flat)) {
+      const ops = batch.map(({ playerId, s }) => {
+        const data = {
+          totalPoints: s.totalPoints,
+          minutes: s.minutes,
+          starts: s.starts,
+          goalsScored: s.goalsScored,
+          assists: s.assists,
+          cleanSheets: s.cleanSheets,
+          goalsConceded: s.goalsConceded,
+          saves: s.saves,
+          bonus: s.bonus,
+          bps: s.bps,
+          defensiveContribution: s.defensiveContribution,
+          expectedGoals: s.expectedGoals,
+          expectedAssists: s.expectedAssists,
+          expectedGoalsConceded: s.expectedGoalsConceded,
+          startCost: s.startCost,
+          endCost: s.endCost,
+        };
+        return this.prisma.playerSeasonHistory.upsert({
+          where: { playerId_season: { playerId, season: s.season } },
+          create: { playerId, season: s.season, ...data },
+          update: data,
+        });
+      });
+      if (ops.length) await this.prisma.$transaction(ops);
+      written += ops.length;
+    }
+    return written;
+  }
+
   // --- SyncRun accounting ---------------------------------------------------
 
-  async startRun(endpoint: string, mode: string): Promise<{ id: string; startedAt: Date }> {
+  async startRun(
+    endpoint: string,
+    mode: string,
+  ): Promise<{ id: string; startedAt: Date }> {
     const run = await this.prisma.syncRun.create({
       data: { endpoint, mode, status: 'running' },
       select: { id: true, startedAt: true },
@@ -291,7 +387,12 @@ export class SyncRepository {
 
   async finishRun(
     id: string,
-    result: { rowsWritten: number; status: string; payloadHash?: string; error?: string },
+    result: {
+      rowsWritten: number;
+      status: string;
+      payloadHash?: string;
+      error?: string;
+    },
   ): Promise<void> {
     await this.prisma.syncRun.update({
       where: { id },
@@ -308,7 +409,11 @@ export class SyncRepository {
   /** The payload hash of the most recent successful/skipped run for an endpoint, or null. */
   async lastGoodHash(endpoint: string): Promise<string | null> {
     const row = await this.prisma.syncRun.findFirst({
-      where: { endpoint, status: { in: ['success', 'skipped'] }, payloadHash: { not: null } },
+      where: {
+        endpoint,
+        status: { in: ['success', 'skipped'] },
+        payloadHash: { not: null },
+      },
       orderBy: { startedAt: 'desc' },
       select: { payloadHash: true },
     });

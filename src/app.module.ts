@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './infra/prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
 import { FplSyncModule } from './modules/fpl-sync/fpl-sync.module';
+import { ProjectionsModule } from './modules/projections/projections.module';
 
 @Module({
   imports: [
@@ -12,7 +13,8 @@ import { FplSyncModule } from './modules/fpl-sync/fpl-sync.module';
     PrismaModule,
     HealthModule,
     FplSyncModule,
-    // Domain modules land here: players, fixtures, teams, squad, projections,
+    ProjectionsModule,
+    // Domain modules land here: players, fixtures, teams, squad,
     // optimizer, insights. One directory each under src/modules/ — see fpl-architecture-contract.
   ],
 })

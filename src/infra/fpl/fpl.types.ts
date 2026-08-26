@@ -38,6 +38,45 @@ export interface RawElement {
   selected_by_percent: string; // decimal string
   transfers_in_event: number;
   transfers_out_event: number;
+
+  // Projection inputs. ep_*/form/points_per_game are decimal STRINGS; the per_90 family are numbers.
+  form: string | null;
+  points_per_game: string | null;
+  ep_next: string | null;
+  ep_this: string | null;
+  expected_goals_per_90: number;
+  expected_assists_per_90: number;
+  expected_goals_conceded_per_90: number;
+  defensive_contribution_per_90: number;
+  saves_per_90: number;
+  starts_per_90: number;
+  penalties_order: number | null;
+  direct_freekicks_order: number | null;
+  corners_and_indirect_freekicks_order: number | null;
+  minutes: number; // season total
+  starts: number; // season total
+}
+
+/** One row of `element-summary/{id}/`'s `history_past` array — a prior SEASON's totals. */
+export interface RawSeasonHistory {
+  season_name: string;
+  element_code: number;
+  total_points: number;
+  minutes: number;
+  starts: number;
+  goals_scored: number;
+  assists: number;
+  clean_sheets: number;
+  goals_conceded: number;
+  saves: number;
+  bonus: number;
+  bps: number;
+  defensive_contribution?: number;
+  expected_goals: string;
+  expected_assists: string;
+  expected_goals_conceded: string;
+  start_cost: number;
+  end_cost: number;
 }
 
 export interface RawEvent {
@@ -112,4 +151,5 @@ export interface RawElementHistory {
 
 export interface ElementSummary {
   history: RawElementHistory[];
+  history_past: RawSeasonHistory[];
 }
