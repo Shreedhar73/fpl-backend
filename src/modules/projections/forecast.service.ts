@@ -6,7 +6,6 @@ import { minutesDistribution, projectFixtureV2 } from './model-v2';
 import { ForecastRepository } from './forecast.repository';
 import { HistoryRow, walkRounds } from './features';
 
-
 /**
  * Projects a real, upcoming gameweek with the fitted model (B-007 Phase 4e).
  *
@@ -86,9 +85,7 @@ export class ForecastService {
 
     const out: { summary: ForecastSummary; players: PlayerForecast[] }[] = [];
     for (const gw of gameweekIds) {
-      out.push(
-        await this.forecastOne(gw, history, scoring, playerId),
-      );
+      out.push(await this.forecastOne(gw, history, scoring, playerId));
     }
     return out;
   }
@@ -129,7 +126,10 @@ export class ForecastService {
           avail?.chance ?? null,
         );
         const minutes = minutesDistribution(
-          features.laggedStartRate,
+          {
+            startRate: features.laggedStartRate,
+            subRate: features.laggedSubRate,
+          },
           multiplier,
           FITTED_PARAMS,
         );

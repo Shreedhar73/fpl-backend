@@ -19,8 +19,24 @@ export interface MinutesParams {
   /** P(start) given a lagged start rate — a logistic on it, fitted rather than assumed to be identity */
   startIntercept: number;
   startSlope: number;
-  /** P(appearing at all | not starting) */
+  /**
+   * P(appearing at all | not starting), as ONE league-wide number.
+   *
+   * Kept as the fallback the sub curve collapses to, and as the number the report quotes for the
+   * population. It is no longer what the model multiplies by: B-013 measured that constant as the
+   * model's worst-calibrated shape, because it pays a never-used fringe player and a first substitute
+   * the same 15.4%.
+   */
   subAppearanceRate: number;
+  /**
+   * The sub curve — `P(appear | did not start)` as a logistic on the logit of the player's OWN lagged
+   * rate, fitted the same way `startIntercept`/`startSlope` are (B-019).
+   *
+   * `subSlope: 0` reduces this exactly to the old constant behaviour with
+   * `subIntercept = logit(subAppearanceRate)`, which is how the unfitted baseline states it.
+   */
+  subIntercept: number;
+  subSlope: number;
   /** P(playing 60+ | started) — a starter is not a certainty to see the hour */
   sixtyGivenStart: number;
   /** P(playing 60+ | came off the bench) */
@@ -87,6 +103,9 @@ export const UNFITTED_PARAMS: FittedParams = {
     startIntercept: 0,
     startSlope: 1,
     subAppearanceRate: 0.35,
+    // slope 0 => the curve is flat at the constant, which is exactly what v1 did.
+    subIntercept: Math.log(0.35 / 0.65),
+    subSlope: 0,
     sixtyGivenStart: 0.85,
     sixtyGivenSub: 0.05,
     minutesGivenStart: 85,
@@ -131,14 +150,21 @@ export const UNFITTED_PARAMS: FittedParams = {
  * | `assistsPerXa` | 1 | 1.395 | assists land well above expected assists |
  * | `defcon.dispersion` | 1 (Poisson) | 1.5 | defensive actions cluster, as suspected |
  * | `xgFixtureElasticity` | 1 | **0** | see below |
+ * | `subSlope` | — (a flat 0.154) | **1.384** | the sub term is a curve now, see below |
  *
- * Two results worth reading before trusting anything built on this:
+ * Three results worth reading before trusting anything built on this:
  *
  * - **`startSlope` 0.485, not 1.** v1 used a player's lagged start rate directly as P(start). The
  *   fitted curve is much flatter: a player who started every recent match is *not* a certainty, and
  *   one who started none is not hopeless. The first attempt at this fit returned a slope of 7.3e8 —
  *   complete separation running away to a step function — which is why the fit now carries a ridge
  *   penalty and a sanity bound.
+ * - **The substitute-appearance term is a curve now, and it was the model's worst shape.** B-013
+ *   scored every term on its own and `P(any appearance)` carried a Brier reliability of 0.0121
+ *   against a mean of 0.0012 for every other binary: one global `subAppearanceRate` paid a
+ *   never-used fringe player and a first substitute the same 15.4%. `subSlope` **1.384** is steeper
+ *   than 1, the opposite direction to `startSlope` — the lagged sub rate is heavily smoothed toward
+ *   the population prior before the model sees it, so the fit un-shrinks it.
  * - **Both fixture elasticities fitted to 0**, and `confidenceMatches` ran to the top of its grid.
  *   Held-out RMSE says the fixture-strength signal does not improve a SINGLE-GAMEWEEK points
  *   prediction: player-level variance swamps it. That is a real finding rather than a broken input —
@@ -156,6 +182,8 @@ export const FITTED_PARAMS: FittedParams = {
     startIntercept: -0.18790070079541765,
     startSlope: 0.4849268629262438,
     subAppearanceRate: 0.15435726210350584,
+    subIntercept: 0.5746772470150242,
+    subSlope: 1.3841301233905476,
     sixtyGivenStart: 0.9339351334078926,
     sixtyGivenSub: 0.013411204845338524,
     minutesGivenStart: 82.83320019172392,
@@ -176,7 +204,7 @@ export const FITTED_PARAMS: FittedParams = {
   provenance: {
     fittedOn: ['2023-24', '2024-25'],
     rows: 42468,
-    date: '2026-08-26',
+    date: '2026-08-27',
     objective:
       'frequencies measured directly; shape parameters by RMSE on held-out 2024-25 rounds 20+ ' +
       '(14,540 rows). RMSE deliberately, not MAE: MAE is minimised by the conditional median and ' +
@@ -190,6 +218,8 @@ export const FITTED_PARAMS: FittedParams = {
       'The availability multiplier is NOT fitted: the archive carries no per-gameweek status or chance_of_playing. It waits on player_deadline_snapshot (B-007 Phase 2) accumulating live gameweeks.',
       'strength.confidenceMatches reached the top of its search grid — the optimum is at or beyond 96, meaning held-out RMSE keeps improving as team strength is shrunk toward the league average.',
       'Both fixture elasticities fitted to 0 on single-gameweek RMSE. Team strength still drives clean sheets and goals conceded through lambda-against.',
+      'xaFixtureElasticity: the grid was FLAT — every value from 1.0 to 2.0 scored 1.9497 and the whole grid spanned 0.0007 RMSE. A grid search returns a winner whether or not its objective can tell the candidates apart, so the search now takes the NULL candidate (no effect) when the spread is under 0.001, and says so. Without that rule this parameter would have shipped as 1.5 — a claim that the fixture moves assists by half again, on evidence of seven ten-thousandths of a point.',
+      'subIntercept/subSlope replace the scalar subAppearanceRate (B-019). Fitted on non-start rows only — the population the term is asked about at prediction time. subAppearanceRate is kept as the population rate the report quotes and as the flat-curve fallback.',
     ],
   },
 };

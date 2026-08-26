@@ -136,7 +136,14 @@ async function main(): Promise<void> {
             awayTeamId: String(row.opponentTeamCode),
           });
         }
-        const minutes = minutesDistribution(features.laggedStartRate, 1, FITTED_PARAMS);
+        const minutes = minutesDistribution(
+          {
+            startRate: features.laggedStartRate,
+            subRate: features.laggedSubRate,
+          },
+          1,
+          FITTED_PARAMS,
+        );
         const projection = projectFixtureV2(
           row.position,
           minutes,

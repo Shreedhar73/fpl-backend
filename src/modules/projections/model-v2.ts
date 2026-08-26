@@ -237,7 +237,21 @@ function saveRate(
 }
 
 /**
- * Turn a lagged start rate into the minutes distribution the projection needs.
+ * What the minutes model is allowed to know about a player before the round it is predicting.
+ *
+ * Both rates come out of `walkRounds`, which computes them before folding the round in — the
+ * structural guarantee against reading the future belongs to the feature engine, and this shape only
+ * has to carry them across.
+ */
+export interface LaggedMinutes {
+  /** starts / matches so far, season first and career behind */
+  startRate: number;
+  /** appearances-off-the-bench / non-starts so far, smoothed toward the population prior */
+  subRate: number;
+}
+
+/**
+ * Turn a player's lagged minutes record into the minutes distribution the projection needs.
  *
  * `availability` is the injury/doubt multiplier and stays HEURISTIC on purpose: the archive carries no
  * per-gameweek `status` or `chance_of_playing_next_round`, so this half of the model cannot be fitted
@@ -245,17 +259,20 @@ function saveRate(
  * Phase 2). Anything that reports this model as fitted must say which half.
  */
 export function minutesDistribution(
-  laggedStartRate: number,
+  lagged: LaggedMinutes,
   availability: number,
   params: FittedParams,
 ): MinutesDistribution {
   const m = params.minutes;
   const rawStart = logistic(
-    m.startIntercept + m.startSlope * logit(laggedStartRate),
+    m.startIntercept + m.startSlope * logit(lagged.startRate),
   );
+  // P(appear | did not start), from the player's OWN lagged rate rather than one league-wide
+  // constant. B-013 measured that constant as the model's worst-calibrated shape by a factor of ten.
+  const rawSub = logistic(m.subIntercept + m.subSlope * logit(lagged.subRate));
 
   const pStart = clamp01(availability * rawStart);
-  const pSub = clamp01(availability * (1 - rawStart) * m.subAppearanceRate);
+  const pSub = clamp01(availability * (1 - rawStart) * rawSub);
   const pPlay = clamp01(pStart + pSub);
   const pSixtyPlus = clamp01(
     pStart * m.sixtyGivenStart + pSub * m.sixtyGivenSub,

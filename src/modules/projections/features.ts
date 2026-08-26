@@ -69,6 +69,19 @@ export interface PlayerFeatures {
    * exists to prevent, and it produces no error and nothing wrong-looking in the output.
    */
   appearancesSample: number;
+  /**
+   * The player's own `P(appear | did not start)`, lagged and smoothed — B-019.
+   *
+   * The direct counterpart of `laggedStartRate` for the other half of the minutes model. Until this
+   * existed, every non-starter in the league was paid one global 15.4% chance of coming on, which
+   * B-013 measured as the model's worst-calibrated term by a factor of ten: a fringe player who will
+   * never be used and a first substitute who always comes on were given the same number.
+   *
+   * Smoothed toward the population prior so it is DEFINED for a player who has started every match
+   * he has played — there is no empirical rate for him — and so three non-starts cannot produce a 0
+   * or a 1 that the logit would then have to clamp.
+   */
+  laggedSubRate: number;
   /** trailing-30-day points per match, recomputed rather than read: the archive has no `form` column */
   form: number | null;
   /** previous season's points per 90, the other baseline */
@@ -290,18 +303,57 @@ function featuresFor(
     rates,
     // A player with no history at all is assumed a squad player rather than a starter — the
     // alternative, assuming they start, is what makes a model recommend every new signing.
-    laggedStartRate: s.matches > 0 ? s.starts / s.matches : c.matches > 0 ? c.starts / c.matches : 0.3,
+    laggedStartRate:
+      s.matches > 0
+        ? s.starts / s.matches
+        : c.matches > 0
+          ? c.starts / c.matches
+          : 0.3,
+    laggedSubRate: laggedSubRate(s, c),
     minutesSample: mins,
     matchesSample: c.matches,
     appearancesSample: c.appearances,
     form,
     priorSeasonPointsPer90:
-      prior && prior.minutes >= 450 ? (prior.points / prior.minutes) * 90 : null,
+      prior && prior.minutes >= 450
+        ? (prior.points / prior.minutes) * 90
+        : null,
   };
 }
 
 function blend(own: number, league: number, weight: number): number {
   return weight * own + (1 - weight) * league;
+}
+
+/**
+ * The population rate a thin sub-appearance record is shrunk toward, and how much shrinking it takes.
+ *
+ * The prior is the same quantity `fitted.ts` calls `subAppearanceRate` — the league-wide share of
+ * non-starts that became appearances. It is written here as a constant rather than threaded through
+ * from the fitted parameters on purpose: this is a SMOOTHING target, not a model parameter, and the
+ * feature has to be identical between the run that fits the curve and the run that serves it. A
+ * smoothing target that moves with the fit makes the fitted curve a function of its own output.
+ */
+const SUB_RATE_PRIOR = 0.15;
+/** Non-starts before a player's own rate outweighs the prior — a Beta(k) pseudo-count. */
+const SUB_RATE_SHRINK = 8;
+
+/**
+ * `P(appeared | did not start)` from what is already folded in, this season first and career behind.
+ *
+ * Season first for the same reason `laggedStartRate` is: a role changes between seasons, and last
+ * year's super-sub may be this year's starter or this year's out-of-favour. The career record is the
+ * fallback while the season is young, and the prior is the fallback behind that.
+ */
+function laggedSubRate(season: Accumulator, career: Accumulator): number {
+  const pick =
+    season.matches - season.starts >= SUB_RATE_SHRINK ? season : career;
+  const nonStarts = Math.max(0, pick.matches - pick.starts);
+  const subAppearances = Math.max(0, pick.appearances - pick.starts);
+  return (
+    (subAppearances + SUB_RATE_PRIOR * SUB_RATE_SHRINK) /
+    (nonStarts + SUB_RATE_SHRINK)
+  );
 }
 
 /**
@@ -313,7 +365,13 @@ function blend(own: number, league: number, weight: number): number {
  */
 const LEAGUE_RATES: Record<
   PositionCode,
-  { xg90: number; xa90: number; defcon90: number; saves90: number; bps90: number }
+  {
+    xg90: number;
+    xa90: number;
+    defcon90: number;
+    saves90: number;
+    bps90: number;
+  }
 > = {
   GKP: { xg90: 0, xa90: 0.01, defcon90: 0, saves90: 3.0, bps90: 18 },
   DEF: { xg90: 0.05, xa90: 0.06, defcon90: 7.5, saves90: 0, bps90: 16 },
