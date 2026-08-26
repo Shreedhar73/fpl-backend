@@ -101,6 +101,7 @@ model Player {
   seasonHistory    PlayerSeasonHistory[]
   projections      Projection[]
   squadPicks       SquadPick[]
+  archiveGameweeks ArchivePlayerGameweek[]
 
   @@index([teamId])
   @@index([position])
@@ -397,4 +398,97 @@ model ScoringConfig {
   updatedAt DateTime @updatedAt
 
   @@map("scoring_config")
+}
+
+/// THIRD-PARTY ARCHIVE — per-gameweek rows scraped from the FPL API by
+/// github.com/vaastav/Fantasy-Premier-League, which is where they exist and the official API does not:
+/// `element-summary/{id}/history_past` returns season TOTALS only. Held for the last three completed
+/// seasons (2023-24, 2024-25, 2025-26) so the projection model can be fitted on ~87k player-gameweeks
+/// instead of the one gameweek this season has produced (B-007 Phase 2b).
+///
+/// Kept in its OWN table on purpose. These rows are a scrape under an unclear licence, not our sync,
+/// and nothing in the serving path may read them — a row that cannot be traced to the source that
+/// produced it is a row nobody can audit later. They join to ours only through the stable `code`.
+///
+/// NOT stored: the archive's `xP` column. It is FPL's `ep_this` scraped AFTER each gameweek ended, so
+/// it carries post-match information (the archive's own README documents this and advises dropping
+/// it). Absent from the schema so a later session cannot reach for it without reading why.
+model ArchivePlayerGameweek {
+  id     String @id @default(cuid())
+  /// as the archive labels it: "2025-26"
+  season String
+  /// gameweek within that season (the archive's `round`)
+  round  Int
+  /// that season's fixture id — part of the key, so a double gameweek is two rows
+  fixture Int
+
+  /// STABLE across seasons, unlike the per-season `element` id. The join key to `Player.code`.
+  playerCode Int
+  /// null when the player has since left the league and has no row of ours. The fit needs them.
+  playerId   String?
+  webName    String
+  position   Position
+  teamCode         Int?
+  opponentTeamCode Int?
+  wasHome     Boolean
+  kickoffTime DateTime?
+
+  minutes         Int @default(0)
+  starts          Int @default(0)
+  totalPoints     Int @default(0)
+  goalsScored     Int @default(0)
+  assists         Int @default(0)
+  cleanSheets     Int @default(0)
+  goalsConceded   Int @default(0)
+  ownGoals        Int @default(0)
+  penaltiesSaved  Int @default(0)
+  penaltiesMissed Int @default(0)
+  yellowCards     Int @default(0)
+  redCards        Int @default(0)
+  saves           Int @default(0)
+  bonus           Int @default(0)
+  bps             Int @default(0)
+
+  /// 2025-26 onward only — the category did not exist before, so NULL means "not a thing yet",
+  /// which is not the same as 0. The components are stored beside the total because a threshold
+  /// model fits the components and predicts the total.
+  defensiveContribution         Int?
+  clearancesBlocksInterceptions Int?
+  tackles                       Int?
+  recoveries                    Int?
+
+  expectedGoals         Decimal @default(0) @db.Decimal(6, 2)
+  expectedAssists       Decimal @default(0) @db.Decimal(6, 2)
+  expectedGoalsConceded Decimal @default(0) @db.Decimal(6, 2)
+  ictIndex              Decimal @default(0) @db.Decimal(6, 1)
+
+  /// tenths of a million, the player's price that gameweek
+  value      Int @default(0)
+  selectedBy Int @default(0)
+  createdAt  DateTime @default(now())
+
+  player Player? @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@unique([season, playerCode, round, fixture])
+  @@index([season, round])
+  @@index([playerCode])
+  @@map("archive_player_gameweek")
+}
+
+/// The scoring table for a PAST season, reconstructed by hand — upstream serves only the current
+/// season's `game_config`, and the archive carries none. Separate from `scoring_config` because that
+/// one is a synced mirror and this one is our reconstruction; mixing them would make a hand-entered
+/// row indistinguishable from an upstream one.
+///
+/// Each row is proved rather than trusted: `pointsFor` must reproduce that season's official
+/// `total_points` for every archive row, exactly as it does for the live gameweek.
+model ArchiveSeasonScoring {
+  id        String   @id @default(cuid())
+  season    String   @unique
+  scoring   Json
+  /// what the values were checked against, so a future session can re-check them
+  source    String
+  updatedAt DateTime @updatedAt
+
+  @@map("archive_season_scoring")
 }
