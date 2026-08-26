@@ -59,6 +59,11 @@ export interface CalibrationReport {
   model: ErrorStats;
   baselineForm: ErrorStats;
   baselinePriorSeason: ErrorStats;
+  /**
+   * Kept for the pairwise tables, NOT as a verdict. D-020: MAE over the whole field is minimised by
+   * predicting that nobody scores, so "beats the baselines on MAE" is not a statement about whether
+   * this model makes better decisions. That question is `DecisionService`'s.
+   */
   beatsForm: boolean;
   beatsPriorSeason: boolean;
   path: string;

@@ -51,6 +51,20 @@ export interface PredictionRow {
   /** realised minutes — what auto-substitution turns on, so the decision phases need it here */
   minutes: number;
   predicted: Record<Predictor, number | null>;
+  /**
+   * The model's P(featuring at all), for bench order.
+   *
+   * A bench is ordered by `pPlay × EP` (`fpl-optimizer`) — an 8-point projection from a player with
+   * a 40% chance of appearing is worth less on a bench than a 3-point projection from a nailed one,
+   * because a bench player only ever scores if they come on. The harness used to discard the minutes
+   * distribution the moment EP was composed from it.
+   *
+   * **Model-only, and that asymmetry is deliberate.** `form` and last season's points-per-90 are
+   * scalars with no notion of appearance probability, so they order their benches by their own
+   * predicted points — which is all they have. Inventing a `pPlay` for them would be handing a
+   * baseline a component of our model and then reporting that we beat it.
+   */
+  pPlay: number;
 }
 
 export interface RunOptions {
@@ -137,6 +151,7 @@ export function runBacktest(
           form: features.form,
           priorSeason: features.priorSeasonPointsPer90,
         },
+        pPlay: minutes.pPlay,
       });
     }
   }

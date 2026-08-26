@@ -52,8 +52,60 @@ That is a claim about ordering, not about points. It becomes a claim about point
 
 `priorSeason` is far behind on every measure, which is the sanity check on the metric itself: a baseline that cannot see this season should not rank this season's rounds.
 
+## The XI and the armband
+
+Every predictor is handed **the same fifteen players** and picks an XI, a bench order and a captain from them. If each picked its own squad the XI comparison would be confounded by the squad comparison, and a model could field a worse XI out of a better fifteen and look better for it.
+
+The squads are chosen once, at **round 1**, by rules that read no model: the **template** is the legal fifteen maximising `selectedBy` — an integer program, because the top fifteen by ownership breaks the position quotas, the three-per-club cap and the budget all at once — plus **4 seeded random legal squads** (seed `20260827`) so the verdict does not rest on one squad's quirks.
+
+**XI efficiency** is the share of the points that squad *could* have delivered that the predictor's selections actually took — so squads of different quality can be read side by side. **Captain regret** is the mean gap per round between the best realised score among the players fielded and the captain's; a bench player's haul is an XI decision, not an armband one, so it is deliberately not in the denominator.
+
+**The squads are built at round 1 and scored from round 2.** `form` has no trailing round at a season's first deadline, so round 1 is absent from the comparison population entirely — which means the squads are picked at opening-day prices and opening-day ownership, before a round of transfers has moved the crowd, and the season measured here is 37 rounds rather than 38.
+
+| Squad | Predictor | rounds | points | XI efficiency | captain regret |
+|---|---|---:|---:|---:|---:|
+| template (most-owned legal fifteen) | model | 37 | 1738 | 86.9% | 5.838 |
+| template (most-owned legal fifteen) | form | 37 | 1731 | 86.6% | 6.162 |
+| template (most-owned legal fifteen) | priorSeason | 37 | 1696 | 84.8% | 7.081 |
+| random #1 (seed 20260827) | model | 37 | 494 | 85.3% | 2.108 |
+| random #1 (seed 20260827) | form | 37 | 505 | 87.2% | 1.811 |
+| random #1 (seed 20260827) | priorSeason | 37 | 455 | 78.6% | 3.162 |
+| random #2 (seed 20260827) | model | 37 | 1002 | 84.6% | 4.865 |
+| random #2 (seed 20260827) | form | 37 | 995 | 84.0% | 5.054 |
+| random #2 (seed 20260827) | priorSeason | 37 | 1031 | 87.0% | 4.081 |
+| random #3 (seed 20260827) | model | 37 | 744 | 83.5% | 3.973 |
+| random #3 (seed 20260827) | form | 37 | 775 | 87.0% | 3.135 |
+| random #3 (seed 20260827) | priorSeason | 37 | 778 | 87.3% | 3.054 |
+| random #4 (seed 20260827) | model | 37 | 955 | 81.7% | 5.676 |
+| random #4 (seed 20260827) | form | 37 | 963 | 82.4% | 5.459 |
+| random #4 (seed 20260827) | priorSeason | 37 | 977 | 83.6% | 5.081 |
+
+### Is the difference bigger than the noise?
+
+**A mean difference over 38 rounds is not a result on its own.** Measured on the B-011 collision sweep next door (`reports/guards-009.md`, 103 archived gameweeks): a paired per-round difference of +0.59 realised points carried a standard deviation of 0.92, and the per-season sign flipped — −2.41, +2.34, +0.97 across three seasons of the same comparison. A season does not contain enough rounds to resolve effects of a couple of points a week.
+
+So each row below is **paired by round** — both predictors faced the same fixtures, blanks and hauls, so the round-to-round variance that dominates the totals cancels — and carries the standard error of that pairing. "Clears noise" is |mean| > 2 standard errors, which is a crude bar and is meant to be.
+
+| Squad | comparison | rounds | mean difference | ± s.e. | clears noise |
+|---|---|---:|---:|---:|---|
+| template (most-owned legal fifteen) | model − form | 37 | +0.19 | 0.78 | no |
+| template (most-owned legal fifteen) | model − priorSeason | 37 | +1.14 | 0.80 | no |
+| random #1 (seed 20260827) | model − form | 37 | -0.30 | 0.49 | no |
+| random #1 (seed 20260827) | model − priorSeason | 37 | +1.05 | 0.62 | no |
+| random #2 (seed 20260827) | model − form | 37 | +0.19 | 0.65 | no |
+| random #2 (seed 20260827) | model − priorSeason | 37 | -0.78 | 0.49 | no |
+| random #3 (seed 20260827) | model − form | 37 | -0.84 | 0.61 | no |
+| random #3 (seed 20260827) | model − priorSeason | 37 | -0.92 | 0.80 | no |
+| random #4 (seed 20260827) | model − form | 37 | -0.22 | 0.66 | no |
+| random #4 (seed 20260827) | model − priorSeason | 37 | -0.59 | 0.78 | no |
+
+
+**Nothing here separates the predictors.** Not one model-versus-`form` comparison clears two standard errors, and the sign of the difference flips across squads (2 of 5 positive). **This is a null result and it is reported as one** — the model does not make measurably better XI and captain decisions than `form` over one season, on any of these fifteens.
+
+That is not a contradiction of the ordering section above, and it is worth being precise about why. Given a **fixed** fifteen, most of the XI picks itself: the decisions left are a handful of marginal calls at the bench boundary and the armband, which is a much smaller surface than ranking six hundred players. The ordering advantage is real and this is the wrong instrument to see it with — **it shows up in which fifteen you own, not in how you arrange the fifteen you already have.** Testing that needs the transfers, which is Phase 3.
+
 ## Still to come in this report
 
-B-012's remaining phases: the XI and captain decision over fixed squads shared by every model (Phase 2), and a full-season simulation under the real rules — free transfers banked to five, −4 hits, the 50% sell fee, auto-subs, captain fallback (Phases 3–4). Until those land, this report answers "is the ranking better" and does not yet answer "would it have scored more points".
+B-012's remaining phases: a full-season simulation under the real rules — free transfers banked to five, −4 hits, the 50% sell fee, transfers as a policy (Phases 3–4). The squads above are **held fixed all season**, so what is measured here is the XI and the armband and nothing else; a model that would have transferred its way to a better squad gets no credit for it yet.
 
 Nothing was written to `projections` — asserted, not assumed.

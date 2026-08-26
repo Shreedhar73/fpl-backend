@@ -33,10 +33,16 @@ async function main(): Promise<void> {
     log.log(
       `last-season n=${r.baselinePriorSeason.n} MAE=${r.baselinePriorSeason.mae.toFixed(3)}`,
     );
+    // Deliberately NOT a verdict line. D-020 retired MAE over the whole field as the bar, and the
+    // report file stopped claiming one — a CLI that still prints "beats both baselines" is the same
+    // claim in the place people actually read. The verdict lives in `pnpm decision-quality`.
     log.log(
-      r.beatsForm && r.beatsPriorSeason
-        ? 'beats both baselines on MAE'
-        : 'does NOT beat both baselines on MAE',
+      `vs form: MAE ${r.model.mae.toFixed(3)} / ${r.baselineForm.mae.toFixed(3)}, ` +
+        `RMSE ${r.model.rmse.toFixed(3)} / ${r.baselineForm.rmse.toFixed(3)} ` +
+        `(n=${r.model.n})`,
+    );
+    log.log(
+      'MAE over the whole field is a diagnostic, not the bar — run `pnpm decision-quality` (D-020)',
     );
     await app.close();
     process.exit(0);

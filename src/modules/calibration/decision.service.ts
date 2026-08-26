@@ -20,6 +20,22 @@ import {
   summariseOrdering,
 } from './ordering';
 import { TEST_SEASON, TRAIN_SEASONS } from './calibration.service';
+import { fixedSquads, FixedSquad } from './fixed-squads';
+import {
+  decideOverSeason,
+  DecisionSummary,
+  pairedDifference,
+  RoundDecision,
+} from './xi-decision';
+
+/**
+ * The seed behind every random fixed squad in this report.
+ *
+ * Recorded rather than hidden, and constant rather than drawn: an unseeded random baseline produces
+ * a number nobody can reproduce, which is not a baseline.
+ */
+export const SQUAD_SEED = 20260827;
+export const RANDOM_SQUADS = 4;
 
 /**
  * The decision-quality report (B-012).
@@ -37,6 +53,7 @@ import { TEST_SEASON, TRAIN_SEASONS } from './calibration.service';
 export interface DecisionReport {
   path: string;
   ordering: Map<Predictor, OrderingSummary>;
+  decisions: DecisionSummary[];
 }
 
 @Injectable()
@@ -47,6 +64,7 @@ export class DecisionService {
 
   async evaluate(label: string, params: FittedParams): Promise<DecisionReport> {
     const before = await this.repo.projectionCount();
+    const beforeRuns = await this.repo.optimizerRunCount();
     const scoringFor = await this.scoringResolver();
     const rows = await this.repo.history([...TRAIN_SEASONS, TEST_SEASON]);
 
@@ -66,7 +84,52 @@ export class DecisionService {
       );
     }
 
-    const path = await this.writeReport(label, result.rows, population);
+    // Phase 2: the XI and the armband, over squads shared by every predictor so the comparison is
+    // about the decision and not about who got the better fifteen.
+    const rules = await this.repo.rules();
+    const byRound = new Map<number, Map<number, PredictionRow>>();
+    for (const r of population) {
+      let m = byRound.get(r.round);
+      if (!m) byRound.set(r.round, (m = new Map()));
+      m.set(r.playerCode, r);
+    }
+    // Squads are built from ROUND 1, and scored from round 2 — because `form` has no trailing round
+    // at a season's first deadline, so round 1 is absent from the common population entirely. Two
+    // consequences, both deliberate: the squad is chosen at opening-day prices and opening-day
+    // ownership (rather than after a round of transfers has already moved the crowd), and the
+    // comparison covers 37 rounds rather than 38. Both are stated in the report.
+    const squadRound = Math.min(...result.rows.map((r) => r.round));
+    const squadPool = new Map<number, PredictionRow>();
+    for (const r of result.rows) {
+      if (r.round === squadRound) squadPool.set(r.playerCode, r);
+    }
+    const squads = await fixedSquads(
+      [...squadPool.values()],
+      await this.repo.ownershipAt(TEST_SEASON, squadRound),
+      rules,
+      SQUAD_SEED,
+      RANDOM_SQUADS,
+    );
+
+    const decisions: DecisionSummary[] = [];
+    const roundsBy = new Map<string, RoundDecision[]>();
+    for (const squad of squads) {
+      for (const p of PREDICTORS) {
+        const r = decideOverSeason(squad, byRound, p, rules, TEST_SEASON);
+        decisions.push(r.summary);
+        roundsBy.set(`${squad.label}|${p}`, r.rounds);
+      }
+    }
+
+    const path = await this.writeReport(
+      label,
+      result.rows,
+      population,
+      squads,
+      decisions,
+      roundsBy,
+      squadRound,
+    );
 
     const after = await this.repo.projectionCount();
     if (after !== before) {
@@ -76,7 +139,16 @@ export class DecisionService {
       );
     }
 
-    return { path, ordering };
+    const afterRuns = await this.repo.optimizerRunCount();
+    if (afterRuns !== beforeRuns) {
+      throw new Error(
+        `the decision harness wrote to optimizer_runs (${beforeRuns} → ${afterRuns}). A simulated ` +
+          `season is thousands of solves; one persisted becomes the newest run and the app serves a ` +
+          `2025-26 recommendation as this week's advice.`,
+      );
+    }
+
+    return { path, ordering, decisions };
   }
 
   private async scoringResolver(): Promise<(season: string) => Scoring> {
@@ -103,6 +175,10 @@ export class DecisionService {
     label: string,
     all: PredictionRow[],
     population: PredictionRow[],
+    squads: FixedSquad[],
+    decisions: DecisionSummary[],
+    roundsBy: Map<string, RoundDecision[]>,
+    squadRound: number,
   ): Promise<string> {
     const lines: string[] = [];
     const w = (s = '') => lines.push(s);
@@ -244,14 +320,131 @@ export class DecisionService {
       );
     }
     w();
+    w(`## The XI and the armband`);
+    w();
+    w(
+      `Every predictor is handed **the same fifteen players** and picks an XI, a bench order and a ` +
+        `captain from them. If each picked its own squad the XI comparison would be confounded by ` +
+        `the squad comparison, and a model could field a worse XI out of a better fifteen and look ` +
+        `better for it.`,
+    );
+    w();
+    w(
+      `The squads are chosen once, at **round ${squadRound}**, by rules that read no model: the ` +
+        `**template** is the legal fifteen maximising \`selectedBy\` ` +
+        `— an integer program, because the top fifteen by ownership breaks the position quotas, the ` +
+        `three-per-club cap and the budget all at once — plus **${RANDOM_SQUADS} seeded random legal ` +
+        `squads** (seed \`${SQUAD_SEED}\`) so the verdict does not rest on one squad's quirks.`,
+    );
+    w();
+    w(
+      `**XI efficiency** is the share of the points that squad *could* have delivered that the ` +
+        `predictor's selections actually took — so squads of different quality can be read side by ` +
+        `side. **Captain regret** is the mean gap per round between the best realised score among ` +
+        `the players fielded and the captain's; a bench player's haul is an XI decision, not an ` +
+        `armband one, so it is deliberately not in the denominator.`,
+    );
+    w();
+    w(
+      `**The squads are built at round ${squadRound} and scored from round ` +
+        `${Math.min(...[...roundsBy.values()][0].map((r) => r.round))}.** \`form\` has no trailing ` +
+        `round at a season's first deadline, so round 1 is absent from the comparison population ` +
+        `entirely — which means the squads are picked at opening-day prices and opening-day ` +
+        `ownership, before a round of transfers has moved the crowd, and the season measured here is ` +
+        `37 rounds rather than 38.`,
+    );
+    w();
+    w(`| Squad | Predictor | rounds | points | XI efficiency | captain regret |`);
+    w(`|---|---|---:|---:|---:|---:|`);
+    for (const d of decisions) {
+      w(
+        `| ${d.squad} | ${d.predictor} | ${d.rounds} | ${d.totalPoints} | ` +
+          `${pct(d.xiEfficiency)} | ${n3(d.captainRegret)} |`,
+      );
+    }
+    w();
+    w(`### Is the difference bigger than the noise?`);
+    w();
+    w(
+      `**A mean difference over 38 rounds is not a result on its own.** Measured on the B-011 ` +
+        `collision sweep next door (\`reports/guards-009.md\`, 103 archived gameweeks): a paired ` +
+        `per-round difference of +0.59 realised points carried a standard deviation of 0.92, and the ` +
+        `per-season sign flipped — −2.41, +2.34, +0.97 across three seasons of the same comparison. ` +
+        `A season does not contain enough rounds to resolve effects of a couple of points a week.`,
+    );
+    w();
+    w(
+      `So each row below is **paired by round** — both predictors faced the same fixtures, blanks ` +
+        `and hauls, so the round-to-round variance that dominates the totals cancels — and carries ` +
+        `the standard error of that pairing. "Clears noise" is |mean| > 2 standard errors, which is ` +
+        `a crude bar and is meant to be.`,
+    );
+    w();
+    w(`| Squad | comparison | rounds | mean difference | ± s.e. | clears noise |`);
+    w(`|---|---|---:|---:|---:|---|`);
+    for (const squad of squads) {
+      for (const against of ['form', 'priorSeason'] as Predictor[]) {
+        const d = pairedDifference(
+          roundsBy.get(`${squad.label}|model`) ?? [],
+          roundsBy.get(`${squad.label}|${against}`) ?? [],
+        );
+        if (!d) continue;
+        w(
+          `| ${squad.label} | model − ${against} | ${d.rounds} | ` +
+            `${d.meanDifference >= 0 ? '+' : ''}${d.meanDifference.toFixed(2)} | ` +
+            `${d.standardError.toFixed(2)} | ${d.clearsNoise ? '**yes**' : 'no'} |`,
+        );
+      }
+    }
+    w();
+
+    {
+      const pairs = squads
+        .map((sq) => ({
+          squad: sq.label,
+          d: pairedDifference(
+            roundsBy.get(`${sq.label}|model`) ?? [],
+            roundsBy.get(`${sq.label}|form`) ?? [],
+          ),
+        }))
+        .filter((x) => x.d !== null) as { squad: string; d: NonNullable<ReturnType<typeof pairedDifference>> }[];
+      const cleared = pairs.filter((x) => x.d.clearsNoise);
+      const positive = pairs.filter((x) => x.d.meanDifference > 0);
+      w();
+      if (cleared.length === 0) {
+        w(
+          `**Nothing here separates the predictors.** Not one model-versus-\`form\` comparison ` +
+            `clears two standard errors, and the sign of the difference flips across squads ` +
+            `(${positive.length} of ${pairs.length} positive). **This is a null result and it is ` +
+            `reported as one** — the model does not make measurably better XI and captain decisions ` +
+            `than \`form\` over one season, on any of these fifteens.`,
+        );
+        w();
+        w(
+          `That is not a contradiction of the ordering section above, and it is worth being precise ` +
+            `about why. Given a **fixed** fifteen, most of the XI picks itself: the decisions left ` +
+            `are a handful of marginal calls at the bench boundary and the armband, which is a much ` +
+            `smaller surface than ranking six hundred players. The ordering advantage is real and ` +
+            `this is the wrong instrument to see it with — **it shows up in which fifteen you own, ` +
+            `not in how you arrange the fifteen you already have.** Testing that needs the ` +
+            `transfers, which is Phase 3.`,
+        );
+      } else {
+        w(
+          `**${cleared.length} of ${pairs.length}** model-versus-\`form\` comparisons clear two ` +
+            `standard errors: ${cleared.map((c) => `${c.squad} (${c.d.meanDifference >= 0 ? '+' : ''}${c.d.meanDifference.toFixed(2)})`).join(', ')}.`,
+        );
+      }
+      w();
+    }
     w(`## Still to come in this report`);
     w();
     w(
-      `B-012's remaining phases: the XI and captain decision over fixed squads shared by every ` +
-        `model (Phase 2), and a full-season simulation under the real rules — free transfers banked ` +
-        `to five, −4 hits, the 50% sell fee, auto-subs, captain fallback (Phases 3–4). Until those ` +
-        `land, this report answers "is the ranking better" and does not yet answer "would it have ` +
-        `scored more points".`,
+      `B-012's remaining phases: a full-season simulation under the real rules — free transfers ` +
+        `banked to five, −4 hits, the 50% sell fee, transfers as a policy (Phases 3–4). The squads ` +
+        `above are **held fixed all season**, so what is measured here is the XI and the armband and ` +
+        `nothing else; a model that would have transferred its way to a better squad gets no credit ` +
+        `for it yet.`,
     );
     w();
     w(`Nothing was written to \`projections\` — asserted, not assumed.`);
