@@ -15,7 +15,10 @@ import {
 } from '../../projections/backtest';
 import { HistoryRow, walkRounds } from '../../projections/features';
 import { UNFITTED_PARAMS, FITTED_PARAMS } from '../../projections/fitted';
-import { minutesDistribution, projectFixtureV2 } from '../../projections/model-v2';
+import {
+  minutesDistribution,
+  projectFixtureV2,
+} from '../../projections/model-v2';
 import { Scoring, RawScoring } from '../../projections/scoring';
 import { calibrationCurve, errorStats, Observation } from '../metrics';
 
@@ -48,11 +51,21 @@ const scoring = Scoring.from(SCORING);
 describe('the cross-season time cut', () => {
   it('admits every earlier season and only earlier rounds of the current one', () => {
     const target = { season: '2024-25', round: 5 };
-    expect(withinSeasonRoundCut({ season: '2023-24', round: 38 }, target)).toBe(true);
-    expect(withinSeasonRoundCut({ season: '2024-25', round: 4 }, target)).toBe(true);
-    expect(withinSeasonRoundCut({ season: '2024-25', round: 5 }, target)).toBe(false);
-    expect(withinSeasonRoundCut({ season: '2024-25', round: 6 }, target)).toBe(false);
-    expect(withinSeasonRoundCut({ season: '2025-26', round: 1 }, target)).toBe(false);
+    expect(withinSeasonRoundCut({ season: '2023-24', round: 38 }, target)).toBe(
+      true,
+    );
+    expect(withinSeasonRoundCut({ season: '2024-25', round: 4 }, target)).toBe(
+      true,
+    );
+    expect(withinSeasonRoundCut({ season: '2024-25', round: 5 }, target)).toBe(
+      false,
+    );
+    expect(withinSeasonRoundCut({ season: '2024-25', round: 6 }, target)).toBe(
+      false,
+    );
+    expect(withinSeasonRoundCut({ season: '2025-26', round: 1 }, target)).toBe(
+      false,
+    );
   });
 
   it('does not let a later season in through a lower round number', () => {
@@ -76,7 +89,7 @@ describe('distributions', () => {
     const correct = expectedFloorDiv(2, 3);
     expect(correct).toBeLessThan(naive);
     // Sum_{m>=1} P(X >= 3m) for Poisson(2) = 0.3233 + 0.0166 + ... = 0.340.
-    expect(correct).toBeCloseTo(0.340, 2);
+    expect(correct).toBeCloseTo(0.34, 2);
   });
 
   it('is exact where it can be checked by hand', () => {
@@ -104,7 +117,9 @@ describe('distributions', () => {
 });
 
 describe('team strength', () => {
-  const rows = (...specs: [number, number, string, number][]): StrengthInputRow[] =>
+  const rows = (
+    ...specs: [number, number, string, number][]
+  ): StrengthInputRow[] =>
     specs.map(([teamCode, opponentTeamCode, fixtureKey, expectedGoals]) => ({
       teamCode,
       opponentTeamCode,
@@ -180,7 +195,9 @@ describe('the feature walk', () => {
     // so collecting the walk and reading it afterwards must give the SAME answer as reading it
     // inline. When these were a closure over the live accumulators, this returned [1, 1].
     const walked = [...walkRounds(rows, UNFITTED_PARAMS)];
-    expect(walked.map((c) => c.items[0].features.matchesSample)).toEqual([0, 1]);
+    expect(walked.map((c) => c.items[0].features.matchesSample)).toEqual([
+      0, 1,
+    ]);
   });
 
   it('does not carry team strength across a season boundary', () => {
@@ -188,7 +205,13 @@ describe('the feature walk', () => {
     // team. Round 1 of the new season starts from the league average again.
     const rows = [
       row({ season: '2023-24', round: 38 }),
-      row({ season: '2023-24', round: 38, teamCode: 2, opponentTeamCode: 1, wasHome: false }),
+      row({
+        season: '2023-24',
+        round: 38,
+        teamCode: 2,
+        opponentTeamCode: 1,
+        wasHome: false,
+      }),
       row({ season: '2024-25', round: 1 }),
     ];
     const leagues = [...walkRounds(rows, UNFITTED_PARAMS)].map(
@@ -207,14 +230,25 @@ describe('the feature walk', () => {
 });
 
 describe('projectFixtureV2', () => {
-  const minutes = minutesDistribution(1, 1, FITTED_PARAMS);
+  const minutes = minutesDistribution(
+    { startRate: 1, subRate: 0.15 },
+    1,
+    FITTED_PARAMS,
+  );
   const goals = { lambdaFor: 1.5, lambdaAgainst: 1.2, attackAdjustment: 1 };
   const rates = { xg90: 0.4, xa90: 0.2, defcon90: 6, saves90: 0, bps90: 25 };
 
   it('mixes appearance points instead of thresholding an expected minute count', () => {
     // A player who is 50/50 to see the hour must not be paid like a certainty either way.
     const coinflip = { ...minutes, pPlay: 1, pSixtyPlus: 0.5 };
-    const p = projectFixtureV2('MID', coinflip, rates, goals, scoring, FITTED_PARAMS);
+    const p = projectFixtureV2(
+      'MID',
+      coinflip,
+      rates,
+      goals,
+      scoring,
+      FITTED_PARAMS,
+    );
     expect(p.components.minutes).toBeCloseTo(0.5 * 2 + 0.5 * 1, 6);
   });
 
@@ -231,15 +265,44 @@ describe('projectFixtureV2', () => {
   });
 
   it('pays a harder fixture fewer clean-sheet points', () => {
-    const easy = projectFixtureV2('DEF', minutes, rates, { ...goals, lambdaAgainst: 0.7 }, scoring, FITTED_PARAMS);
-    const hard = projectFixtureV2('DEF', minutes, rates, { ...goals, lambdaAgainst: 2.2 }, scoring, FITTED_PARAMS);
-    expect(easy.components.clean_sheets).toBeGreaterThan(hard.components.clean_sheets);
-    expect(hard.components.goals_conceded).toBeLessThan(easy.components.goals_conceded);
+    const easy = projectFixtureV2(
+      'DEF',
+      minutes,
+      rates,
+      { ...goals, lambdaAgainst: 0.7 },
+      scoring,
+      FITTED_PARAMS,
+    );
+    const hard = projectFixtureV2(
+      'DEF',
+      minutes,
+      rates,
+      { ...goals, lambdaAgainst: 2.2 },
+      scoring,
+      FITTED_PARAMS,
+    );
+    expect(easy.components.clean_sheets).toBeGreaterThan(
+      hard.components.clean_sheets,
+    );
+    expect(hard.components.goals_conceded).toBeLessThan(
+      easy.components.goals_conceded,
+    );
   });
 
   it('projects nothing at all for a player who cannot play', () => {
-    const out = minutesDistribution(0.9, 0, FITTED_PARAMS);
-    const p = projectFixtureV2('MID', out, rates, goals, scoring, FITTED_PARAMS);
+    const out = minutesDistribution(
+      { startRate: 0.9, subRate: 0.15 },
+      0,
+      FITTED_PARAMS,
+    );
+    const p = projectFixtureV2(
+      'MID',
+      out,
+      rates,
+      goals,
+      scoring,
+      FITTED_PARAMS,
+    );
     expect(p.ep).toBe(0);
   });
 
@@ -247,8 +310,16 @@ describe('projectFixtureV2', () => {
     // The first fit returned a slope of 7.3e8 — separation — which turns every rotation risk into a
     // certainty. A flat-ish curve is the fitted answer and a near-vertical one is a bug.
     expect(Math.abs(FITTED_PARAMS.minutes.startSlope)).toBeLessThan(20);
-    const nailed = minutesDistribution(0.95, 1, FITTED_PARAMS);
-    const fringe = minutesDistribution(0.15, 1, FITTED_PARAMS);
+    const nailed = minutesDistribution(
+      { startRate: 0.95, subRate: 0.15 },
+      1,
+      FITTED_PARAMS,
+    );
+    const fringe = minutesDistribution(
+      { startRate: 0.15, subRate: 0.15 },
+      1,
+      FITTED_PARAMS,
+    );
     expect(nailed.pStart).toBeGreaterThan(fringe.pStart);
     expect(nailed.pStart).toBeLessThan(0.99);
     expect(fringe.pStart).toBeGreaterThan(0.01);
@@ -262,7 +333,9 @@ describe('projectFixtureV2', () => {
  * it cannot be ranked against its round, put in a squad, or named. These tests are about arithmetic,
  * so the identity is scenery, but it is not optional scenery.
  */
-function obs(over: Partial<Observation> & { predicted: number; actual: number }): Observation {
+function obs(
+  over: Partial<Observation> & { predicted: number; actual: number },
+): Observation {
   return {
     position: 'MID',
     value: 50,
@@ -277,9 +350,7 @@ function obs(over: Partial<Observation> & { predicted: number; actual: number })
 
 describe('metrics', () => {
   it('reports bias with a sign, since direction is the whole diagnosis', () => {
-    const over = errorStats([
-      obs({ predicted: 3, actual: 1, value: 70 }),
-    ]);
+    const over = errorStats([obs({ predicted: 3, actual: 1, value: 70 })]);
     expect(over.bias).toBe(2);
   });
 

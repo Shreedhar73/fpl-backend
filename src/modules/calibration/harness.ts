@@ -172,7 +172,10 @@ export function runBacktest(
       // only be validated once `player_deadline_snapshot` has live gameweeks in it.
       const availability = options.availability?.(row) ?? 1;
       const minutes = minutesDistribution(
-        features.laggedStartRate,
+        {
+          startRate: features.laggedStartRate,
+          subRate: features.laggedSubRate,
+        },
         availability,
         params,
       );

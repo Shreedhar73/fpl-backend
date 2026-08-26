@@ -64,9 +64,24 @@ export interface FitReport {
     candidates: { value: number; rmse: number; mae: number }[];
     /** true when the winner is the first or last candidate — the optimum is outside the grid */
     atGridBoundary: boolean;
+    /** worst minus best RMSE across the grid — how much the parameter is worth at all */
+    spread: number;
+    /**
+     * true when that spread is below `FLAT_EPSILON`, i.e. the objective cannot tell the candidates
+     * apart and the "winner" is noise.
+     */
+    flat: boolean;
   }[];
   leagueRates: Record<PositionCode, Record<string, number>>;
 }
+
+/**
+ * How much held-out RMSE a grid has to move before its winner means anything.
+ *
+ * In points, against a corpus RMSE of about 1.95 — so this is roughly 0.05% of the objective. Below
+ * it, the candidates are indistinguishable and the ordering is noise.
+ */
+const FLAT_EPSILON = 0.001;
 
 export function fitParams(input: FitInput): FitReport {
   const { train, defconTrain, validate, defconValidate, scoringFor } = input;
@@ -85,6 +100,8 @@ export function fitParams(input: FitInput): FitReport {
       startIntercept: measured.startIntercept,
       startSlope: measured.startSlope,
       subAppearanceRate: measured.subAppearanceRate,
+      subIntercept: measured.subIntercept,
+      subSlope: measured.subSlope,
       sixtyGivenStart: measured.sixtyGivenStart,
       sixtyGivenSub: measured.sixtyGivenSub,
       minutesGivenStart: measured.minutesGivenStart,
@@ -132,6 +149,11 @@ export function fitParams(input: FitInput): FitReport {
     candidates: number[],
     apply: (p: FittedParams, v: number) => FittedParams,
     which: 'main' | 'defcon' = 'main',
+    /**
+     * The candidate that means "this input has no effect". When the objective cannot tell the grid
+     * apart, this one is taken instead of the nominal winner.
+     */
+    nullValue?: number,
   ) => {
     const rows = which === 'defcon' ? combinedDefcon : combined;
     const set = which === 'defcon' ? defconSet : validateSet;
@@ -149,7 +171,26 @@ export function fitParams(input: FitInput): FitReport {
       const stats = errorStats(observationsFor(run.rows, 'model'));
       return { value, rmse: stats.rmse, mae: stats.mae };
     });
-    const best = scored.reduce((a, b) => (b.rmse < a.rmse ? b : a));
+    let best = scored.reduce((a, b) => (b.rmse < a.rmse ? b : a));
+
+    // **A grid search always returns a winner, including when the objective is flat.** That is the
+    // shape of check that cannot fail: the table looks like a converged search either way, and the
+    // model then carries a parameter chosen by the fourth decimal of a noisy RMSE. Measured here:
+    // the assist elasticity scored 1.9497 at every value from 1.0 to 2.0, and the search duly
+    // "chose" 1.5 — which would have shipped as a claim that the fixture moves assists by half
+    // again, on evidence of 0.0007 points of RMSE.
+    //
+    // So when the whole grid lands inside FLAT_EPSILON, the null candidate wins instead: adopting a
+    // non-zero effect the data cannot distinguish from zero is a claim, and declining to make it is
+    // the smaller error. The report says `flat` either way, so the choice is visible rather than
+    // silent.
+    const spread =
+      Math.max(...scored.map((c) => c.rmse)) -
+      Math.min(...scored.map((c) => c.rmse));
+    const flat = spread < FLAT_EPSILON;
+    if (flat && nullValue !== undefined) {
+      best = scored.find((c) => c.value === nullValue) ?? best;
+    }
     params = apply(params, best.value);
 
     // A winner sitting at either end of the grid is not an optimum, it is the edge of where we
@@ -167,6 +208,8 @@ export function fitParams(input: FitInput): FitReport {
       chosen: best.value,
       candidates: scored,
       atGridBoundary: atBoundary,
+      spread,
+      flat,
     });
   };
 
@@ -180,11 +223,15 @@ export function fitParams(input: FitInput): FitReport {
     'attack.xgFixtureElasticity',
     [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
     (p, v) => ({ ...p, attack: { ...p.attack, xgFixtureElasticity: v } }),
+    'main',
+    0,
   );
   search(
     'attack.xaFixtureElasticity',
     [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
     (p, v) => ({ ...p, attack: { ...p.attack, xaFixtureElasticity: v } }),
+    'main',
+    0,
   );
   search(
     'defcon.ratePer90ToMatch',
@@ -288,46 +335,96 @@ function measureDirect(rows: HistoryRow[]): Record<string, number> {
       awayPerMatch > 0 ? Math.sqrt(homePerMatch / awayPerMatch) : 1.15,
     leagueGoalsPerTeamMatch: (homePerMatch + awayPerMatch) / 2,
     // The start model is fitted as a calibration of the lagged rate onto the realised one; see
-    // fitStartCurve for why it is a two-parameter logistic rather than the identity v1 assumed.
-    ...fitStartCurve(rows),
+    // fitMinutesCurves for why each is a two-parameter logistic rather than the identity v1 assumed.
+    ...fitMinutesCurves(rows),
   };
 }
 
 /**
- * P(start) is NOT the lagged start rate.
+ * The two minutes curves, fitted the same way, on the same walk.
  *
- * v1 used the lagged rate directly, which assumes a player who started 8 of their last 10 starts the
- * next one with probability 0.8. Realised behaviour is more extreme at both ends — nailed starters
- * regress toward 1, fringe players toward 0 — so a two-parameter logistic on the logit of the lagged
- * rate is fitted instead, by Newton steps on the log-likelihood.
+ * **P(start) is NOT the lagged start rate.** v1 used the lagged rate directly, which assumes a player
+ * who started 8 of their last 10 starts the next one with probability 0.8. Realised behaviour is more
+ * extreme at both ends — nailed starters regress toward 1, fringe players toward 0 — so a
+ * two-parameter logistic on the logit of the lagged rate is fitted instead.
+ *
+ * **P(appear | did not start) is not one number either, and that was the model's worst shape.**
+ * B-013 scored every term of the model on its own and this one carried a Brier reliability of 0.0121
+ * against a mean of 0.0012 for the rest: a single global `subAppearanceRate` pays a never-used fringe
+ * player and a first substitute the same chance. It gets the identical treatment — a logistic on the
+ * logit of the player's own lagged sub rate — and the two are fitted in ONE walk rather than two,
+ * because a second walk over 87,000 rows to measure a sibling quantity is pure cost.
+ *
+ * Both are conditioned strictly: the sub curve reads only rows where the player did NOT start, which
+ * is the population it is asked about at prediction time. Fitting it over every row would make it a
+ * curve about starting, dressed as a curve about coming on.
  */
-function fitStartCurve(rows: HistoryRow[]): {
+function fitMinutesCurves(rows: HistoryRow[]): {
   startIntercept: number;
   startSlope: number;
+  subIntercept: number;
+  subSlope: number;
 } {
-  // Build (laggedRate, started) pairs with a strict cut, using the same walk the harness uses.
-  const points: { x: number; y: number }[] = [];
+  const startPoints: { x: number; y: number }[] = [];
+  const subPoints: { x: number; y: number }[] = [];
+
   for (const context of walkRounds(rows, UNFITTED_PARAMS)) {
     for (const { row, features } of context.items) {
       if (features.matchesSample === 0) continue;
-      points.push({
+      startPoints.push({
         x: logit(features.laggedStartRate),
         y: row.starts > 0 ? 1 : 0,
       });
+      if (row.starts === 0) {
+        subPoints.push({
+          x: logit(features.laggedSubRate),
+          y: row.minutes > 0 ? 1 : 0,
+        });
+      }
     }
   }
-  if (points.length === 0) return { startIntercept: 0, startSlope: 1 };
 
-  // Ridge penalty and damped steps, both required rather than tidy.
-  //
-  // The first run of this fit returned a slope of 7.3e8 — complete separation. A lagged start rate is
-  // very nearly a perfect predictor of the next start, so the unpenalised likelihood keeps improving
-  // as the coefficients run to infinity, and Newton obliges. The resulting "model" is a step function:
-  // P(start) is exactly 0 or 1, every rotation risk becomes a certainty in one direction or the other,
-  // and the MAE barely moves — which is precisely how a broken fit survives an error metric.
+  const start = fitLogistic(startPoints, { intercept: 0, slope: 1 });
+  // The sub fallback is the flat curve at the population rate — exactly the constant this replaces,
+  // so a failed fit degrades to the old behaviour rather than to nonsense.
+  const subFallbackRate = subPoints.length
+    ? subPoints.reduce((t, p) => t + p.y, 0) / subPoints.length
+    : 0.15;
+  const sub = fitLogistic(subPoints, {
+    intercept: logit(subFallbackRate),
+    slope: 0,
+  });
+
+  return {
+    startIntercept: start.intercept,
+    startSlope: start.slope,
+    subIntercept: sub.intercept,
+    subSlope: sub.slope,
+  };
+}
+
+/**
+ * Two-parameter logistic regression by damped, ridge-penalised Newton steps.
+ *
+ * Ridge penalty and damped steps, both required rather than tidy. The first run of the start fit
+ * returned a slope of 7.3e8 — complete separation. A lagged start rate is very nearly a perfect
+ * predictor of the next start, so the unpenalised likelihood keeps improving as the coefficients run
+ * to infinity, and Newton obliges. The resulting "model" is a step function: P(start) is exactly 0 or
+ * 1, every rotation risk becomes a certainty in one direction or the other, and the MAE barely moves
+ * — which is precisely how a broken fit survives an error metric.
+ *
+ * `fallback` is returned when the fit does not converge to something usable, so the caller always
+ * gets a curve it can defend rather than one it has to check.
+ */
+function fitLogistic(
+  points: { x: number; y: number }[],
+  fallback: { intercept: number; slope: number },
+): { intercept: number; slope: number } {
+  if (points.length === 0) return fallback;
+
   const RIDGE = 1e-3;
-  let a = 0;
-  let b = 1;
+  let a = fallback.intercept;
+  let b = fallback.slope;
 
   for (let iter = 0; iter < 50; iter++) {
     let g0 = 0;
@@ -367,12 +464,12 @@ function fitStartCurve(rows: HistoryRow[]): {
     if (Math.abs(da) < 1e-8 && Math.abs(db) < 1e-8) break;
   }
 
-  // A slope beyond this is not a fit, it is separation that survived the penalty. Fall back to the
-  // identity — v1's assumption — rather than shipping a step function that no metric would flag.
+  // A slope beyond this is not a fit, it is separation that survived the penalty. Fall back rather
+  // than shipping a step function that no error metric would flag.
   if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(b) > 20) {
-    return { startIntercept: 0, startSlope: 1 };
+    return fallback;
   }
-  return { startIntercept: a, startSlope: b };
+  return { intercept: a, slope: b };
 }
 
 /**
@@ -414,7 +511,8 @@ function fitDispersion(rows: HistoryRow[]): number {
     let loss = 0;
     for (const s of samples) {
       const p = thresholdProbability(s.lambda, s.threshold, dispersion);
-      loss -= s.hit * Math.log(clampP(p)) + (1 - s.hit) * Math.log(clampP(1 - p));
+      loss -=
+        s.hit * Math.log(clampP(p)) + (1 - s.hit) * Math.log(clampP(1 - p));
     }
     if (loss < best.loss) best = { value: dispersion, loss };
   }
@@ -437,14 +535,26 @@ function measureLeagueRates(
       mins > 0 ? (total / mins) * 90 : 0;
 
     out[position] = {
-      xg90: per90(played.reduce((s, r) => s + r.expectedGoals, 0), minutes),
-      xa90: per90(played.reduce((s, r) => s + r.expectedAssists, 0), minutes),
+      xg90: per90(
+        played.reduce((s, r) => s + r.expectedGoals, 0),
+        minutes,
+      ),
+      xa90: per90(
+        played.reduce((s, r) => s + r.expectedAssists, 0),
+        minutes,
+      ),
       defcon90: per90(
         defconRows.reduce((s, r) => s + (r.defensiveContribution ?? 0), 0),
         defconMinutes,
       ),
-      saves90: per90(played.reduce((s, r) => s + r.saves, 0), minutes),
-      bps90: per90(played.reduce((s, r) => s + r.bps, 0), minutes),
+      saves90: per90(
+        played.reduce((s, r) => s + r.saves, 0),
+        minutes,
+      ),
+      bps90: per90(
+        played.reduce((s, r) => s + r.bps, 0),
+        minutes,
+      ),
     };
   }
   return out;

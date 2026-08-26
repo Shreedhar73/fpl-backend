@@ -31,12 +31,22 @@ async function main(): Promise<void> {
       log.log(`  ${k.padEnd(24)} ${v.toFixed(4)}`);
     }
 
-    log.log('chosen by held-out search (objective: RMSE — MAE rewards under-prediction here):');
+    log.log(
+      'chosen by held-out search (objective: RMSE — MAE rewards under-prediction here):',
+    );
     for (const s of report.searched) {
       const trail = s.candidates
         .map((c) => `${c.value}=${c.rmse.toFixed(4)}`)
         .join('  ');
-      const flag = s.atGridBoundary ? '  ⚠ AT GRID EDGE — true optimum is outside the search' : '';
+      const flags = [
+        s.atGridBoundary
+          ? '⚠ AT GRID EDGE — true optimum is outside the search'
+          : '',
+        s.flat
+          ? `⚠ FLAT (spread ${s.spread.toFixed(4)}) — the objective cannot tell these apart; the null candidate was taken`
+          : '',
+      ].filter(Boolean);
+      const flag = flags.length ? `  ${flags.join('  ')}` : '';
       log.log(`  ${s.name.padEnd(30)} → ${s.chosen}   [${trail}]${flag}`);
     }
 
@@ -65,7 +75,7 @@ async function main(): Promise<void> {
     };
 
     log.log('paste into src/modules/projections/fitted.ts as FITTED_PARAMS:');
-    // eslint-disable-next-line no-console
+
     console.log(JSON.stringify(withProvenance, null, 2));
 
     log.log(

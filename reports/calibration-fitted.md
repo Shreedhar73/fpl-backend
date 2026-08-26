@@ -15,7 +15,7 @@ Trained on 2023-24 + 2024-25 (2024-25 rounds 20+ reserved for choosing shape par
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 28905 | 1.119 | 2.021 | -0.022 | 1.132 | 1.153 |
+| this model | 28905 | 1.086 | 2.006 | -0.002 | 1.152 | 1.153 |
 | baseline: form | 28905 | 1.042 | 2.131 | 0.012 | 1.166 | 1.153 |
 
 **Does not beat `form` on MAE** (it does on RMSE).
@@ -24,7 +24,7 @@ Trained on 2023-24 + 2024-25 (2024-25 rounds 20+ reserved for choosing shape par
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 11965 | 1.705 | 2.651 | -0.203 | 1.763 | 1.966 |
+| this model | 11965 | 1.725 | 2.637 | -0.098 | 1.868 | 1.966 |
 | baseline: last season points/90 | 11965 | 3.152 | 3.665 | 1.939 | 3.905 | 1.966 |
 
 **Beats last season's points per 90 on MAE.**
@@ -35,7 +35,7 @@ The same two predictors on the rows that also carry a prior-season baseline — 
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 11648 | 1.699 | 2.646 | -0.197 | 1.764 | 1.961 |
+| this model | 11648 | 1.718 | 2.632 | -0.093 | 1.868 | 1.961 |
 | baseline: form | 11648 | 1.742 | 2.813 | 0.019 | 1.980 | 1.961 |
 
 **Beats `form` here**, on rows where it loses over the full field. The difference between the two populations is fringe players: rows where the outcome is usually zero, where a near-zero prediction is very hard to beat on MAE, and which a squad optimiser never chooses between. That is the case for reading MAE over the whole field as the wrong verdict (D-020) — measured rather than argued.
@@ -46,7 +46,7 @@ Not a comparison — three different populations. Kept because it is what was re
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 29482 | 1.124 | 2.026 | -0.025 | 1.133 | 1.158 |
+| this model | 29482 | 1.091 | 2.011 | -0.004 | 1.154 | 1.158 |
 | baseline: form (trailing 4 rounds) | 28905 | 1.042 | 2.131 | 0.012 | 1.166 | 1.153 |
 | baseline: last season points/90 | 11965 | 3.152 | 3.665 | 1.939 | 3.905 | 1.966 |
 
@@ -78,10 +78,10 @@ The rows the `form` comparison had to leave out. A count invites the reader to a
 
 | Position | n | MAE | RMSE | bias |
 |---|---:|---:|---:|---:|
-| DEF | 9463 | 1.270 | 2.189 | -0.032 |
-| FWD | 3183 | 1.154 | 2.152 | -0.121 |
-| GKP | 3330 | 0.766 | 1.462 | 0.125 |
-| MID | 12929 | 1.091 | 1.984 | -0.028 |
+| DEF | 9463 | 1.232 | 2.179 | -0.048 |
+| FWD | 3183 | 1.145 | 2.119 | -0.022 |
+| GKP | 3330 | 0.676 | 1.454 | 0.025 |
+| MID | 12929 | 1.069 | 1.968 | 0.030 |
 
 ## By price band
 
@@ -89,11 +89,11 @@ A single mean hides a directional error, which is the kind that matters most to 
 
 | Band | n | MAE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|
-| ≤ £5.0m | 20111 | 0.856 | 0.076 | 0.835 | 0.758 |
-| £5.1–7.0m | 7550 | 1.593 | -0.211 | 1.667 | 1.877 |
-| £7.1–9.0m | 1025 | 2.355 | -0.510 | 2.518 | 3.028 |
-| £9.1–11.0m | 145 | 2.760 | -0.486 | 2.721 | 3.207 |
-| > £11.0m | 74 | 3.685 | 0.256 | 4.864 | 4.608 |
+| ≤ £5.0m | 20111 | 0.795 | 0.041 | 0.800 | 0.758 |
+| £5.1–7.0m | 7550 | 1.626 | -0.060 | 1.817 | 1.877 |
+| £7.1–9.0m | 1025 | 2.380 | -0.381 | 2.647 | 3.028 |
+| £9.1–11.0m | 145 | 2.813 | -0.400 | 2.807 | 3.207 |
+| > £11.0m | 74 | 3.702 | 0.286 | 4.894 | 4.608 |
 
 ## Calibration
 
@@ -101,13 +101,13 @@ Error says how far off a prediction is; calibration says whether the model means
 
 | Predicted band | n | mean predicted | mean actual |
 |---|---:|---:|---:|
-| 0–1 | 16048 | 0.341 | 0.196 |
-| 1–2 | 7085 | 1.475 | 1.675 |
-| 2–3 | 3383 | 2.420 | 2.885 |
-| 3–4 | 2000 | 3.413 | 3.509 |
-| 4–5 | 320 | 4.314 | 3.672 |
-| 5–6 | 57 | 5.465 | 5.579 |
-| 6–8 | 12 | 6.410 | 4.000 |
+| 0–1 | 15382 | 0.234 | 0.157 |
+| 1–2 | 6641 | 1.508 | 1.508 |
+| 2–3 | 4309 | 2.422 | 2.717 |
+| 3–4 | 2176 | 3.411 | 3.503 |
+| 4–5 | 325 | 4.320 | 3.708 |
+| 5–6 | 59 | 5.435 | 5.508 |
+| 6–8 | 13 | 6.400 | 3.692 |
 
 ## Rows not scored
 
@@ -128,6 +128,8 @@ Error says how far off a prediction is; calibration says whether the model means
     "startIntercept": -0.18790070079541765,
     "startSlope": 0.4849268629262438,
     "subAppearanceRate": 0.15435726210350584,
+    "subIntercept": 0.5746772470150242,
+    "subSlope": 1.3841301233905476,
     "sixtyGivenStart": 0.9339351334078926,
     "sixtyGivenSub": 0.013411204845338524,
     "minutesGivenStart": 82.83320019172392,
@@ -154,14 +156,16 @@ Error says how far off a prediction is; calibration says whether the model means
       "2024-25"
     ],
     "rows": 42468,
-    "date": "2026-08-26",
+    "date": "2026-08-27",
     "objective": "frequencies measured directly; shape parameters by RMSE on held-out 2024-25 rounds 20+ (14,540 rows). RMSE deliberately, not MAE: MAE is minimised by the conditional median and this corpus is mostly near-zero rows, so an MAE search shrank every parameter toward predicting nobody scores.",
     "heldOut": "2025-26 rounds 13-38 entirely; rounds 1-12 (8,818 rows) are read by the defensive-contribution parameters and by nothing else. Live 2026/27 untouched.",
     "notes": [
       "The defensive-contribution parameters are the ONE exception to the holdout: that category exists only in 2025-26, so dispersion is fitted on rounds 1-12 and ratePer90ToMatch chosen on 13-19. Those rows are passed separately and no other parameter reads them — an earlier version folded them into the training set, where the frequency measurements iterated them too, so a quarter of the test season silently informed the whole fit while this note claimed otherwise.",
       "The availability multiplier is NOT fitted: the archive carries no per-gameweek status or chance_of_playing. It waits on player_deadline_snapshot (B-007 Phase 2) accumulating live gameweeks.",
       "strength.confidenceMatches reached the top of its search grid — the optimum is at or beyond 96, meaning held-out RMSE keeps improving as team strength is shrunk toward the league average.",
-      "Both fixture elasticities fitted to 0 on single-gameweek RMSE. Team strength still drives clean sheets and goals conceded through lambda-against."
+      "Both fixture elasticities fitted to 0 on single-gameweek RMSE. Team strength still drives clean sheets and goals conceded through lambda-against.",
+      "xaFixtureElasticity: the grid was FLAT — every value from 1.0 to 2.0 scored 1.9497 and the whole grid spanned 0.0007 RMSE. A grid search returns a winner whether or not its objective can tell the candidates apart, so the search now takes the NULL candidate (no effect) when the spread is under 0.001, and says so. Without that rule this parameter would have shipped as 1.5 — a claim that the fixture moves assists by half again, on evidence of seven ten-thousandths of a point.",
+      "subIntercept/subSlope replace the scalar subAppearanceRate (B-019). Fitted on non-start rows only — the population the term is asked about at prediction time. subAppearanceRate is kept as the population rate the report quotes and as the flat-curve fallback."
     ]
   }
 }
