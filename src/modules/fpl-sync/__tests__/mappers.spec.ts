@@ -40,7 +40,9 @@ interface Bootstrap {
 
 const bootstrap = fixture<Bootstrap>('bootstrap.sample.json');
 const rawFixtures = fixture<RawFixture[]>('fixtures.sample.json');
-const elementSummary = fixture<{ history: RawElementHistory[] }>('element-summary.sample.json');
+const elementSummary = fixture<{ history: RawElementHistory[] }>(
+  'element-summary.sample.json',
+);
 
 const raya = bootstrap.elements.find((e) => e.web_name === 'Raya')!;
 const timber = bootstrap.elements.find((e) => e.status !== 'a')!; // injured, chance == 0
@@ -101,7 +103,9 @@ describe('mapPlayer', () => {
   });
 
   it('throws on an unknown element_type rather than guessing a position', () => {
-    expect(() => mapPlayer({ ...raya, element_type: 99 }, pos)).toThrow(/unknown element_type/);
+    expect(() => mapPlayer({ ...raya, element_type: 99 }, pos)).toThrow(
+      /unknown element_type/,
+    );
   });
 });
 

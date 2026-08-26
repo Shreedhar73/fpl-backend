@@ -14,7 +14,9 @@ import { HealthDto } from './dto/health.dto';
 @Controller('health')
 export class HealthController {
   @Get()
-  @ApiOperation({ summary: 'Liveness probe. Reads nothing, needs no database.' })
+  @ApiOperation({
+    summary: 'Liveness probe. Reads nothing, needs no database.',
+  })
   @ApiEnvelopeResponse(HealthDto, { description: 'The process is up.' })
   check(): HealthDto {
     return {

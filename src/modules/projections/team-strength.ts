@@ -42,9 +42,13 @@ export function effectiveDifficulty(
     return { attackDifficulty: fdr, defenceDifficulty: fdr };
   }
   // Opponent concedes more than average → easier to score → LOWER attacking difficulty.
-  const attackXg = clampDifficulty(3 - (opponent.xgAgainstPerMatch - leagueAvgXg) / SPREAD);
+  const attackXg = clampDifficulty(
+    3 - (opponent.xgAgainstPerMatch - leagueAvgXg) / SPREAD,
+  );
   // Opponent creates more than average → harder to keep a clean sheet → HIGHER defensive difficulty.
-  const defenceXg = clampDifficulty(3 + (opponent.xgForPerMatch - leagueAvgXg) / SPREAD);
+  const defenceXg = clampDifficulty(
+    3 + (opponent.xgForPerMatch - leagueAvgXg) / SPREAD,
+  );
 
   const conf = opponent.matches / (opponent.matches + CONFIDENCE_MATCHES);
   return {

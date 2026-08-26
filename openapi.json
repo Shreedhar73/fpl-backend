@@ -49,6 +49,471 @@
           "health"
         ]
       }
+    },
+    "/api/squad/import": {
+      "post": {
+        "description": "Fetches the manager's last-locked picks from the public API and persists them. No credential is involved and none is accepted (D-013): the manager id is an input, not an identity. The pre-deadline unsaved squad is not public and is not returned. This is the one endpoint that calls upstream while you wait, so it carries a short timeout; a second call for the same manager and gameweek is served from GET /api/squad/{managerId}.",
+        "operationId": "SquadController_import",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportSquadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The imported squad, now persisted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/SquadDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such manager id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "MANAGER_NOT_FOUND"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The squad contains a player this app has not synced.\n\nThe manager exists but has no readable picks yet — picks become public after a deadline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "SQUAD_NOT_AVAILABLE_YET"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The official API timed out or failed. Not the manager id's fault.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "FPL_UPSTREAM_UNAVAILABLE"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Import a squad from a public FPL manager id.",
+        "tags": [
+          "squad"
+        ]
+      }
+    },
+    "/api/squad/recommended": {
+      "get": {
+        "description": "Solved fresh, and deliberately not persisted to squads — it belongs to no manager, and every solve is already recorded in optimizer_runs.",
+        "operationId": "SquadController_recommended",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The recommended squad. managerId is null.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/SquadDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "The optimizer's own best legal 15, in the same shape as an imported squad.",
+        "tags": [
+          "squad"
+        ]
+      }
+    },
+    "/api/squad/{managerId}": {
+      "get": {
+        "description": "Reads Postgres. Makes no upstream call.",
+        "operationId": "SquadController_get",
+        "parameters": [
+          {
+            "name": "managerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The stored squad.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/SquadDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "This manager has never been imported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "SQUAD_NOT_IMPORTED"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "A previously imported squad, from our own store.",
+        "tags": [
+          "squad"
+        ]
+      }
+    },
+    "/api/insights/advice/recommended": {
+      "get": {
+        "description": "Mostly useful as a check on the comparison: a squad measured against itself must report a gap of zero.",
+        "operationId": "InsightsController_adviceForRecommended",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The advice.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/AdviceDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Advice for the optimizer's own squad.",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/api/insights/advice/{managerId}": {
+      "get": {
+        "description": "Captain, vice, bench order and the gap against the best legal 15, with the model's per-term reasoning on every player. Does NOT recommend transfers or chips — see `notAdvisedOn` in the response, and B-008.",
+        "operationId": "InsightsController_adviceForManager",
+        "parameters": [
+          {
+            "name": "managerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The advice.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/AdviceDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Import the squad first: POST /api/squad/import.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "SQUAD_NOT_IMPORTED"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Advice for a previously imported squad.",
+        "tags": [
+          "insights"
+        ]
+      }
     }
   },
   "info": {
@@ -149,6 +614,418 @@
           "status",
           "service",
           "uptimeSeconds"
+        ]
+      },
+      "SquadPickDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string",
+            "description": "Our internal player id (cuid), not the FPL element id."
+          },
+          "fplId": {
+            "type": "number",
+            "description": "The player's FPL element id."
+          },
+          "webName": {
+            "type": "string",
+            "example": "Haaland"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string",
+            "example": "MCI"
+          },
+          "nowCost": {
+            "type": "number",
+            "description": "Market price in tenths of a million. 55 is £5.5m."
+          },
+          "sellValue": {
+            "type": "number",
+            "nullable": true,
+            "description": "What a sale would return, in tenths. NULL for an imported squad and that is correct: no public endpoint carries a purchase or selling price. Filled by the transfer planner (B-008)."
+          },
+          "slot": {
+            "type": "number",
+            "description": "1-11 starting XI, 12-15 bench in substitution order. Called `position` upstream, renamed here because a pick already has a position in the GKP/DEF/MID/FWD sense and one field cannot be both."
+          },
+          "multiplier": {
+            "type": "number",
+            "description": "1 normally, 2 for the captain, 3 under the triple-captain chip."
+          },
+          "isCaptain": {
+            "type": "boolean"
+          },
+          "isViceCaptain": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "playerId",
+          "fplId",
+          "webName",
+          "position",
+          "teamShortName",
+          "nowCost",
+          "sellValue",
+          "slot",
+          "multiplier",
+          "isCaptain",
+          "isViceCaptain"
+        ]
+      },
+      "SquadDto": {
+        "type": "object",
+        "properties": {
+          "managerId": {
+            "type": "number",
+            "nullable": true,
+            "description": "The FPL manager id this squad was imported from. NULL for the recommended squad, which belongs to nobody."
+          },
+          "managerName": {
+            "type": "string",
+            "nullable": true,
+            "description": "The manager's display name, when the squad came from an import."
+          },
+          "gameweekId": {
+            "type": "number",
+            "description": "The gameweek this squad is the picks for."
+          },
+          "bank": {
+            "type": "number",
+            "description": "Money not spent, in tenths of a million."
+          },
+          "teamValue": {
+            "type": "number",
+            "description": "Squad value excluding the bank, in tenths of a million."
+          },
+          "activeChip": {
+            "type": "string",
+            "nullable": true,
+            "description": "The chip active in this gameweek, e.g. bboost or 3xc. Null when none."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "import",
+              "recommended"
+            ],
+            "description": "Where this squad came from. The advice is identical either way."
+          },
+          "picks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SquadPickDto"
+            }
+          }
+        },
+        "required": [
+          "managerId",
+          "managerName",
+          "gameweekId",
+          "bank",
+          "teamValue",
+          "activeChip",
+          "source",
+          "picks"
+        ]
+      },
+      "ImportSquadDto": {
+        "type": "object",
+        "properties": {
+          "managerId": {
+            "type": "number",
+            "description": "A public FPL manager id — the number in a manager's /entry/<id>/ URL on the official site.",
+            "example": 1,
+            "minimum": 1
+          }
+        },
+        "required": [
+          "managerId"
+        ]
+      },
+      "EvidenceDto": {
+        "type": "object",
+        "properties": {
+          "components": {
+            "type": "object",
+            "description": "Per-term breakdown of the next gameweek's expected points: appearance, goals, assists, cs, conceded, defcon, saves, bonus. The model's own reasoning, not a rationalisation.",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "expectedMinutes": {
+            "type": "number",
+            "description": "Expected minutes in the next gameweek."
+          },
+          "playProbability": {
+            "type": "number",
+            "description": "P(the player features at all). The term that dominates every other one — a 9-point forward who might not start is worth less than a 4-point one who certainly will."
+          }
+        },
+        "required": [
+          "components",
+          "expectedMinutes",
+          "playProbability"
+        ]
+      },
+      "AdvicePlayerDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string"
+          },
+          "fplId": {
+            "type": "number"
+          },
+          "webName": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string"
+          },
+          "nowCost": {
+            "type": "number",
+            "description": "Market price in tenths of a million."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "captain",
+              "vice",
+              "starter",
+              "bench"
+            ],
+            "description": "What this player should do, not what the manager currently has them doing."
+          },
+          "benchOrder": {
+            "type": "number",
+            "nullable": true,
+            "description": "1-4 for a bench player, in substitution order; null for a starter. Order is a real decision: auto-subs walk the bench in this order and the first eligible player comes on."
+          },
+          "epNextGw": {
+            "type": "number",
+            "description": "Expected points for the next gameweek alone."
+          },
+          "epHorizon": {
+            "type": "number",
+            "description": "Expected points over the horizon, decayed — the number the optimizer actually maximises."
+          },
+          "evidence": {
+            "nullable": true,
+            "description": "Null when the model has no projection for this player in the next gameweek.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "playerId",
+          "fplId",
+          "webName",
+          "position",
+          "teamShortName",
+          "nowCost",
+          "role",
+          "benchOrder",
+          "epNextGw",
+          "epHorizon",
+          "evidence"
+        ]
+      },
+      "SquadDifferenceDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string"
+          },
+          "webName": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string"
+          },
+          "nowCost": {
+            "type": "number",
+            "description": "Market price in tenths of a million."
+          },
+          "epHorizon": {
+            "type": "number",
+            "description": "Expected points over the horizon."
+          }
+        },
+        "required": [
+          "playerId",
+          "webName",
+          "position",
+          "teamShortName",
+          "nowCost",
+          "epHorizon"
+        ]
+      },
+      "ComparisonDto": {
+        "type": "object",
+        "properties": {
+          "squadHorizonEp": {
+            "type": "number",
+            "description": "Horizon EP summed over this squad's 15."
+          },
+          "optimalHorizonEp": {
+            "type": "number",
+            "description": "Horizon EP summed over the optimal 15."
+          },
+          "horizonGap": {
+            "type": "number",
+            "description": "optimalHorizonEp − squadHorizonEp. Never negative: the optimal squad is optimal, so a negative gap would mean the comparison is broken, and a test asserts it cannot happen."
+          },
+          "xiNextGwEp": {
+            "type": "number",
+            "description": "Next-gameweek EP of the best XI from this squad, captain counted twice — what the manager should actually score if the model is right."
+          },
+          "optimalXiNextGwEp": {
+            "type": "number",
+            "description": "The same for the optimal squad."
+          },
+          "xiNextGwGap": {
+            "type": "number",
+            "description": "optimalXiNextGwEp − xiNextGwEp."
+          },
+          "formation": {
+            "type": "string",
+            "description": "The formation the best XI from this squad plays."
+          },
+          "optimalFormation": {
+            "type": "string",
+            "description": "The optimal squad's formation."
+          },
+          "optimalHasThatYouDoNot": {
+            "description": "In the optimal 15 and not in this squad. **Not a transfer recommendation** — a transfer costs money and possibly 4 points, and deciding whether one is worth it is B-008. This is the set difference and nothing more.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SquadDifferenceDto"
+            }
+          },
+          "youHaveThatOptimalDoesNot": {
+            "description": "In this squad and not in the optimal 15. Same caveat.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SquadDifferenceDto"
+            }
+          }
+        },
+        "required": [
+          "squadHorizonEp",
+          "optimalHorizonEp",
+          "horizonGap",
+          "xiNextGwEp",
+          "optimalXiNextGwEp",
+          "xiNextGwGap",
+          "formation",
+          "optimalFormation",
+          "optimalHasThatYouDoNot",
+          "youHaveThatOptimalDoesNot"
+        ]
+      },
+      "AdviceDto": {
+        "type": "object",
+        "properties": {
+          "managerId": {
+            "type": "number",
+            "nullable": true,
+            "description": "The manager this advice is for. Null for the recommended squad."
+          },
+          "gameweekId": {
+            "type": "number",
+            "description": "The gameweek the advice is for — the next one."
+          },
+          "horizonGameweekIds": {
+            "description": "Every gameweek in the horizon the epHorizon numbers cover.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "modelVersion": {
+            "type": "string",
+            "description": "Which projection model produced these numbers."
+          },
+          "captain": {
+            "nullable": true,
+            "description": "Who to captain: the highest-EP player in the best XI. Null for an empty squad.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdvicePlayerDto"
+              }
+            ]
+          },
+          "viceCaptain": {
+            "nullable": true,
+            "description": "The fallback.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdvicePlayerDto"
+              }
+            ]
+          },
+          "players": {
+            "description": "All 15, each with the role the model would give it and its evidence.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdvicePlayerDto"
+            }
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/ComparisonDto"
+          },
+          "notAdvisedOn": {
+            "description": "What this advice deliberately does not answer, in plain language, so the gap is visible in the payload rather than only in a plan file.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "managerId",
+          "gameweekId",
+          "horizonGameweekIds",
+          "modelVersion",
+          "captain",
+          "viceCaptain",
+          "players",
+          "comparison",
+          "notAdvisedOn"
         ]
       }
     }

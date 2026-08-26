@@ -59,7 +59,8 @@ export class Rules {
 
   private pos(p: PositionCode): RawPosition {
     const row = this.positions.get(p);
-    if (!row) throw new Error(`no quota for position ${p} in scoring_config.positions`);
+    if (!row)
+      throw new Error(`no quota for position ${p} in scoring_config.positions`);
     return row;
   }
 }

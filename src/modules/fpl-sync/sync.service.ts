@@ -292,8 +292,12 @@ export class SyncService {
    * it requires joins the finished-gameweek `--full` path does not — and it can only be verified
    * against a genuinely in-progress gameweek. `--full` already covers every finished gameweek. See
    * B-003 / docs/plans/003-fpl-sync.md.
+   *
+   * The parameter stays in the signature — it is the contract callers will use once this is
+   * implemented, and deleting it to satisfy the linter would change that contract.
    */
-  runLive(_gameweek: number): Promise<never> {
+  runLive(gameweek: number): Promise<never> {
+    void gameweek;
     return Promise.reject(
       new Error(
         'live sync is not implemented yet (B-003 follow-up). Use the default or --full mode; ' +

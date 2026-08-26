@@ -31,7 +31,10 @@ describe('Rules — read from config, not constants', () => {
   });
 
   it('reflects a changed budget (break-on-purpose: a hardcoded 1000 would not move)', () => {
-    const cheaper = new Rules({ ...RULES_JSON, squad_total_spend: 800 }, POSITIONS_JSON);
+    const cheaper = new Rules(
+      { ...RULES_JSON, squad_total_spend: 800 },
+      POSITIONS_JSON,
+    );
     expect(cheaper.budget()).toBe(800);
   });
 
@@ -49,17 +52,56 @@ function universe(): Candidate[] {
     cost: number,
     ep: number,
     teamId = `t${i}`,
-  ): Candidate => ({ key: `p_${position}${i}`, playerId: `id${i}`, webName: `P${i}`, position, teamId, cost, ep, pPlay: 0.9 });
+  ): Candidate => ({
+    key: `p_${position}${i}`,
+    playerId: `id${i}`,
+    webName: `P${i}`,
+    position,
+    teamId,
+    cost,
+    ep,
+    pPlay: 0.9,
+  });
   const list: Candidate[] = [];
   let i = 0;
   // GKP ×4
-  list.push(mk(i++, 'GKP', 45, 12), mk(i++, 'GKP', 40, 8), mk(i++, 'GKP', 50, 14), mk(i++, 'GKP', 40, 3));
+  list.push(
+    mk(i++, 'GKP', 45, 12),
+    mk(i++, 'GKP', 40, 8),
+    mk(i++, 'GKP', 50, 14),
+    mk(i++, 'GKP', 40, 3),
+  );
   // DEF ×7
-  for (const [cost, ep] of [[45, 10], [50, 12], [55, 14], [40, 6], [60, 16], [45, 9], [40, 4]] as const) list.push(mk(i++, 'DEF', cost, ep));
+  for (const [cost, ep] of [
+    [45, 10],
+    [50, 12],
+    [55, 14],
+    [40, 6],
+    [60, 16],
+    [45, 9],
+    [40, 4],
+  ] as const)
+    list.push(mk(i++, 'DEF', cost, ep));
   // MID ×7 — include two studs
-  for (const [cost, ep] of [[130, 40], [125, 38], [70, 18], [65, 16], [55, 12], [50, 9], [45, 5]] as const) list.push(mk(i++, 'MID', cost, ep));
+  for (const [cost, ep] of [
+    [130, 40],
+    [125, 38],
+    [70, 18],
+    [65, 16],
+    [55, 12],
+    [50, 9],
+    [45, 5],
+  ] as const)
+    list.push(mk(i++, 'MID', cost, ep));
   // FWD ×5
-  for (const [cost, ep] of [[140, 42], [90, 22], [70, 16], [55, 10], [45, 6]] as const) list.push(mk(i++, 'FWD', cost, ep));
+  for (const [cost, ep] of [
+    [140, 42],
+    [90, 22],
+    [70, 16],
+    [55, 10],
+    [45, 6],
+  ] as const)
+    list.push(mk(i++, 'FWD', cost, ep));
   return list;
 }
 
@@ -76,12 +118,20 @@ describe('buildLp', () => {
 describe('pickBestXi', () => {
   it('picks exactly one keeper and a legal outfield split summing to 11', () => {
     const u = universe();
-    const take = (pos: Candidate['position'], n: number) => u.filter((c) => c.position === pos).slice(0, n);
-    const squad = [...take('GKP', 2), ...take('DEF', 5), ...take('MID', 5), ...take('FWD', 3)]; // a legal 15
+    const take = (pos: Candidate['position'], n: number) =>
+      u.filter((c) => c.position === pos).slice(0, n);
+    const squad = [
+      ...take('GKP', 2),
+      ...take('DEF', 5),
+      ...take('MID', 5),
+      ...take('FWD', 3),
+    ]; // a legal 15
     // ensure the slice has ≥2 GKP by construction of universe (first 4 are GKP)
     const { starters, formation } = pickBestXi(squad, rules);
     expect(starters.size).toBe(11);
-    const gkStarters = squad.filter((c) => starters.has(c.key) && c.position === 'GKP');
+    const gkStarters = squad.filter(
+      (c) => starters.has(c.key) && c.position === 'GKP',
+    );
     expect(gkStarters.length).toBe(1);
     expect(formation).toMatch(/^\d-\d-\d$/);
   });
@@ -94,18 +144,30 @@ describe('HiGHS solve — optimal under the constraints', () => {
     const sol = highs.solve(buildLp(cands, rules));
     expect(sol.Status).toBe('Optimal');
 
-    const chosen = cands.filter((c) => ((sol.Columns[c.key] as { Primal?: number })?.Primal ?? 0) > 0.5);
+    const chosen = cands.filter(
+      (c) => ((sol.Columns[c.key] as { Primal?: number })?.Primal ?? 0) > 0.5,
+    );
     expect(chosen.length).toBe(15);
     // budget
-    expect(chosen.reduce((s, c) => s + c.cost, 0)).toBeLessThanOrEqual(rules.budget());
+    expect(chosen.reduce((s, c) => s + c.cost, 0)).toBeLessThanOrEqual(
+      rules.budget(),
+    );
     // quotas
-    for (const [pos, n] of [['GKP', 2], ['DEF', 5], ['MID', 5], ['FWD', 3]] as const) {
+    for (const [pos, n] of [
+      ['GKP', 2],
+      ['DEF', 5],
+      ['MID', 5],
+      ['FWD', 3],
+    ] as const) {
       expect(chosen.filter((c) => c.position === pos).length).toBe(n);
     }
     // 3-per-club
     const perClub = new Map<string, number>();
-    for (const c of chosen) perClub.set(c.teamId, (perClub.get(c.teamId) ?? 0) + 1);
-    expect(Math.max(...perClub.values())).toBeLessThanOrEqual(rules.clubLimit());
+    for (const c of chosen)
+      perClub.set(c.teamId, (perClub.get(c.teamId) ?? 0) + 1);
+    expect(Math.max(...perClub.values())).toBeLessThanOrEqual(
+      rules.clubLimit(),
+    );
 
     // greedy-by-EP (top per quota, ignoring budget) is infeasible here — the two 40-pt mids plus the
     // 42-pt fwd blow the budget — so the ILP's feasible objective is the meaningful one.
@@ -118,9 +180,19 @@ describe('HiGHS solve — optimal under the constraints', () => {
     const highs = await highsLoader();
     const cands = universe();
     const rich = highs.solve(buildLp(cands, rules));
-    const poor = highs.solve(buildLp(cands, new Rules({ ...RULES_JSON, squad_total_spend: 850 }, POSITIONS_JSON)));
+    const poor = highs.solve(
+      buildLp(
+        cands,
+        new Rules({ ...RULES_JSON, squad_total_spend: 850 }, POSITIONS_JSON),
+      ),
+    );
     const cost = (sol: typeof rich) =>
-      cands.filter((c) => ((sol.Columns[c.key] as { Primal?: number })?.Primal ?? 0) > 0.5).reduce((s, c) => s + c.cost, 0);
+      cands
+        .filter(
+          (c) =>
+            ((sol.Columns[c.key] as { Primal?: number })?.Primal ?? 0) > 0.5,
+        )
+        .reduce((s, c) => s + c.cost, 0);
     expect(poor.Status).toBe('Optimal');
     expect(cost(poor)).toBeLessThanOrEqual(850);
     expect(cost(poor)).toBeLessThan(cost(rich));

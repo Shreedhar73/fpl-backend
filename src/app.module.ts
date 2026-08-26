@@ -6,6 +6,8 @@ import { HealthModule } from './modules/health/health.module';
 import { FplSyncModule } from './modules/fpl-sync/fpl-sync.module';
 import { ProjectionsModule } from './modules/projections/projections.module';
 import { OptimizerModule } from './modules/optimizer/optimizer.module';
+import { SquadModule } from './modules/squad/squad.module';
+import { InsightsModule } from './modules/insights/insights.module';
 
 @Module({
   imports: [
@@ -16,8 +18,10 @@ import { OptimizerModule } from './modules/optimizer/optimizer.module';
     FplSyncModule,
     ProjectionsModule,
     OptimizerModule,
-    // Domain modules land here: players, fixtures, teams, squad,
-    // insights. One directory each under src/modules/ — see fpl-architecture-contract.
+    SquadModule,
+    InsightsModule,
+    // Domain modules land here: players, fixtures, teams.
+    // One directory each under src/modules/ — see fpl-architecture-contract.
   ],
 })
 export class AppModule {}

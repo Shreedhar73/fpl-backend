@@ -82,12 +82,19 @@ export class ProjectionsService {
         let gwEp = 0;
         const components: Record<string, number> = {};
         for (const fx of teamFixtures) {
-          const diff = effectiveDifficulty(fx.fdr, ratings.get(fx.opponentFplId), leagueAvgXg);
+          const diff = effectiveDifficulty(
+            fx.fdr,
+            ratings.get(fx.opponentFplId),
+            leagueAvgXg,
+          );
           const fp = projectFixture(
             player.position,
             mins,
             rates,
-            { attackDifficulty: diff.attackDifficulty, defenceDifficulty: diff.defenceDifficulty },
+            {
+              attackDifficulty: diff.attackDifficulty,
+              defenceDifficulty: diff.defenceDifficulty,
+            },
             scoring,
             expectedBonus,
           );

@@ -155,7 +155,9 @@ export interface MappedPositionQuota {
 }
 
 /** Per-position squad quotas from `element_types`, for the optimizer to read from config. */
-export function mapPositionQuotas(types: RawElementType[]): MappedPositionQuota[] {
+export function mapPositionQuotas(
+  types: RawElementType[],
+): MappedPositionQuota[] {
   return types.map((t) => ({
     position: t.singular_name_short as PositionCode,
     squadSelect: t.squad_select,
