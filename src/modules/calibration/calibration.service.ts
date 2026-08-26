@@ -70,11 +70,15 @@ export class CalibrationService {
 
     const train = all.filter(
       (r) =>
-        (r.season === '2023-24' ||
-          (r.season === '2024-25' && r.round < VALIDATE_FROM_ROUND)) ||
-        // The defcon category exists only in 2025-26, so its first half has to be training data or
-        // the term cannot be fitted at all. Everything else about 2025-26 stays out of the fit.
-        (r.season === TEST_SEASON && r.round <= DEFCON_FIT_ROUND),
+        r.season === '2023-24' ||
+        (r.season === '2024-25' && r.round < VALIDATE_FROM_ROUND),
+    );
+    // The ONLY rows of the test season the fit may touch, and only the defcon parameters read them.
+    // They were once folded into `train`, where the frequency measurements iterated them as well — so
+    // a quarter of the "held-out" season informed every measured parameter while the provenance said
+    // just the one term was affected.
+    const defconTrain = all.filter(
+      (r) => r.season === TEST_SEASON && r.round <= DEFCON_FIT_ROUND,
     );
     const validate = all.filter(
       (r) => r.season === '2024-25' && r.round >= VALIDATE_FROM_ROUND,
@@ -89,10 +93,10 @@ export class CalibrationService {
     );
 
     this.log.log(
-      `fitting on ${train.length} rows, validating on ${validate.length} ` +
-        `(defcon shape on ${defconValidate.length})`,
+      `fitting on ${train.length} rows, validating on ${validate.length}; ` +
+        `defcon only: ${defconTrain.length} fit / ${defconValidate.length} validate`,
     );
-    return fitParams({ train, validate, defconValidate, scoringFor });
+    return fitParams({ train, defconTrain, validate, defconValidate, scoringFor });
   }
 
   /**
@@ -194,10 +198,13 @@ export class CalibrationService {
     );
     w();
     w(
-      `**The defensive-contribution term is the exception.** That category exists only in ` +
-        `${TEST_SEASON}, so it was fitted on rounds 1–${DEFCON_FIT_MAX_ROUND} of this very season. Its ` +
-        `contribution to the headline below is therefore not held out, and no reading of this report ` +
-        `should treat it as though it were.`,
+      `**The defensive-contribution parameters are the one exception to the holdout.** That category ` +
+        `exists only in ${TEST_SEASON}, so its dispersion was fitted on rounds 1–${DEFCON_FIT_ROUND} ` +
+        `of this very season and its rate parameter chosen on rounds ${DEFCON_FIT_ROUND + 1}–` +
+        `${DEFCON_FIT_MAX_ROUND}. Those rows are passed to the fit separately and **no other parameter ` +
+        `reads them**. Rounds ${DEFCON_FIT_MAX_ROUND + 1}–38 are untouched by the fit entirely. The ` +
+        `defcon term's contribution to the headline below is therefore not held out; everything else ` +
+        `is.`,
     );
     w();
     w(`## Headline`);

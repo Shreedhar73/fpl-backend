@@ -23,8 +23,24 @@ import { errorStats } from './metrics';
  */
 
 export interface FitInput {
-  /** rows the fit may learn from */
+  /**
+   * Rows the fit may learn from — training seasons ONLY.
+   *
+   * Kept separate from `defconTrain` because they are contaminated differently. Everything measured
+   * here (frequencies, the start curve, the shrinkage targets) must never see the test season, or the
+   * holdout claim is false for every parameter rather than for the one documented exception.
+   */
   train: HistoryRow[];
+  /**
+   * The defensive-contribution exception, and nothing else reads it.
+   *
+   * That category exists only in the test season, so its parameters cannot be fitted anywhere else.
+   * Isolating those rows here is what keeps "2025-26 is held out" true of every OTHER parameter — an
+   * earlier version folded them into `train`, where the frequency measurements iterated them too, so
+   * a quarter of the test season silently informed the whole fit while the provenance claimed
+   * otherwise.
+   */
+  defconTrain: HistoryRow[];
   /** rows used only to choose shape parameters — never scored in the final report */
   validate: HistoryRow[];
   /**
@@ -53,7 +69,7 @@ export interface FitReport {
 }
 
 export function fitParams(input: FitInput): FitReport {
-  const { train, validate, defconValidate, scoringFor } = input;
+  const { train, defconTrain, validate, defconValidate, scoringFor } = input;
 
   const measured = measureDirect(train);
   const leagueRates = measureLeagueRates(train);
@@ -86,7 +102,7 @@ export function fitParams(input: FitInput): FitReport {
     },
     defcon: {
       ...UNFITTED_PARAMS.defcon,
-      dispersion: fitDispersion(train),
+      dispersion: fitDispersion(defconTrain),
     },
   };
 
@@ -109,7 +125,7 @@ export function fitParams(input: FitInput): FitReport {
   const combined = [...train, ...validate];
 
   const defconSet = new Set(defconValidate);
-  const combinedDefcon = [...train, ...defconValidate];
+  const combinedDefcon = [...train, ...defconTrain, ...defconValidate];
 
   const search = (
     name: string,
