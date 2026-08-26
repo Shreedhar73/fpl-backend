@@ -1,5 +1,6 @@
 import { Rules } from '../../optimizer/rules';
 import { PredictionRow } from '../harness';
+import { predictionRow } from './prediction-row';
 import {
   GREEDY_ONE_FT,
   grantFreeTransfer,
@@ -35,24 +36,25 @@ const RULES = new Rules(
 
 const OPTIONS: SimOptions = { freeTransferCap: 5, hitCost: 4 };
 
-const row = (over: Partial<PredictionRow>): PredictionRow => ({
-  season: '2025-26',
-  round: 1,
-  playerCode: 1,
-  webName: 'Player',
-  position: 'MID',
-  teamCode: 1,
-  value: 50,
-  actual: 2,
-  minutes: 90,
-  predicted: { model: 2, form: 2, priorSeason: 2 },
-  pPlay: 1,
-  appearances: 20,
-  ...over,
-});
+/**
+ * A player who played the whole match and scored 2, which is what every rule in this file is
+ * measured against. The defaults differ from the ordering spec's on purpose: an ordering test wants
+ * a blank row it can vary one field of, and a season simulation wants a legal starter.
+ */
+const row = (over: Partial<PredictionRow>): PredictionRow =>
+  predictionRow({
+    actual: 2,
+    minutes: 90,
+    predicted: { model: 2, form: 2, priorSeason: 2 },
+    appearances: 20,
+    ...over,
+  });
 
 /** A legal fifteen: 2 GKP, 5 DEF, 5 MID, 3 FWD, spread over enough clubs to satisfy the cap. */
-function squadOf(round: number, over: (i: number) => Partial<PredictionRow> = () => ({})) {
+function squadOf(
+  round: number,
+  over: (i: number) => Partial<PredictionRow> = () => ({}),
+) {
   const spec: [string, number][] = [
     ['GKP', 2],
     ['DEF', 5],
@@ -177,7 +179,10 @@ describe('a blank round', () => {
   it('carries the last known price forward through the blank', () => {
     const opening = squadOf(1);
     const result = simulateSeason(
-      asRounds(squadOf(1), squadOf(2).filter((r) => r.playerCode !== 1)),
+      asRounds(
+        squadOf(1),
+        squadOf(2).filter((r) => r.playerCode !== 1),
+      ),
       opening,
       'model',
       RULES,
@@ -296,10 +301,10 @@ describe('the greedy policy', () => {
       predicted: { model: 30, form: 30, priorSeason: 30 },
     });
     const result = simulateSeason(
-      asRounds(squadOf(1, () => ({ value: 66 })), [
-        ...squadOf(2, () => ({ value: 66 })),
-        expensive,
-      ]),
+      asRounds(
+        squadOf(1, () => ({ value: 66 })),
+        [...squadOf(2, () => ({ value: 66 })), expensive],
+      ),
       opening,
       'model',
       RULES,
@@ -354,7 +359,8 @@ describe('the greedy policy', () => {
       OPTIONS,
     );
     // The only legal target is a goalkeeper-for-goalkeeper swap, which the squad has.
-    for (const r of result.rounds) expect(r.transfersMade).toBeLessThanOrEqual(1);
+    for (const r of result.rounds)
+      expect(r.transfersMade).toBeLessThanOrEqual(1);
     expect(result.totalHitCost).toBe(0);
   });
 });

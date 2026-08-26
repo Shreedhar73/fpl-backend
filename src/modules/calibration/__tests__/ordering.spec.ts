@@ -1,4 +1,5 @@
 import { PredictionRow } from '../harness';
+import { predictionRow } from './prediction-row';
 import {
   ORDERING_VIEWS,
   orderingByRound,
@@ -17,21 +18,8 @@ import {
  * shuffle (because a metric that survives a shuffle is measuring the round, not the model).
  */
 
-const row = (over: Partial<PredictionRow>): PredictionRow => ({
-  season: '2025-26',
-  round: 1,
-  playerCode: 1,
-  webName: 'Player',
-  position: 'MID',
-  teamCode: 1,
-  value: 50,
-  actual: 0,
-  minutes: 0,
-  predicted: { model: 0, form: 0, priorSeason: 0 },
-  pPlay: 1,
-  appearances: 10,
-  ...over,
-});
+const row = (over: Partial<PredictionRow>): PredictionRow =>
+  predictionRow(over);
 
 /** A deterministic shuffle — an unseeded one makes a sabotage run unreproducible. */
 function seededShuffle<T>(items: T[], seed: number): T[] {
@@ -110,10 +98,30 @@ describe('rounds are scored separately, then aggregated', () => {
   // was the high-scoring one. Pooled, that looks like a flawed ranking. Per round, it is perfect —
   // and per round is the only ranking a deadline ever asks for.
   const rows: PredictionRow[] = [
-    row({ round: 1, playerCode: 1, predicted: { model: 2, form: 0, priorSeason: 0 }, actual: 2 }),
-    row({ round: 1, playerCode: 2, predicted: { model: 1, form: 0, priorSeason: 0 }, actual: 1 }),
-    row({ round: 2, playerCode: 1, predicted: { model: 2, form: 0, priorSeason: 0 }, actual: 20 }),
-    row({ round: 2, playerCode: 2, predicted: { model: 1, form: 0, priorSeason: 0 }, actual: 10 }),
+    row({
+      round: 1,
+      playerCode: 1,
+      predicted: { model: 2, form: 0, priorSeason: 0 },
+      actual: 2,
+    }),
+    row({
+      round: 1,
+      playerCode: 2,
+      predicted: { model: 1, form: 0, priorSeason: 0 },
+      actual: 1,
+    }),
+    row({
+      round: 2,
+      playerCode: 1,
+      predicted: { model: 2, form: 0, priorSeason: 0 },
+      actual: 20,
+    }),
+    row({
+      round: 2,
+      playerCode: 2,
+      predicted: { model: 1, form: 0, priorSeason: 0 },
+      actual: 10,
+    }),
   ];
 
   it('reports a perfect within-round ranking as perfect', () => {
@@ -186,7 +194,7 @@ describe('the sabotage: a shuffled ranking must collapse', () => {
     expect(shuffled.meanPointsCaptured.get(11)!).toBeLessThan(0.8);
   });
 
-  it('caps a perfect ranking below 1 when the outcome is tied — the ceiling is the data\'s', () => {
+  it("caps a perfect ranking below 1 when the outcome is tied — the ceiling is the data's", () => {
     // Stated on its own so the number above is read as a ceiling rather than a shortfall. Perfect
     // prediction, three-way tie in the outcome: the best rho available is not 1.
     // By hand: predicted ranks [1,2,3,4], actual ranks [1,3,3,3] after tie-averaging.
@@ -211,7 +219,7 @@ describe('views narrow the field the way the optimiser does', () => {
     expect(byRound[0].n).toBe(100);
   });
 
-  it('ranks the predictor\'s own shortlist, which is what reaches a recommendation', () => {
+  it("ranks the predictor's own shortlist, which is what reaches a recommendation", () => {
     const byRound = orderingByRound(field, 'model', ORDERING_VIEWS[2], [11]);
     expect(byRound[0].n).toBe(100);
   });

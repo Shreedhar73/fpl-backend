@@ -3,6 +3,7 @@ import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { CalibrationService } from './calibration.service';
 import { CalibrationRepository } from './calibration.repository';
 import { DecisionService } from './decision.service';
+import { ComponentCalibrationService } from './component-calibration.service';
 import { ProjectionsModule } from '../projections/projections.module';
 
 /**
@@ -14,7 +15,12 @@ import { ProjectionsModule } from '../projections/projections.module';
  */
 @Module({
   imports: [PrismaModule, ProjectionsModule],
-  providers: [CalibrationService, CalibrationRepository, DecisionService],
-  exports: [CalibrationService, DecisionService],
+  providers: [
+    CalibrationService,
+    CalibrationRepository,
+    DecisionService,
+    ComponentCalibrationService,
+  ],
+  exports: [CalibrationService, DecisionService, ComponentCalibrationService],
 })
 export class CalibrationModule {}

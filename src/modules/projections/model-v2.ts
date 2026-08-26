@@ -43,10 +43,52 @@ export interface PlayerRates {
   bps90: number;
 }
 
+/**
+ * The probabilities the model computes on its way to a mean, kept rather than discarded.
+ *
+ * Every one of these has a realised counterpart in the archive, so each can be scored on its own with
+ * a reliability curve and a Brier score (B-013). Until this existed the model was measurable only in
+ * aggregate, and an error in one term was invisible against the others.
+ *
+ * `bonusAtLeastOne` is the one entry here the model does not natively hold. It is DERIVED from the
+ * expected bonus on the identity `P(bonus >= 1) = E[bonus] / E[bonus | bonus >= 1]`, with the
+ * conditional mean taken as exactly 2 — the three recipients of a match's bonus receive 3, 2 and 1,
+ * so an award, given there is one, averages 2. It is evidence about the SHAPE of the bonus term and
+ * is never served to anyone as a probability.
+ */
+export interface FixtureProbabilities {
+  start: number;
+  play: number;
+  sixtyPlus: number;
+  /** P(credited with a clean sheet) — needs the 60 minutes AND the shut-out, as FPL scores it */
+  cleanSheet: number;
+  /** P(reaching the positional defensive-contribution threshold); 0 where the position has none */
+  defcon: number;
+  bonusAtLeastOne: number;
+}
+
+/** The count terms' expectations, in counts rather than in points. */
+export interface FixtureExpectations {
+  goals: number;
+  assists: number;
+  saves: number;
+  conceded: number;
+  bonus: number;
+  bps: number;
+  defconActions: number;
+  minutes: number;
+}
+
 export interface FixtureProjectionV2 {
   ep: number;
   components: Record<string, number>;
+  /** what the model believed, term by term — scored by B-013, ignored by the points sum */
+  probabilities: FixtureProbabilities;
+  expected: FixtureExpectations;
 }
+
+/** E[bonus | bonus >= 1]. The three awards in a match are 3, 2 and 1. */
+export const MEAN_BONUS_GIVEN_ANY = 2;
 
 export function projectFixtureV2(
   position: PositionCode,
@@ -85,45 +127,47 @@ export function projectFixtureV2(
   // --- Clean sheet. Requires 60+ minutes, and P(no goal) falls out of the same lambda that prices
   // conceding — so the two terms can no longer contradict each other the way two hand-drawn FDR
   // curves could.
-  const csPoints =
-    minutes.pSixtyPlus *
-    cleanSheetProbability(goals.lambdaAgainst) *
-    scoring.cleanSheet(position);
+  const pCleanSheet =
+    minutes.pSixtyPlus * cleanSheetProbability(goals.lambdaAgainst);
+  const csPoints = pCleanSheet * scoring.cleanSheet(position);
 
   // --- Goals conceded: -1 per TWO conceded, so E[floor(X/2)], not E[X]/2.
   const concededUnit = scoring.goalsConceded(position);
+  const expectedConcededPenalties = expectedFloorDiv(goals.lambdaAgainst, 2);
   const concededPoints =
     concededUnit !== 0
-      ? minutes.pSixtyPlus *
-        expectedFloorDiv(goals.lambdaAgainst, 2) *
-        concededUnit
+      ? minutes.pSixtyPlus * expectedConcededPenalties * concededUnit
       : 0;
 
   // --- Saves: 1 per THREE saves. Same defect, same fix. Saves scale with what the opponent creates,
   // so the fixture's lambda-against carries the shot volume.
+  const expectedSaves =
+    position === 'GKP' ? saveRate(rates, ninetieths, goals) : 0;
   const savePoints =
     position === 'GKP'
-      ? expectedFloorDiv(saveRate(rates, ninetieths, goals), 3) *
-        scoring.savePoint()
+      ? expectedFloorDiv(expectedSaves, 3) * scoring.savePoint()
       : 0;
 
   // --- Defensive contribution: a tail probability, not a linear ramp. The ramp over-paid exactly the
   // high-rate players who make up the premium head this whole entry exists to explain.
   const threshold = DEFCON_THRESHOLD[position];
   const defconUnit = scoring.defensiveContribution(position);
-  const defconPoints =
-    threshold > 0 && defconUnit !== 0
+  const expectedDefconActions =
+    rates.defcon90 * ninetieths * params.defcon.ratePer90ToMatch;
+  const pDefcon =
+    threshold > 0
       ? thresholdProbability(
-          rates.defcon90 * ninetieths * params.defcon.ratePer90ToMatch,
+          expectedDefconActions,
           threshold,
           params.defcon.dispersion,
-        ) * defconUnit
+        )
       : 0;
+  const defconPoints = defconUnit !== 0 ? pDefcon * defconUnit : 0;
 
   // --- Bonus, from BPS rather than from attacking output. Only three players in a match get any, so
   // the relationship saturates and the cap is part of the model, not a safety rail.
   const expectedBps = ninetieths * rates.bps90;
-  const bonusPoints =
+  const expectedBonus =
     minutes.pPlay *
     Math.min(
       params.bonus.maxBonus,
@@ -131,8 +175,8 @@ export function projectFixtureV2(
         0,
         params.bonus.bpsIntercept + params.bonus.bonusPerBps * expectedBps,
       ),
-    ) *
-    scoring.bonus();
+    );
+  const bonusPoints = expectedBonus * scoring.bonus();
 
   const components = {
     minutes: appearance,
@@ -148,6 +192,29 @@ export function projectFixtureV2(
   return {
     ep: Object.values(components).reduce((a, b) => a + b, 0),
     components,
+    probabilities: {
+      start: minutes.pStart,
+      play: minutes.pPlay,
+      sixtyPlus: minutes.pSixtyPlus,
+      cleanSheet: pCleanSheet,
+      defcon: pDefcon,
+      bonusAtLeastOne: Math.max(
+        0,
+        Math.min(1, expectedBonus / MEAN_BONUS_GIVEN_ANY),
+      ),
+    },
+    expected: {
+      goals: expectedGoals,
+      assists: expectedAssists,
+      saves: expectedSaves,
+      // FPL counts goals conceded WHILE THE PLAYER WAS ON THE PITCH, so the expectation scales
+      // with expected minutes rather than with P(60+).
+      conceded: ninetieths * goals.lambdaAgainst,
+      bonus: expectedBonus,
+      bps: minutes.pPlay * expectedBps,
+      defconActions: expectedDefconActions,
+      minutes: minutes.expectedMinutes,
+    },
   };
 }
 
@@ -183,7 +250,9 @@ export function minutesDistribution(
   params: FittedParams,
 ): MinutesDistribution {
   const m = params.minutes;
-  const rawStart = logistic(m.startIntercept + m.startSlope * logit(laggedStartRate));
+  const rawStart = logistic(
+    m.startIntercept + m.startSlope * logit(laggedStartRate),
+  );
 
   const pStart = clamp01(availability * rawStart);
   const pSub = clamp01(availability * (1 - rawStart) * m.subAppearanceRate);
