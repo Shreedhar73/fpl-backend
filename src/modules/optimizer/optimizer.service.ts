@@ -2,8 +2,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
 import { OptimizerRepository } from './optimizer.repository';
-import { buildLp, pickBestXi, Candidate } from './ilp';
+import {
+  buildLp,
+  pickBestXi,
+  buildConflictPairs,
+  Candidate,
+  Collisions,
+  ConflictPair,
+  NO_COLLISIONS,
+} from './ilp';
 import { POSITIONS, Rules } from './rules';
+import { MIN_APPEARANCES, COLLISION_LAMBDA } from './policy';
 
 export const OPTIMIZER_VERSION = 'v1-ilp';
 const HORIZON = 5;
@@ -49,6 +58,14 @@ export interface Universe {
   rules: Rules;
   gameweekIds: number[];
   modelVersion: string;
+  /**
+   * The collision context of the first horizon gameweek, built over EVERY candidate — not just the
+   * pool. `insights` scores squads the optimizer did not choose, and a pair involving a player the
+   * pool pruned is still a pair that squad is holding. Carried on the universe for the reason the
+   * universe exists at all: two sides arranged under different objectives report a gap that is
+   * partly an artefact of the two builds disagreeing.
+   */
+  collisions: Collisions;
 }
 
 /**
@@ -63,15 +80,17 @@ export interface Universe {
 export function arrangeSquad(
   inSquad: Candidate[],
   rules: Rules,
-): { squad: SquadPlayer[]; formation: string } {
-  const { starters, formation } = pickBestXi(inSquad, rules);
-
-  // captain = highest-EP starter, vice = next
-  const starterList = inSquad
-    .filter((c) => starters.has(c.key))
-    .sort((a, b) => b.ep - a.ep);
-  const captainKey = starterList[0]?.key;
-  const viceKey = starterList[1]?.key;
+  collisions: Collisions = NO_COLLISIONS,
+): {
+  squad: SquadPlayer[];
+  formation: string;
+  xiCollisions: ConflictPair[];
+  xiPenalty: number;
+} {
+  // The captain comes back from the enumeration rather than being picked afterwards by raw EP: the
+  // armband doubles the stake on a collision, so it is part of the same decision (see `pickBestXi`).
+  const { starters, formation, captainKey, viceKey, penaltyPoints, collisions: xiCollisions } =
+    pickBestXi(inSquad, rules, collisions);
 
   const bench = inSquad.filter((c) => !starters.has(c.key));
   const benchGk = bench.filter((c) => c.position === 'GKP');
@@ -102,7 +121,7 @@ export function arrangeSquad(
     };
   });
 
-  return { squad, formation };
+  return { squad, formation, xiCollisions, xiPenalty: penaltyPoints };
 }
 
 /**
@@ -142,6 +161,7 @@ export class OptimizerService {
       gameweekIds,
     );
     const players = await this.repo.loadPlayers();
+    const appearances = await this.repo.appearanceCounts();
 
     // horizon EP per player, and next-gameweek play probability
     const epByPlayer = new Map<string, Map<number, number>>();
@@ -172,43 +192,75 @@ export class OptimizerService {
       cost: p.nowCost,
       ep: horizonEp(p.id),
       pPlay: ppByPlayer.get(p.id) ?? 0,
+      appearances: appearances.get(p.id) ?? 0,
     }));
 
-    return { candidates, rules, gameweekIds, modelVersion };
+    // Only the FIRST horizon gameweek. A collision three gameweeks out is answered by a transfer,
+    // not by refusing to own the player (B-008).
+    const fixtures = await this.repo.fixturesFor(nextGw);
+    const collisions: Collisions = {
+      pairs: buildConflictPairs(candidates, fixtures),
+      lambda: COLLISION_LAMBDA,
+    };
+
+    return { candidates, rules, gameweekIds, modelVersion, collisions };
   }
 
   async run(
     opts: { singleGw?: boolean; persist?: boolean } = {},
   ): Promise<OptimizeSummary> {
     const started = Date.now();
-    const { candidates, rules, gameweekIds, modelVersion } =
+    const { candidates, rules, gameweekIds, modelVersion, collisions } =
       await this.buildUniverse(opts);
     const gwIds = gameweekIds;
     const nextGw = gwIds[0];
 
-    const pool = this.prunePool(candidates);
-    const lp = buildLp(pool, rules);
+    const eligible = candidates.filter((c) => c.appearances >= MIN_APPEARANCES);
+    const pool = prunePool(candidates);
     const highs = await highsLoader();
-    const solution = highs.solve(lp);
-    if (solution.Status !== 'Optimal') {
-      throw new Error(
-        `optimiser did not find an optimal squad (status: ${solution.Status})`,
-      );
-    }
-    const objectiveValue = solution.ObjectiveValue;
+    const solve = (
+      from: Candidate[],
+    ): { squad: Candidate[]; objective: number } => {
+      const solution = highs.solve(buildLp(from, rules, collisions));
+      if (solution.Status !== 'Optimal') {
+        throw new Error(
+          `optimiser did not find an optimal squad (status: ${solution.Status})`,
+        );
+      }
+      return {
+        squad: from.filter((c) => (solution.Columns[c.key]?.Primal ?? 0) > 0.5),
+        objective: solution.ObjectiveValue,
+      };
+    };
 
-    const inSquad = pool.filter(
-      (c) => (solution.Columns[c.key]?.Primal ?? 0) > 0.5,
-    );
+    const { squad: inSquad, objective: objectiveValue } = solve(pool);
     if (inSquad.length !== rules.squadSize()) {
       throw new Error(
         `solver returned ${inSquad.length} players, expected ${rules.squadSize()}`,
       );
     }
 
+    // What the floor cost, in players rather than in adjectives: the same solve with the floor
+    // lifted and LAMBDA unchanged, so the diff isolates B-010 and does not smuggle B-011 into it.
+    const unfiltered = solve(prunePool(candidates, { floor: false })).squad;
+    const chosen = new Set(inSquad.map((c) => c.key));
+    const wouldHaveMadeTheSquad = unfiltered
+      .filter((c) => !chosen.has(c.key) && c.appearances < MIN_APPEARANCES)
+      .map((c) => ({
+        playerId: c.playerId,
+        webName: c.webName,
+        position: c.position,
+        appearances: c.appearances,
+        ep: round2(c.ep),
+      }));
+
     // best legal XI, captain, vice and bench order — the same arrangement `insights` applies to a
     // squad the optimizer did not choose.
-    const { squad, formation } = arrangeSquad(inSquad, rules);
+    const { squad, formation, xiCollisions, xiPenalty } = arrangeSquad(
+      inSquad,
+      rules,
+      collisions,
+    );
 
     const totalCost = inSquad.reduce((s, c) => s + c.cost, 0);
     const durationMs = Date.now() - started;
@@ -230,9 +282,30 @@ export class OptimizerService {
               decay: DECAY,
               poolSize: pool.length,
               projectionModel: modelVersion,
+              minAppearances: MIN_APPEARANCES,
+              collisionLambda: COLLISION_LAMBDA,
             },
             result: { squad, totalCost, formation },
-            reasoning: squad,
+            reasoning: {
+              squad,
+              excluded: {
+                count: candidates.length - eligible.length,
+                threshold: MIN_APPEARANCES,
+                wouldHaveMadeTheSquad,
+              },
+              collisions: {
+                lambda: COLLISION_LAMBDA,
+                pairsConsidered: collisions.pairs.length,
+                xiPenalty: round2(xiPenalty),
+                taken: xiCollisions.map((p) => ({
+                  attacker: p.attacker.webName,
+                  defender: p.defender.webName,
+                  attackerTeamId: p.attacker.teamId,
+                  defenderTeamId: p.defender.teamId,
+                  lambda: COLLISION_LAMBDA,
+                })),
+              },
+            },
           });
 
     this.log.log(
@@ -251,19 +324,41 @@ export class OptimizerService {
     };
   }
 
-  /** Top-EP per position ∪ cheapest per position — the only players an optimal squad can contain. */
-  private prunePool(candidates: Candidate[]): Candidate[] {
-    const keep = new Map<string, Candidate>();
-    for (const pos of POSITIONS) {
-      const ofPos = candidates.filter((c) => c.position === pos);
-      const byEp = [...ofPos].sort((a, b) => b.ep - a.ep).slice(0, POOL_TOP);
-      const byCost = [...ofPos]
-        .sort((a, b) => a.cost - b.cost)
-        .slice(0, POOL_CHEAP);
-      for (const c of [...byEp, ...byCost]) keep.set(c.key, c);
-    }
-    return [...keep.values()];
+}
+
+
+/**
+ * The eligible candidate pool the ILP solves over: the appearance floor first (B-010), then top-EP
+ * per position ∪ cheapest per position.
+ *
+ * **The order is load-bearing.** Pruning first and filtering after would let sub-threshold cheap
+ * fodder occupy the budget-enabler slots and then be dropped, leaving the pool short of the cheap
+ * players a legal 15 needs — and there are zero eligible forwards at or under £4.5m, so the pool can
+ * genuinely run out.
+ *
+ * The floor applies HERE and nowhere else. `buildUniverse` keeps every player, so `insights` can
+ * still score a user squad holding a new signing over the same numbers.
+ *
+ * Under a pairwise collision penalty the top-32 cut is no longer provably answer-preserving — a
+ * player just outside it who collides with nothing can belong to the true optimum. At 32 per position
+ * the gap is negligible, and the honest fix is this sentence rather than a bigger pool.
+ */
+export function prunePool(
+  candidates: Candidate[],
+  opts: { floor?: boolean } = {},
+): Candidate[] {
+  const eligible =
+    opts.floor === false
+      ? candidates
+      : candidates.filter((c) => c.appearances >= MIN_APPEARANCES);
+  const keep = new Map<string, Candidate>();
+  for (const pos of POSITIONS) {
+    const ofPos = eligible.filter((c) => c.position === pos);
+    const byEp = [...ofPos].sort((a, b) => b.ep - a.ep).slice(0, POOL_TOP);
+    const byCost = [...ofPos].sort((a, b) => a.cost - b.cost).slice(0, POOL_CHEAP);
+    for (const c of [...byEp, ...byCost]) keep.set(c.key, c);
   }
+  return [...keep.values()];
 }
 
 function round2(x: number): number {

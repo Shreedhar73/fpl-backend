@@ -19,6 +19,11 @@ export interface ProjectionRowLite {
   playProbability: number;
 }
 
+export interface FixtureLite {
+  homeTeamId: string;
+  awayTeamId: string;
+}
+
 export interface OptimizerRunInput {
   gameweekId: number;
   modelVersion: string;
@@ -85,6 +90,66 @@ export class OptimizerRepository {
       position: r.position,
       teamId: r.teamId,
       nowCost: r.nowCost,
+    }));
+  }
+
+  /**
+   * Premier League appearances per player — gameweek rows with `minutes > 0` — over the stored
+   * archive plus the current season, keyed by `Player.id` (B-010).
+   *
+   * Two grouped queries, not one per player: the players table is 612 rows and a per-player count is
+   * the N+1 trap `fpl-performance-budget` names. The archive joins on the stable `Player.code`
+   * (`ArchivePlayerGameweek.playerId` is nullable and set to null when a player row goes), the live
+   * season joins on `Player.id`.
+   *
+   * This is NOT `Accumulator.matches` in `features.ts`, which counts every row including unused-sub
+   * zeros. Same word, different number; it cannot be reused unchanged.
+   */
+  async appearanceCounts(): Promise<Map<string, number>> {
+    const [archive, live] = await Promise.all([
+      this.prisma.archivePlayerGameweek.groupBy({
+        by: ['playerCode'],
+        where: { minutes: { gt: 0 } },
+        _count: { _all: true },
+      }),
+      this.prisma.playerGameweekStat.groupBy({
+        by: ['playerId'],
+        where: { minutes: { gt: 0 } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const idByCode = new Map(
+      (
+        await this.prisma.player.findMany({ select: { id: true, code: true } })
+      ).map((p) => [p.code, p.id]),
+    );
+
+    const counts = new Map<string, number>();
+    for (const row of archive) {
+      const id = idByCode.get(row.playerCode);
+      if (!id) continue; // an archived player who is not in the current game
+      counts.set(id, (counts.get(id) ?? 0) + row._count._all);
+    }
+    for (const row of live) {
+      counts.set(row.playerId, (counts.get(row.playerId) ?? 0) + row._count._all);
+    }
+    return counts;
+  }
+
+  /**
+   * The fixtures of one gameweek, as team-id pairs (B-011). A double gameweek returns two rows for
+   * the same team and a blank returns none — the collision rule needs no special case for either,
+   * because it iterates fixtures rather than teams.
+   */
+  async fixturesFor(gameweekId: number): Promise<FixtureLite[]> {
+    const rows = await this.prisma.fixture.findMany({
+      where: { gameweekId },
+      select: { homeTeamId: true, awayTeamId: true },
+    });
+    return rows.map((r) => ({
+      homeTeamId: r.homeTeamId,
+      awayTeamId: r.awayTeamId,
     }));
   }
 

@@ -61,6 +61,7 @@ function universe(): Candidate[] {
     cost,
     ep,
     pPlay: 0.9,
+    appearances: 50,
   });
   const list: Candidate[] = [];
   let i = 0;

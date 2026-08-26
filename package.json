@@ -31,7 +31,9 @@
     "openapi:emit": "nest build && node dist/scripts/emit-openapi.js",
     "import:archive": "nest build && node dist/scripts/import-archive.js",
     "calibrate": "nest build && node dist/scripts/calibrate.js",
-    "fit:model": "nest build && node dist/scripts/fit-model.js"
+    "fit:model": "nest build && node dist/scripts/fit-model.js",
+    "guards:report": "nest build && node dist/scripts/guards-report.js",
+    "sweep:collision": "nest build && node dist/scripts/collision-sweep.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
