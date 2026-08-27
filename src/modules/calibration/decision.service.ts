@@ -32,6 +32,8 @@ import {
   RoundDecision,
 } from './xi-decision';
 import { detectableAt, simulatedSeasonVerdict } from './sim-verdict';
+import { loadV4Scorers } from '../projections/v4/load';
+import { categoryRmse, v4Bar } from './v4-verdict';
 import highsLoader from 'highs';
 import { HORIZON } from '../optimizer/policy';
 import { MAX_TRANSFERS } from '../transfers/transfer-lp';
@@ -116,6 +118,10 @@ export class DecisionService {
       // product plans over. It is built at the deadline by `walkRounds`, not looked up from a later
       // round's context — see `PredictionRow.horizonEp`.
       horizon: HORIZON,
+      // The v4 candidate (B-036), scored on every row beside the incumbent. Measurement, not
+      // adoption: `modelVersion` moves only on a D-numbered decision, and the bar it is judged on
+      // was committed to the register before the first training run.
+      v4: loadV4Scorers(),
     });
 
     // Ordering is a comparison, so it runs on the common population like every other comparison
@@ -486,6 +492,55 @@ export class DecisionService {
       );
     }
     w();
+    w(`## v4 against the bar (B-036)`);
+    w();
+    w(
+      `The gradient-boosted candidate — one XGBoost per position over 1/3/5/10/38-match window ` +
+        `features, the OpenFPL recipe — scored on the same rows as every other predictor. **The bar ` +
+        `below was committed to the register before the first training run**, so it cannot have ` +
+        `been written to fit the numbers. Known handicap, stated: the archive carries no ` +
+        `per-gameweek availability, so v4 trains without OpenFPL's match-status features — the ` +
+        `same ceiling the incumbent lives under (B-015).`,
+    );
+    w();
+    {
+      const shared = commonRows(all, ['model', 'v4']);
+      const mOrd = summariseOrdering(
+        orderingByRound(shared, 'model', ORDERING_VIEWS[0]),
+      );
+      const vOrd = summariseOrdering(
+        orderingByRound(shared, 'v4', ORDERING_VIEWS[0]),
+      );
+      const cats = categoryRmse(all, ['model', 'v4']);
+      const verdict = v4Bar({
+        captured: DEFAULT_KS.map((k) => ({
+          k,
+          v4: vOrd.meanPointsCaptured.get(k) ?? null,
+          model: mOrd.meanPointsCaptured.get(k) ?? null,
+        })),
+        categories: cats,
+      });
+      w(
+        `Population for the ordering comparison: **${shared.length}** rows both could score. ` +
+          `Spearman v4 **${n3(vOrd.meanSpearman)}** vs incumbent **${n3(mOrd.meanSpearman)}**.`,
+      );
+      w();
+      w(`| category | n | v4 RMSE | incumbent RMSE | form RMSE |`);
+      w(`|---|---:|---:|---:|---:|`);
+      const withForm = categoryRmse(all, ['model', 'form', 'v4']);
+      for (const c of withForm) {
+        w(
+          `| ${c.category} | ${c.n} | ${c.rmse.v4.toFixed(3)} | ${c.rmse.model.toFixed(3)} | ` +
+            `${c.rmse.form.toFixed(3)} |`,
+        );
+      }
+      w();
+      for (const line of verdict.lines) {
+        w(line);
+        w();
+      }
+    }
+
     w(`## The XI and the armband`);
     w();
     w(

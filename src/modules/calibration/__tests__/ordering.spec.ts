@@ -101,25 +101,25 @@ describe('rounds are scored separately, then aggregated', () => {
     row({
       round: 1,
       playerCode: 1,
-      predicted: { model: 2, form: 0, priorSeason: 0 },
+      predicted: { model: 2, form: 0, priorSeason: 0, v4: null },
       actual: 2,
     }),
     row({
       round: 1,
       playerCode: 2,
-      predicted: { model: 1, form: 0, priorSeason: 0 },
+      predicted: { model: 1, form: 0, priorSeason: 0, v4: null },
       actual: 1,
     }),
     row({
       round: 2,
       playerCode: 1,
-      predicted: { model: 2, form: 0, priorSeason: 0 },
+      predicted: { model: 2, form: 0, priorSeason: 0, v4: null },
       actual: 20,
     }),
     row({
       round: 2,
       playerCode: 2,
-      predicted: { model: 1, form: 0, priorSeason: 0 },
+      predicted: { model: 1, form: 0, priorSeason: 0, v4: null },
       actual: 10,
     }),
   ];
@@ -154,7 +154,7 @@ describe('the sabotage: a shuffled ranking must collapse', () => {
       playerCode: i + 1,
       // A realistic FPL shape: most players near zero, a few hauls, many ties.
       actual: i < 4 ? 12 - i : i < 12 ? 5 : i < 25 ? 2 : 0,
-      predicted: { model: 60 - i, form: 0, priorSeason: 0 },
+      predicted: { model: 60 - i, form: 0, priorSeason: 0, v4: null },
     }),
   );
 
@@ -210,7 +210,7 @@ describe('views narrow the field the way the optimiser does', () => {
     row({
       playerCode: i + 1,
       value: 40 + i,
-      predicted: { model: i, form: null, priorSeason: null },
+      predicted: { model: i, form: null, priorSeason: null, v4: null },
     }),
   );
 

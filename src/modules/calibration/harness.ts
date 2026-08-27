@@ -15,6 +15,7 @@ import {
 } from '../projections/features';
 import { HORIZON_DECAY } from '../optimizer/policy';
 import { Observation } from './metrics';
+import { exportFeatures } from './feature-export';
 
 /**
  * Runs a model over history and collects what it predicted beside what happened.
@@ -38,7 +39,12 @@ import { Observation } from './metrics';
  */
 
 /** The predictors the harness scores. Adding one here is what makes it appear in every comparison. */
-export const PREDICTORS = ['model', 'form', 'priorSeason'] as const;
+/**
+ * `v4` is the gradient-boosted candidate (B-035) and is nullable like every baseline: it exists on
+ * a row only when the run was handed the v4 scorers AND the exporter emitted features for that row.
+ * The incumbent stays `model` until a D-numbered decision says otherwise — a name is not an adoption.
+ */
+export const PREDICTORS = ['model', 'form', 'priorSeason', 'v4'] as const;
 export type Predictor = (typeof PREDICTORS)[number];
 
 /**
@@ -171,6 +177,12 @@ export interface RunOptions {
   horizon?: number;
   /** Discount on a later round in the horizon sum. Defaults to what the product serves. */
   horizonDecay?: number;
+  /**
+   * Position → v4 scorer (B-036). When present, every scored row also carries `predicted.v4`,
+   * computed from the SAME walk-ordered feature stream the CSV export emits — one time cut, not a
+   * reimplementation. Absent, `predicted.v4` is null and every v4 comparison drops out pairwise.
+   */
+  v4?: ReadonlyMap<string, { predict(f: ReadonlyMap<string, number | null>): number }>;
 }
 
 export interface RunResult {
@@ -198,6 +210,12 @@ export function runBacktest(
 
   const horizon = Math.max(1, Math.floor(options.horizon ?? 1));
   const decay = options.horizonDecay ?? HORIZON_DECAY;
+
+  // The v4 features come from the same exporter the training CSVs come from — a second walk over
+  // the same rows, indexed by the row's natural key. Two walks, ONE implementation of the cut.
+  const v4Features = options.v4
+    ? indexExportedFeatures(rows, params)
+    : null;
 
   // One projection path for the round being scored and for every round in its horizon. Two would be
   // two models, and the horizon one would drift from the one the reports measure.
@@ -280,6 +298,7 @@ export function runBacktest(
           model: projection.ep,
           form: features.form,
           priorSeason: features.priorSeasonPointsPer90,
+          v4: v4Predict(options.v4, v4Features, row),
         },
         pPlay: minutes.pPlay,
         appearances: features.appearancesSample,
@@ -381,4 +400,43 @@ export function realisedOutcomes(row: HistoryRow): RealisedOutcomes {
     defconActions: row.defensiveContribution,
     minutes: row.minutes,
   };
+}
+
+/** The natural key both walks share. */
+const exportKey = (r: {
+  season: string;
+  round: number;
+  fixture: number;
+  playerCode: number;
+}): string => `${r.season}|${r.round}|${r.fixture}|${r.playerCode}`;
+
+function indexExportedFeatures(
+  rows: HistoryRow[],
+  params: FittedParams,
+): Map<string, { position: string; features: Map<string, number | null> }> {
+  const out = new Map<
+    string,
+    { position: string; features: Map<string, number | null> }
+  >();
+  for (const r of exportFeatures(rows, params)) {
+    out.set(exportKey(r), { position: r.position, features: r.features });
+  }
+  return out;
+}
+
+function v4Predict(
+  scorers:
+    | ReadonlyMap<string, { predict(f: ReadonlyMap<string, number | null>): number }>
+    | undefined,
+  features:
+    | Map<string, { position: string; features: Map<string, number | null> }>
+    | null,
+  row: HistoryRow,
+): number | null {
+  if (!scorers || !features) return null;
+  const entry = features.get(exportKey(row));
+  if (!entry) return null;
+  const scorer = scorers.get(entry.position);
+  if (!scorer) return null;
+  return scorer.predict(entry.features);
 }
