@@ -273,8 +273,16 @@ describe('the cases GW1 does not contain', () => {
 
   // SYNTHETIC — GW1 2026/27 has no double gameweek, so the summing path has no real row to prove it.
   it('sums a double gameweek across fixtures rather than overwriting', () => {
-    const first = pointsFor({ ...base, minutes: 90, goalsScored: 1 }, 'MID', scoring);
-    const second = pointsFor({ ...base, minutes: 90, assists: 1 }, 'MID', scoring);
+    const first = pointsFor(
+      { ...base, minutes: 90, goalsScored: 1 },
+      'MID',
+      scoring,
+    );
+    const second = pointsFor(
+      { ...base, minutes: 90, assists: 1 },
+      'MID',
+      scoring,
+    );
     expect(first.total + second.total).toBe(2 + 5 + 2 + 3);
   });
 
@@ -291,14 +299,30 @@ describe('the cases GW1 does not contain', () => {
   });
 
   it('prices the events GW1 never produced', () => {
-    expect(pointsFor({ ...base, minutes: 90, penaltiesSaved: 1 }, 'GKP', scoring).total).toBe(7);
-    expect(pointsFor({ ...base, minutes: 90, ownGoals: 1 }, 'DEF', scoring).total).toBe(0);
-    expect(pointsFor({ ...base, minutes: 90, saves: 6 }, 'GKP', scoring).total).toBe(4);
+    expect(
+      pointsFor({ ...base, minutes: 90, penaltiesSaved: 1 }, 'GKP', scoring)
+        .total,
+    ).toBe(7);
+    expect(
+      pointsFor({ ...base, minutes: 90, ownGoals: 1 }, 'DEF', scoring).total,
+    ).toBe(0);
+    expect(
+      pointsFor({ ...base, minutes: 90, saves: 6 }, 'GKP', scoring).total,
+    ).toBe(4);
   });
 
   it('rounds saves and goals conceded down, never up', () => {
-    expect(pointsFor({ ...base, minutes: 90, saves: 2 }, 'GKP', scoring).byIdentifier.saves).toBeUndefined();
-    expect(pointsFor({ ...base, minutes: 90, goalsConceded: 1 }, 'DEF', scoring).byIdentifier.goals_conceded).toBeUndefined();
-    expect(pointsFor({ ...base, minutes: 90, goalsConceded: 3 }, 'DEF', scoring).byIdentifier.goals_conceded).toBe(-1);
+    expect(
+      pointsFor({ ...base, minutes: 90, saves: 2 }, 'GKP', scoring).byIdentifier
+        .saves,
+    ).toBeUndefined();
+    expect(
+      pointsFor({ ...base, minutes: 90, goalsConceded: 1 }, 'DEF', scoring)
+        .byIdentifier.goals_conceded,
+    ).toBeUndefined();
+    expect(
+      pointsFor({ ...base, minutes: 90, goalsConceded: 3 }, 'DEF', scoring)
+        .byIdentifier.goals_conceded,
+    ).toBe(-1);
   });
 });

@@ -247,6 +247,9 @@ export class InsightsService {
             components: projection.components,
             expectedMinutes: projection.expectedMinutes,
             playProbability: projection.playProbability,
+            sd: projection.sd,
+            pBlank: projection.pBlank,
+            pHaul: projection.pHaul,
           }
         : null,
     };

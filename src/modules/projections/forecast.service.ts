@@ -3,6 +3,13 @@ import { PositionCode } from '../fpl-sync/mappers';
 import { Scoring } from './scoring';
 import { FITTED_PARAMS } from './fitted';
 import { minutesDistribution, projectFixtureV2 } from './model-v2';
+import {
+  convolve,
+  pmfAt,
+  summarise,
+  type PmfSummary,
+  type PointsPmf,
+} from './distributions';
 import { ForecastRepository } from './forecast.repository';
 import { HistoryRow, walkRounds } from './features';
 
@@ -31,6 +38,13 @@ export interface PlayerForecast {
   expectedMinutes: number;
   playProbability: number;
   components: Record<string, number>;
+  /**
+   * The points distribution over ALL of this player's fixtures in the gameweek (B-017).
+   *
+   * A double gameweek is a convolution, not a sum of summaries — two matches' points add, and adding
+   * two standard deviations would overstate the spread by about 40%.
+   */
+  distribution: PmfSummary;
   fixtures: number;
   /** false when availability came from the live row rather than a captured deadline snapshot */
   availabilityFromSnapshot: boolean;
@@ -113,6 +127,9 @@ export class ForecastService {
     // One entry per player, summed across their fixtures — a double gameweek is two fixtures and
     // therefore two projections that add, a blank is no fixture and therefore no entry at all.
     const byCode = new Map<number, PlayerForecast>();
+    /** playerCode → the running distribution, kept outside the entry because it cannot be summarised
+     * until every fixture of the gameweek has been folded in. */
+    const pmfByCode = new Map<number, PointsPmf | undefined>();
     let withoutHistory = 0;
     let fromSnapshot = 0;
 
@@ -156,6 +173,7 @@ export class ForecastService {
             expectedMinutes: 0,
             playProbability: minutes.pPlay,
             components: {},
+            distribution: summarise(pmfAt(0)),
             fixtures: 0,
             availabilityFromSnapshot: avail?.fromSnapshot ?? false,
             status: avail?.status ?? 'a',
@@ -163,8 +181,22 @@ export class ForecastService {
           byCode.set(row.playerCode, entry);
         }
 
-        foldFixture(entry, projection, minutes.expectedMinutes);
+        pmfByCode.set(
+          row.playerCode,
+          foldFixture(
+            entry,
+            projection,
+            minutes.expectedMinutes,
+            pmfByCode.get(row.playerCode),
+          ),
+        );
       }
+    }
+
+    // Summarised once, after every fixture is folded in.
+    for (const [code, pmf] of pmfByCode) {
+      const entry = byCode.get(code);
+      if (entry && pmf) entry.distribution = summarise(pmf);
     }
 
     const players = [...byCode.values()].sort(
@@ -204,15 +236,30 @@ export class ForecastService {
  */
 export function foldFixture(
   entry: PlayerForecast,
-  projection: { ep: number; components: Record<string, number> },
+  projection: {
+    ep: number;
+    components: Record<string, number>;
+    pmf?: PointsPmf;
+  },
   expectedMinutes: number,
-): void {
+  /**
+   * The running distribution across the fixtures folded so far.
+   *
+   * Passed in and returned rather than stored on the entry, because a `PmfSummary` cannot be
+   * un-summarised: once two fixtures have been reduced to a mean and a standard deviation there is
+   * no way to convolve a third onto them. The caller keeps the array and summarises once at the end.
+   */
+  runningPmf?: PointsPmf,
+): PointsPmf | undefined {
   entry.expectedPoints += projection.ep;
   entry.expectedMinutes += expectedMinutes;
   entry.fixtures += 1;
   for (const [k, v] of Object.entries(projection.components)) {
     entry.components[k] = (entry.components[k] ?? 0) + v;
   }
+  if (!projection.pmf) return runningPmf;
+  // Two fixtures in one event are two independent matches whose points ADD, which is a convolution.
+  return runningPmf ? convolve(runningPmf, projection.pmf) : projection.pmf;
 }
 
 /**

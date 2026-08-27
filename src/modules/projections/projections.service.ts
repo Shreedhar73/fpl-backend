@@ -104,6 +104,9 @@ export class ProjectionsService {
             ),
             fixtures: p.fixtures,
           },
+          sd: round(p.distribution.sd, 3),
+          pBlank: round(p.distribution.pBlank, 3),
+          pHaul: round(p.distribution.pHaul, 3),
         });
       }
     }
