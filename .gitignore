@@ -21,3 +21,4 @@ src/generated/
 # is deliberately not vendored here.
 .archive-cache/
 reports/datasets/*.csv
+tools/fit-v4/venv/
