@@ -72,6 +72,10 @@ export class ArchiveRepository {
       expectedAssists: new Prisma.Decimal(r.expectedAssists),
       expectedGoalsConceded: new Prisma.Decimal(r.expectedGoalsConceded),
       ictIndex: new Prisma.Decimal(r.ictIndex),
+      influence: r.influence === null ? null : new Prisma.Decimal(r.influence),
+      creativity:
+        r.creativity === null ? null : new Prisma.Decimal(r.creativity),
+      threat: r.threat === null ? null : new Prisma.Decimal(r.threat),
       value: r.value,
       selectedBy: r.selectedBy,
     }));

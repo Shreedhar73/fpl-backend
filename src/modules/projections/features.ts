@@ -51,6 +51,14 @@ export interface HistoryRow {
   expectedGoalsConceded: number;
   /** FPL's ICT index for the match — carried for the v4 feature export (B-034), unread by v3 */
   ictIndex: number;
+  /**
+   * The ICT split (B-037). Null where the source has no column — the live table, and any archive
+   * row imported before the migration. Missing, never zero: the exporter forwards null as a missing
+   * cell and the trees route it through default_left.
+   */
+  influence: number | null;
+  creativity: number | null;
+  threat: number | null;
   value: number;
 }
 

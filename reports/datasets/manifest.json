@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-27T10:38:58.277Z",
+  "generated": "2026-08-27T11:06:30.398Z",
   "seasons": {
     "2023-24": 28850,
     "2024-25": 27010,
@@ -12,7 +12,7 @@
     "MID": 37793
   },
   "totalRows": 85342,
-  "columns": 125,
+  "columns": 140,
   "featureNames": [
     "value",
     "wasHome",
@@ -99,6 +99,21 @@
     "p_defcon_5",
     "p_defcon_10",
     "p_defcon_38",
+    "p_influence_1",
+    "p_influence_3",
+    "p_influence_5",
+    "p_influence_10",
+    "p_influence_38",
+    "p_creativity_1",
+    "p_creativity_3",
+    "p_creativity_5",
+    "p_creativity_10",
+    "p_creativity_38",
+    "p_threat_1",
+    "p_threat_3",
+    "p_threat_5",
+    "p_threat_10",
+    "p_threat_38",
     "t_goalsFor_1",
     "t_goalsFor_3",
     "t_goalsFor_5",

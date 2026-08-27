@@ -47,7 +47,17 @@ interface PlayerMatch {
   xgc: number;
   ict: number;
   defcon: number;
+  influence: number | null;
+  creativity: number | null;
+  threat: number | null;
 }
+
+/**
+ * Fields that can be null per match (the I/C/T split — B-037). Their windows average the matches
+ * that HAVE the value and go missing when none do, so a season with the split and one without do
+ * not blend a real number with an invented zero.
+ */
+const NULLABLE_PLAYER_FIELDS = ['influence', 'creativity', 'threat'] as const;
 
 const PLAYER_FIELDS = [
   'points',
@@ -79,6 +89,19 @@ const TEAM_FIELDS = ['goalsFor', 'goalsAgainst', 'xgFor', 'xgAgainst'] as const;
 
 const mean = (xs: number[]): number =>
   xs.reduce((s, x) => s + x, 0) / xs.length;
+
+/** Mean over the non-null values in the last `n` of `hist`, or null when none carry the field. */
+function nullableWindowMean<T>(
+  hist: T[],
+  n: number,
+  pick: (t: T) => number | null,
+): number | null {
+  const xs = hist
+    .slice(-n)
+    .map(pick)
+    .filter((x): x is number => x !== null);
+  return xs.length ? mean(xs) : null;
+}
 
 /** Mean over the last `n` of `hist`, or null when there is no history at all. */
 function windowMean<T>(
@@ -117,6 +140,8 @@ export function featureNames(): string[] {
     'lambdaAgainst',
   ];
   for (const f of PLAYER_FIELDS)
+    for (const w of WINDOWS) names.push(`p_${f}_${w}`);
+  for (const f of NULLABLE_PLAYER_FIELDS)
     for (const w of WINDOWS) names.push(`p_${f}_${w}`);
   for (const f of TEAM_FIELDS)
     for (const w of WINDOWS) names.push(`t_${f}_${w}`);
@@ -177,6 +202,9 @@ export function exportFeatures(
       for (const field of PLAYER_FIELDS)
         for (const w of WINDOWS)
           f.set(`p_${field}_${w}`, windowMean(ph, w, (m) => m[field]));
+      for (const field of NULLABLE_PLAYER_FIELDS)
+        for (const w of WINDOWS)
+          f.set(`p_${field}_${w}`, nullableWindowMean(ph, w, (m) => m[field]));
 
       const th = teamHist.get(row.teamCode) ?? [];
       for (const field of TEAM_FIELDS)
@@ -235,6 +263,9 @@ export function exportFeatures(
         xgc: row.expectedGoalsConceded,
         ict: row.ictIndex,
         defcon: row.defensiveContribution ?? 0,
+        influence: row.influence,
+        creativity: row.creativity,
+        threat: row.threat,
       });
       if (hist.length > 40) hist.shift();
       playerHist.set(row.playerCode, hist);

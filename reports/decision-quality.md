@@ -22,28 +22,28 @@ Population: **11648** of 29482 player-gameweeks — the rows every predictor cou
 
 | Predictor | rounds | Spearman | points captured @11 | precision @11 | points captured @15 | precision @15 | points captured @30 | precision @30 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| model | 37 | 0.528 | 35.3% | 12.3% | 38.5% | 15.7% | 42.0% | 21.2% |
+| model | 37 | 0.528 | 35.3% | 12.3% | 38.5% | 15.7% | 42.0% | 21.1% |
 | form | 37 | 0.574 | 33.5% | 11.5% | 34.5% | 12.6% | 40.1% | 20.1% |
 | priorSeason | 37 | 0.052 | 12.6% | 2.5% | 17.3% | 5.9% | 22.8% | 11.7% |
-| v4 | 37 | 0.629 | 40.0% | 14.3% | 40.3% | 18.6% | 46.0% | 25.7% |
+| v4 | 37 | 0.628 | 40.1% | 15.5% | 41.5% | 18.9% | 45.5% | 25.1% |
 
 ### top 100 by price
 
 | Predictor | rounds | Spearman | points captured @11 | precision @11 | points captured @15 | precision @15 | points captured @30 | precision @30 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | model | 37 | 0.497 | 45.9% | 26.5% | 46.3% | 29.4% | 62.1% | 50.2% |
-| form | 37 | 0.544 | 42.9% | 22.4% | 47.1% | 28.8% | 61.1% | 49.1% |
+| form | 37 | 0.544 | 42.9% | 22.4% | 47.1% | 28.8% | 61.0% | 49.1% |
 | priorSeason | 37 | -0.024 | 24.9% | 13.3% | 26.0% | 16.4% | 36.4% | 28.6% |
-| v4 | 37 | 0.602 | 47.9% | 29.7% | 50.1% | 32.4% | 64.3% | 51.7% |
+| v4 | 37 | 0.605 | 48.0% | 29.0% | 51.4% | 33.7% | 64.5% | 52.3% |
 
 ### top 100 by predicted
 
 | Predictor | rounds | Spearman | points captured @11 | precision @11 | points captured @15 | precision @15 | points captured @30 | precision @30 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | model | 37 | 0.135 | 38.6% | 18.9% | 42.8% | 24.0% | 49.5% | 36.6% |
-| form | 37 | 0.081 | 37.8% | 18.7% | 39.4% | 20.5% | 48.7% | 35.3% |
+| form | 37 | 0.080 | 37.8% | 18.7% | 39.4% | 20.5% | 48.7% | 35.2% |
 | priorSeason | 37 | 0.023 | 16.1% | 9.1% | 23.3% | 16.0% | 37.5% | 38.6% |
-| v4 | 37 | 0.120 | 43.5% | 24.1% | 44.4% | 25.8% | 53.1% | 37.7% |
+| v4 | 37 | 0.116 | 43.5% | 23.6% | 45.5% | 26.5% | 52.1% | 36.4% |
 
 ## What the ordering says
 
@@ -59,24 +59,24 @@ That is a claim about ordering, not about points. It becomes a claim about point
 
 The gradient-boosted candidate — one XGBoost per position over 1/3/5/10/38-match window features, the OpenFPL recipe — scored on the same rows as every other predictor. **The bar below was committed to the register before the first training run**, so it cannot have been written to fit the numbers. Known handicap, stated: the archive carries no per-gameweek availability, so v4 trains without OpenFPL's match-status features — the same ceiling the incumbent lives under (B-015).
 
-Population for the ordering comparison: **29482** rows both could score. Spearman v4 **0.713** vs incumbent **0.664**.
+Population for the ordering comparison: **29482** rows both could score. Spearman v4 **0.714** vs incumbent **0.664**.
 
 **Two populations, named so the columns are not cross-read** (B-012 invariant 3): the v4-vs-incumbent columns and their paired noise are on the rows BOTH could score; the `form` column is on the smaller three-way intersection and is context, not a leg of the bar. "paired Δse" is the per-round-paired difference in squared error (v4 − incumbent): negative favours v4, and a difference that does not clear two standard errors is not a result — the same rule every season comparison in this report obeys (B-030).
 
 | category | n | v4 RMSE | incumbent RMSE | paired Δse ± s.e. | clears | form RMSE (3-way, n) |
 |---|---:|---:|---:|---:|---|---:|
-| Zeros | 18073 | 0.742 | 0.996 | -0.434 ± 0.023 | **yes** | 0.879 (17753) |
-| Blanks | 7213 | 1.367 | 1.440 | -0.202 ± 0.085 | **yes** | 2.144 (7062) |
-| Tickers | 1690 | 1.516 | 1.421 | +0.267 ± 0.062 | **yes** | 2.068 (1645) |
-| Haulers | 2506 | 5.766 | 5.765 | -0.012 ± 0.335 | no | 5.652 (2445) |
+| Zeros | 18073 | 0.738 | 0.996 | -0.439 ± 0.023 | **yes** | 0.879 (17753) |
+| Blanks | 7213 | 1.376 | 1.440 | -0.176 ± 0.081 | **yes** | 2.144 (7062) |
+| Tickers | 1690 | 1.506 | 1.421 | +0.242 ± 0.059 | **yes** | 2.068 (1645) |
+| Haulers | 2506 | 5.760 | 5.765 | -0.084 ± 0.327 | no | 5.652 (2445) |
 
-**Ordering — beat the incumbent on points captured at every k:** @11 37.5% vs 32.7%, @15 39.2% vs 36.1%, @30 41.6% vs 38.0% — **met**.
+**Ordering — beat the incumbent on points captured at every k:** @11 38.0% vs 32.7%, @15 39.3% vs 36.1%, @30 42.0% vs 38.0% — **met**.
 
-**High-return accuracy — improve Tickers and Haulers:** Tickers 1.516 vs 1.421 (n=1690, clears its paired noise), Haulers 5.766 vs 5.765 (n=2506, inside its paired noise) — **not met**.
+**High-return accuracy — improve Tickers and Haulers:** Tickers 1.506 vs 1.421 (n=1690, clears its paired noise), Haulers 5.760 vs 5.765 (n=2506, inside its paired noise) — **not met**.
 
-**Low-return accuracy — no material (>5%) degradation:** Zeros 0.742 vs 0.996 (n=18073, clears its paired noise), Blanks 1.367 vs 1.440 (n=7213, clears its paired noise) — **held**.
+**Low-return accuracy — no material (>5%) degradation:** Zeros 0.738 vs 0.996 (n=18073, clears its paired noise), Blanks 1.376 vs 1.440 (n=7213, clears its paired noise) — **held**.
 
-**The bar is not met on this run.** `modelVersion` does not move. The named next step is feature enrichment — the Understat/vaastav groups OpenFPL uses that the archive lacks (I/C/T split, xGChain, xGBuildup, key passes, team Deep and PPDA) — and the negative result stands in this report rather than being rerun until it passes.
+**The bar is not met on this run.** `modelVersion` does not move, and the negative result stands in this report rather than being rerun until it passes. The I/C/T split is already in the feature set (plan 023); the remaining OpenFPL groups are blocked at the source — vaastav's understat player files stop before the test season, and understat.com now serves a JS shell with no embedded data (probed 2026-08-27). The candidates left are model-shaped, not feature-shaped: a distribution-aware objective, or v4 as a residual on the incumbent's decomposition — both recorded in B-037.
 
 ## The XI and the armband
 
@@ -93,15 +93,15 @@ The squads are chosen once, at **round 1**, by rules that read no model: the **t
 | template (most-owned legal fifteen) | model | 37 | 1717 | 85.9% | 6.162 |
 | template (most-owned legal fifteen) | form | 37 | 1731 | 86.6% | 6.162 |
 | template (most-owned legal fifteen) | priorSeason | 37 | 1696 | 84.8% | 7.081 |
-| template (most-owned legal fifteen) | v4 | 37 | 1734 | 86.7% | 6.297 |
+| template (most-owned legal fifteen) | v4 | 37 | 1741 | 87.1% | 6.189 |
 | random #1 (seed 20260827) | model | 37 | 495 | 85.5% | 2.081 |
 | random #1 (seed 20260827) | form | 37 | 505 | 87.2% | 1.811 |
 | random #1 (seed 20260827) | priorSeason | 37 | 455 | 78.6% | 3.162 |
-| random #1 (seed 20260827) | v4 | 37 | 484 | 83.6% | 2.378 |
+| random #1 (seed 20260827) | v4 | 37 | 479 | 82.7% | 2.514 |
 | random #2 (seed 20260827) | model | 37 | 989 | 83.5% | 5.216 |
 | random #2 (seed 20260827) | form | 37 | 995 | 84.0% | 5.054 |
 | random #2 (seed 20260827) | priorSeason | 37 | 1031 | 87.0% | 4.081 |
-| random #2 (seed 20260827) | v4 | 37 | 995 | 84.0% | 5.054 |
+| random #2 (seed 20260827) | v4 | 37 | 990 | 83.5% | 5.189 |
 | random #3 (seed 20260827) | model | 37 | 740 | 83.1% | 4.081 |
 | random #3 (seed 20260827) | form | 37 | 775 | 87.0% | 3.135 |
 | random #3 (seed 20260827) | priorSeason | 37 | 778 | 87.3% | 3.054 |
@@ -109,7 +109,7 @@ The squads are chosen once, at **round 1**, by rules that read no model: the **t
 | random #4 (seed 20260827) | model | 37 | 980 | 83.8% | 5.000 |
 | random #4 (seed 20260827) | form | 37 | 963 | 82.4% | 5.459 |
 | random #4 (seed 20260827) | priorSeason | 37 | 977 | 83.6% | 5.081 |
-| random #4 (seed 20260827) | v4 | 37 | 980 | 83.8% | 5.000 |
+| random #4 (seed 20260827) | v4 | 37 | 986 | 84.3% | 4.838 |
 
 ### Is the difference bigger than the noise?
 
@@ -150,12 +150,12 @@ Each predictor picks its **own** opening fifteen and walks the season under the 
 | no-transfer | model | 37 | **1635** | 0 | 0 | £98.9m |
 | no-transfer | form | 37 | **1086** | 0 | 0 | £97.8m |
 | no-transfer | priorSeason | 37 | **1034** | 0 | 0 | £97.8m |
-| no-transfer | v4 | 37 | **1395** | 0 | 0 | £98.1m |
+| no-transfer | v4 | 37 | **1443** | 0 | 0 | £97.9m |
 | no-transfer | template (crowd proxy) | 37 | **1717** | 0 | 0 | £98.2m |
 | greedy-1ft | model | 37 | **1881** | 37 | 0 | £97.5m |
 | greedy-1ft | form | 37 | **1761** | 37 | 0 | £97.5m |
 | greedy-1ft | priorSeason | 37 | **1037** | 4 | 0 | £97.8m |
-| greedy-1ft | v4 | 37 | **1779** | 37 | 0 | £95.1m |
+| greedy-1ft | v4 | 37 | **1986** | 37 | 0 | £96.9m |
 | greedy-1ft | template (crowd proxy) | 37 | **1928** | 37 | 0 | £97.8m |
 | planner | model | 37 | **1814** | 48 | 44 | £97.4m |
 | planner (pre-B-024 objective) | model | 37 | **1846** | 47 | 40 | £98.8m |
@@ -172,11 +172,11 @@ Every row is **paired by round** — both arms faced the same fixtures, blanks a
 |---|---|---:|---:|---:|---|---:|
 | no-transfer | model − form | 37 | +14.84 | 2.74 | **yes** | 203 pts |
 | no-transfer | model − priorSeason | 37 | +16.24 | 2.67 | **yes** | 198 pts |
-| no-transfer | model − v4 | 37 | +6.49 | 2.91 | **yes** | 215 pts |
+| no-transfer | model − v4 | 37 | +5.19 | 2.68 | no | 199 pts |
 | no-transfer | model − template (crowd proxy) | 37 | -2.22 | 2.77 | no | 205 pts |
 | greedy-1ft | model − form | 37 | +3.24 | 2.60 | no | 192 pts |
 | greedy-1ft | model − priorSeason | 37 | +22.81 | 2.86 | **yes** | 212 pts |
-| greedy-1ft | model − v4 | 37 | +2.76 | 2.72 | no | 201 pts |
+| greedy-1ft | model − v4 | 37 | -2.84 | 3.16 | no | 234 pts |
 | greedy-1ft | model − template (crowd proxy) | 37 | -1.27 | 2.11 | no | 156 pts |
 | planner | planner − greedy-1ft, same opening fifteen | 37 | -1.81 | 2.26 | no | 167 pts |
 | planner (pre-B-024 objective) | pre-B-024 planner − greedy-1ft, same opening fifteen | 37 | -0.95 | 1.51 | no | 112 pts |
