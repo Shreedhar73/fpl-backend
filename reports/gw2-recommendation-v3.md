@@ -99,3 +99,51 @@ what we are willing to recommend, and not because it scores more.
   so that half of the minutes model remains a hand-drawn scalar — B-015, and it is calendar-bound.
 - **The fixture term is non-zero and unproven out-of-sample.** B-014's rebuild earned the elasticities
   on the validation set and did not improve the held-out season. See D-024.
+
+---
+
+## Revised 2026-08-27, after B-023 — the armband moves back to Palmer
+
+Everything above was produced **before** B-023 put the XI and the captain into the optimizer's
+objective. Same model version, same gameweek, same projections; a different program solving over
+them. The recommendation of record is the one below.
+
+3-5-2, **£99.7m**, objective **257.84** over GW2–GW6.
+
+| | Player | Pos | Price | EP (GW2–6) |
+|---|---|---|---:|---:|
+| | Trafford | GKP | £5.0m | 12.69 |
+| | Senesi | DEF | £6.0m | 16.12 |
+| | Ballard | DEF | £5.0m | 15.20 |
+| | Lacroix | DEF | £6.0m | 15.06 |
+| **C** | **Palmer** | MID | £9.5m | 22.01 |
+| **V** | Saka | MID | £9.5m | 21.15 |
+| | Mbeumo | MID | £8.0m | 18.57 |
+| | Foden | MID | £7.0m | 18.03 |
+| | Gakpo | MID | £7.0m | 17.51 |
+| | Isak | FWD | £9.0m | 19.33 |
+| | João Pedro | FWD | £7.6m | 17.08 |
+
+Bench, in order: Petrović (GKP, £4.5m), Wieffer (DEF, £5.0m), Richarlison (FWD, £6.0m), De Cuyper
+(DEF, £4.6m).
+
+**The armband is Palmer's again, and the collision is still priced.** The earlier solve moved it to
+Saka because the captain's doubled exposure to two Brighton defenders was the only lever the
+arrangement had. With the XI in the objective the solver has a better one: it keeps the best captain
+and **benches the two defenders he collides with** — Wieffer (17.22) and De Cuyper (16.34) sit behind
+Ballard (15.20) and Lacroix (15.06). That costs `(1 − 0.7) × 3.30 = 0.99` of objective and saves 4
+penalty points, because a captain's collision counts twice. Same rule, better instrument.
+
+**Two of those bench players are worth more than two of the starters, and that is not an error.** A
+bench place is worth 0.7 of a start in this objective (D-029), so the solver will trade XI quality for
+a penalty saving. What it will not do any more is buy four £5.0m defenders because a bench place was
+priced at par.
+
+**What has not changed:** the appearance floor still excludes 227 players, and the honest caveats at
+the foot of the original section — no transfers or chips here (that is `/api/insights/transfers/{id}`
+now), an unfitted availability multiplier, and a fixture term that is non-zero and unproven
+out-of-sample — all still stand.
+
+**And one that has:** every projection now carries a distribution (B-017). Palmer is 6.31 for the
+gameweek with a standard deviation of 4.21, a 23.0% chance of a blank and a 21.5% chance of ten or
+more. Doubling him doubles both ends of that.
