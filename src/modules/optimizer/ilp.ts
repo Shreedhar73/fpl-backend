@@ -163,6 +163,27 @@ function signedExpr(terms: { coef: number; name: string }[]): string {
  * variance, so benching genuinely answers this charge. Key a charge to the decision you want to
  * change.
  */
+/**
+ * Which objective the squad program maximises. **A measurement knob, never a serving one.**
+ *
+ * `xi-bench-captain` is what the product solves and what every caller gets by default:
+ * `Σ EP(y + c) + benchWeight × Σ EP(x − y) − λ Σ d`, landed in B-023 and amended by B-029.
+ *
+ * `all-fifteen-equal` is the objective B-023 REPLACED — `Σ EP × x`, every one of the fifteen worth
+ * the same, no armband priced and no concentration charged. It exists so the replacement can be
+ * measured against what it replaced (B-031), which had never been done: between the commit that
+ * adopted v3 and the commit that rewrote this objective, the model's own simulated fifteen went from
+ * 26 points ahead of the crowd proxy to 47 behind, and nobody knew whether the rewrite was the cause.
+ *
+ * **The feasible set is identical under both.** Only the objective row changes: the `y` and `k`
+ * columns and every constraint on them stay, so one program is solved two ways rather than two
+ * programs being compared. Under `all-fifteen-equal` those columns carry a zero coefficient, which
+ * means the solver has no opinion about the XI — exactly the pre-B-023 behaviour, where the eleven
+ * was chosen afterwards and not by the LP. A caller that reads `xi` or `captainKey` off an
+ * `all-fifteen-equal` solve is reading an arbitrary feasible answer, and must not.
+ */
+export type SquadObjective = 'xi-bench-captain' | 'all-fifteen-equal';
+
 export function buildLp(
   candidates: Candidate[],
   rules: Rules,
@@ -177,6 +198,8 @@ export function buildLp(
    * reason enough to default to what is served.
    */
   benchWeight = BENCH_WEIGHT,
+  /** Defaults to what is served. See `SquadObjective` — the other value is for harnesses only. */
+  objective: SquadObjective = 'xi-bench-captain',
 ): string {
   const clubs = [...new Set(candidates.map((c) => c.teamId))];
   const inPos = (pos: PositionCode) =>
@@ -203,15 +226,25 @@ export function buildLp(
   lines.push('Maximize');
   lines.push(
     ' obj: ' +
-      signedExpr([
-        ...candidates.map((c) => ({ coef: benchWeight * c.ep, name: c.key })),
-        ...candidates.map((c) => ({
-          coef: (1 - benchWeight) * c.ep,
-          name: xi(c),
-        })),
-        ...candidates.map((c) => ({ coef: c.ep, name: cap(c) })),
-        ...pairs.map((_, i) => ({ coef: -concentration.lambda, name: `d_${i}` })),
-      ]),
+      signedExpr(
+        objective === 'all-fifteen-equal'
+          ? candidates.map((c) => ({ coef: c.ep, name: c.key }))
+          : [
+              ...candidates.map((c) => ({
+                coef: benchWeight * c.ep,
+                name: c.key,
+              })),
+              ...candidates.map((c) => ({
+                coef: (1 - benchWeight) * c.ep,
+                name: xi(c),
+              })),
+              ...candidates.map((c) => ({ coef: c.ep, name: cap(c) })),
+              ...pairs.map((_, i) => ({
+                coef: -concentration.lambda,
+                name: `d_${i}`,
+              })),
+            ],
+      ),
   );
 
   lines.push('Subject To');
