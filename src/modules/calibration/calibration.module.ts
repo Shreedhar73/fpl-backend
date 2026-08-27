@@ -6,6 +6,7 @@ import { DecisionService } from './decision.service';
 import { ComponentCalibrationService } from './component-calibration.service';
 import { ServedScoringService } from './served-scoring.service';
 import { XiReplayService } from './xi-replay.service';
+import { CollisionCorrelationService } from './collision-correlation.service';
 import { ProjectionsModule } from '../projections/projections.module';
 
 /**
@@ -24,6 +25,7 @@ import { ProjectionsModule } from '../projections/projections.module';
     ComponentCalibrationService,
     ServedScoringService,
     XiReplayService,
+    CollisionCorrelationService,
   ],
   exports: [
     CalibrationService,
@@ -31,6 +33,7 @@ import { ProjectionsModule } from '../projections/projections.module';
     ComponentCalibrationService,
     ServedScoringService,
     XiReplayService,
+    CollisionCorrelationService,
   ],
 })
 export class CalibrationModule {}
