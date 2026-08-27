@@ -6,7 +6,7 @@ Every table carries `n` and the base rate. A Brier score alone is a trap for a r
 
 ## Verdict
 
-No single term dominates. Worst is P(defensive contribution ≥ threshold) at reliability 0.0022 against a mean of 0.0009 for the rest (2.6×) — the miscalibration is spread across components, which is a different and equally publishable answer.
+No single term dominates. Worst is P(60+ minutes) at reliability 0.0015 against a mean of 0.0007 for the rest (2.2×) — the miscalibration is spread across components, which is a different and equally publishable answer.
 
 ## Binaries
 
@@ -16,7 +16,7 @@ No single term dominates. Worst is P(defensive contribution ≥ threshold) at re
 | P(any appearance) | 29,482 | 0.387 | 0.402 | 0.1153 | **0.0009** | 0.1223 | 0.514 |
 | P(60+ minutes) | 29,482 | 0.264 | 0.267 | 0.1074 | **0.0015** | 0.0876 | 0.447 |
 | P(clean sheet credited) | 26,242 | 0.076 | 0.076 | 0.0626 | **0.0000** | 0.0065 | 0.105 |
-| P(defensive contribution ≥ threshold) | 26,086 | 0.054 | 0.013 | 0.0483 | **0.0022** | 0.0035 | 0.058 |
+| P(defensive contribution ≥ threshold) | 26,086 | 0.054 | 0.048 | 0.0429 | **0.0005** | 0.0080 | 0.163 |
 | P(bonus ≥ 1) | 29,482 | 0.041 | 0.021 | 0.0374 | **0.0005** | 0.0011 | 0.038 |
 
 ### P(start)
@@ -114,17 +114,18 @@ Defined only where the archive carries the category — 2025-26 — and only for
 
 | predicted band | n | mean predicted | observed rate |
 |---|---:|---:|---:|
-| 0.0–0.1 | 25,138 | 0.007 | 0.043 |
-| 0.1–0.2 | 637 | 0.142 | 0.289 |
-| 0.2–0.3 | 214 | 0.248 | 0.449 |
-| 0.3–0.4 | 87 | 0.335 | 0.517 |
-| 0.4–0.5 | 10 | 0.431 | 0.400 |
+| 0.0–0.1 | 21,825 | 0.021 | 0.018 |
+| 0.1–0.2 | 2,840 | 0.138 | 0.176 |
+| 0.2–0.3 | 1,017 | 0.243 | 0.324 |
+| 0.3–0.4 | 259 | 0.340 | 0.402 |
+| 0.4–0.5 | 113 | 0.440 | 0.522 |
+| 0.5–0.6 | 32 | 0.529 | 0.594 |
 
 | position | n | base rate | mean predicted | Brier | reliability |
 |---|---:|---:|---:|---:|---:|
-| DEF | 9,653 | 0.085 | 0.023 | 0.0743 | 0.0047 |
-| MID | 13,193 | 0.044 | 0.009 | 0.0404 | 0.0016 |
-| FWD | 3,240 | 0.003 | 0.001 | 0.0027 | 0.0000 |
+| DEF | 9,653 | 0.085 | 0.072 | 0.0658 | 0.0008 |
+| MID | 13,193 | 0.044 | 0.041 | 0.0359 | 0.0005 |
+| FWD | 3,240 | 0.003 | 0.004 | 0.0026 | 0.0000 |
 
 ### P(bonus ≥ 1)
 
@@ -154,7 +155,7 @@ DERIVED from the expected bonus as `E[bonus] / 2`, not a number the model serves
 | E[goals conceded while on the pitch] | 13,049 | 0.374 | 0.416 | -0.042 |
 | E[bonus] | 29,482 | 0.042 | 0.081 | -0.039 |
 | E[BPS] | 29,482 | 3.293 | 4.536 | -1.244 |
-| E[defensive actions] | 26,086 | 2.008 | 2.243 | -0.235 |
+| E[defensive actions] | 26,086 | 2.231 | 2.243 | -0.012 |
 | E[minutes] | 29,482 | 25.647 | 25.249 | 0.398 |
 
 ### E[goals]
@@ -297,22 +298,22 @@ The count behind the threshold probability. 2025-26 only.
 
 | decile | n | mean predicted | mean actual |
 |---:|---:|---:|---:|
-| 1 | 2,653 | 0.176 | 0.031 |
-| 2 | 2,637 | 0.211 | 0.034 |
-| 3 | 2,536 | 0.232 | 0.047 |
-| 4 | 2,608 | 0.303 | 0.254 |
-| 5 | 2,609 | 0.899 | 0.922 |
-| 6 | 2,609 | 1.895 | 1.828 |
-| 7 | 2,608 | 2.584 | 2.745 |
-| 8 | 2,609 | 3.324 | 3.888 |
-| 9 | 2,608 | 4.250 | 5.243 |
-| 10 | 2,609 | 6.205 | 7.438 |
+| 1 | 2,653 | 0.195 | 0.031 |
+| 2 | 2,637 | 0.234 | 0.034 |
+| 3 | 2,536 | 0.257 | 0.047 |
+| 4 | 2,608 | 0.337 | 0.254 |
+| 5 | 2,609 | 0.998 | 0.922 |
+| 6 | 2,609 | 2.106 | 1.828 |
+| 7 | 2,608 | 2.871 | 2.745 |
+| 8 | 2,609 | 3.694 | 3.888 |
+| 9 | 2,608 | 4.722 | 5.243 |
+| 10 | 2,609 | 6.894 | 7.438 |
 
 | position | n | mean predicted | mean actual |
 |---|---:|---:|---:|
-| DEF | 9,653 | 2.156 | 2.510 |
-| MID | 13,193 | 2.104 | 2.295 |
-| FWD | 3,240 | 1.171 | 1.233 |
+| DEF | 9,653 | 2.396 | 2.510 |
+| MID | 13,193 | 2.338 | 2.295 |
+| FWD | 3,240 | 1.301 | 1.233 |
 
 ### E[minutes]
 
