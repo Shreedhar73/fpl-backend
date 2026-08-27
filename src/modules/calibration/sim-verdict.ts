@@ -187,7 +187,7 @@ export function simulatedSeasonVerdict(input: SimVerdictInput): string[] {
         `time.** It scores ${plannerPoints} against \`greedy-1ft\`'s ${greedyModelPoints} from ` +
         `**the same opening fifteen** — ${diff >= 0 ? `${diff} ahead` : `${-diff} behind`}` +
         `${floor ? `, against a noise floor of ${floor} points` : ''}` +
-        `${clears ? ' , which it clears' : ', which it does not clear'}. It made ` +
+        `${clears ? ', which it clears' : ', which it does not clear'}. It made ` +
         `${plannerTransfers ?? 0} transfers and paid ${hits} points in hits` +
         `${hits > 0 ? `, so the −4 path is exercised by a walked season rather than by a unit test alone` : ` — the −4 path is still exercised by nothing but a unit test`}.`,
     );
