@@ -61,18 +61,20 @@ The gradient-boosted candidate — one XGBoost per position over 1/3/5/10/38-mat
 
 Population for the ordering comparison: **29482** rows both could score. Spearman v4 **0.713** vs incumbent **0.664**.
 
-| category | n | v4 RMSE | incumbent RMSE | form RMSE |
-|---|---:|---:|---:|---:|
-| Zeros | 17753 | 0.729 | 0.989 | 0.879 |
-| Blanks | 7062 | 1.374 | 1.445 | 2.144 |
-| Tickers | 1645 | 1.506 | 1.413 | 2.068 |
-| Haulers | 2445 | 5.765 | 5.766 | 5.652 |
+**Two populations, named so the columns are not cross-read** (B-012 invariant 3): the v4-vs-incumbent columns and their paired noise are on the rows BOTH could score; the `form` column is on the smaller three-way intersection and is context, not a leg of the bar. "paired Δse" is the per-round-paired difference in squared error (v4 − incumbent): negative favours v4, and a difference that does not clear two standard errors is not a result — the same rule every season comparison in this report obeys (B-030).
+
+| category | n | v4 RMSE | incumbent RMSE | paired Δse ± s.e. | clears | form RMSE (3-way, n) |
+|---|---:|---:|---:|---:|---|---:|
+| Zeros | 18073 | 0.742 | 0.996 | -0.434 ± 0.023 | **yes** | 0.879 (17753) |
+| Blanks | 7213 | 1.367 | 1.440 | -0.202 ± 0.085 | **yes** | 2.144 (7062) |
+| Tickers | 1690 | 1.516 | 1.421 | +0.267 ± 0.062 | **yes** | 2.068 (1645) |
+| Haulers | 2506 | 5.766 | 5.765 | -0.012 ± 0.335 | no | 5.652 (2445) |
 
 **Ordering — beat the incumbent on points captured at every k:** @11 37.5% vs 32.7%, @15 39.2% vs 36.1%, @30 41.6% vs 38.0% — **met**.
 
-**High-return accuracy — improve Tickers and Haulers:** Tickers 1.516 vs 1.421 (n=1690), Haulers 5.766 vs 5.765 (n=2506) — **not met**.
+**High-return accuracy — improve Tickers and Haulers:** Tickers 1.516 vs 1.421 (n=1690, clears its paired noise), Haulers 5.766 vs 5.765 (n=2506, inside its paired noise) — **not met**.
 
-**Low-return accuracy — no material (>5%) degradation:** Zeros 0.742 vs 0.996 (n=18073), Blanks 1.367 vs 1.440 (n=7213) — **held**.
+**Low-return accuracy — no material (>5%) degradation:** Zeros 0.742 vs 0.996 (n=18073, clears its paired noise), Blanks 1.367 vs 1.440 (n=7213, clears its paired noise) — **held**.
 
 **The bar is not met on this run.** `modelVersion` does not move. The named next step is feature enrichment — the Understat/vaastav groups OpenFPL uses that the archive lacks (I/C/T split, xGChain, xGBuildup, key passes, team Deep and PPDA) — and the negative result stands in this report rather than being rerun until it passes.
 
@@ -170,9 +172,11 @@ Every row is **paired by round** — both arms faced the same fixtures, blanks a
 |---|---|---:|---:|---:|---|---:|
 | no-transfer | model − form | 37 | +14.84 | 2.74 | **yes** | 203 pts |
 | no-transfer | model − priorSeason | 37 | +16.24 | 2.67 | **yes** | 198 pts |
+| no-transfer | model − v4 | 37 | +6.49 | 2.91 | **yes** | 215 pts |
 | no-transfer | model − template (crowd proxy) | 37 | -2.22 | 2.77 | no | 205 pts |
 | greedy-1ft | model − form | 37 | +3.24 | 2.60 | no | 192 pts |
 | greedy-1ft | model − priorSeason | 37 | +22.81 | 2.86 | **yes** | 212 pts |
+| greedy-1ft | model − v4 | 37 | +2.76 | 2.72 | no | 201 pts |
 | greedy-1ft | model − template (crowd proxy) | 37 | -1.27 | 2.11 | no | 156 pts |
 | planner | planner − greedy-1ft, same opening fifteen | 37 | -1.81 | 2.26 | no | 167 pts |
 | planner (pre-B-024 objective) | pre-B-024 planner − greedy-1ft, same opening fifteen | 37 | -0.95 | 1.51 | no | 112 pts |
