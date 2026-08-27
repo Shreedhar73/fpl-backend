@@ -67,6 +67,8 @@ const row = (over: Partial<HistoryRow>): HistoryRow => ({
   defensiveContribution: null,
   expectedGoals: 0.3,
   expectedAssists: 0.2,
+  expectedGoalsConceded: 0,
+  ictIndex: 0,
   value: 70,
   ...over,
 });

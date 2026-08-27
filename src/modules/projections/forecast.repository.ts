@@ -60,6 +60,8 @@ export class ForecastRepository {
         defensiveContribution: true,
         expectedGoals: true,
         expectedAssists: true,
+        expectedGoalsConceded: true,
+        ictIndex: true,
         value: true,
       },
     });
@@ -68,6 +70,8 @@ export class ForecastRepository {
       position: r.position,
       expectedGoals: Number(r.expectedGoals),
       expectedAssists: Number(r.expectedAssists),
+      expectedGoalsConceded: Number(r.expectedGoalsConceded),
+      ictIndex: Number(r.ictIndex),
     }));
   }
 
@@ -148,6 +152,8 @@ export class ForecastRepository {
         defensiveContribution: s.defensiveContribution,
         expectedGoals: Number(s.expectedGoals),
         expectedAssists: Number(s.expectedAssists),
+        expectedGoalsConceded: Number(s.expectedGoalsConceded),
+        ictIndex: Number(s.ictIndex),
         value: s.value,
       });
     }
@@ -218,6 +224,8 @@ export class ForecastRepository {
             bonus: 0,
             bps: 0,
             defensiveContribution: null,
+            expectedGoalsConceded: 0,
+            ictIndex: 0,
             expectedGoals: 0,
             expectedAssists: 0,
             value: p.nowCost,
