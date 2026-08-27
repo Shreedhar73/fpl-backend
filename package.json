@@ -39,6 +39,7 @@
     "replay:xi": "nest build && node dist/scripts/xi-replay.js",
     "measure:collision": "nest build && node dist/scripts/collision-correlation.js",
     "optimize:bench-sweep": "nest build && node dist/scripts/bench-sweep.js",
+    "ab:objective": "nest build && node dist/scripts/objective-ab.js",
     "decision-quality": "nest build && node dist/scripts/decision-quality.js"
   },
   "dependencies": {

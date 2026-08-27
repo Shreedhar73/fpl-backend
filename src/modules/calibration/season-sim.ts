@@ -2,6 +2,7 @@ import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
 import {
   buildLp,
+  SquadObjective,
   Candidate,
   Concentration,
   defencePairs,
@@ -72,6 +73,16 @@ export interface SimRound {
   squadValue: number;
   substitutions: number;
   captainPoints: number;
+  /**
+   * The fifteen held while this round was played, by player code, sorted.
+   *
+   * Carried so two arms of the same season can be compared on **how much of their squad they share**
+   * (B-031). A paired season comparison at s.e. ≈ 2.6 a round cannot see anything under about 190
+   * points; two arms holding mostly the same players see far more, because the round-to-round
+   * variance that dominates a season total is common to both and cancels in the pairing. The overlap
+   * is what says whether the pairing was tight, so it is measured rather than assumed.
+   */
+  squad: number[];
 }
 
 export interface SeasonResult {
@@ -236,6 +247,14 @@ export async function openingSquad(
    * fifteen under a different objective would be measuring something the product does not serve.
    */
   concentrationLambda: number | null = null,
+  /**
+   * Which objective to solve the opening fifteen under (B-031).
+   *
+   * Defaults to what the product serves. The other value reproduces the objective B-023 replaced,
+   * and exists so the replacement can be measured against it — see `SquadObjective` in `ilp.ts`. It
+   * reaches this function only from a harness, never from a serving path.
+   */
+  objective: SquadObjective = 'xi-bench-captain',
 ): Promise<PredictionRow[]> {
   const candidates: Candidate[] = rows
     .filter((r) => r.teamCode !== null)
@@ -266,7 +285,9 @@ export async function openingSquad(
       : { pairs: defencePairs(candidates), lambda: concentrationLambda };
   const solved = readSolution(
     candidates,
-    highs.solve(buildLp(candidates, rules, concentration, benchWeight)),
+    highs.solve(
+      buildLp(candidates, rules, concentration, benchWeight, objective),
+    ),
     rules,
   );
   const chosen = new Set(solved.squad.map((c) => c.key));
@@ -394,6 +415,7 @@ export function simulateSeason(
       ),
       substitutions: scored.substitutions.length,
       captainPoints: captain?.actual ?? 0,
+      squad: state.owned.map((o) => o.playerCode).sort((x, y) => x - y),
     });
 
     for (const [code, row] of market) {
