@@ -255,8 +255,7 @@ export class CollisionTakenDto {
 
   @ApiProperty({
     description:
-      'Horizon points charged for HOLDING this pair — the effective rate, benchWeight x the policy ' +
-      'constant. Charged whether or not both sides start.',
+      'Horizon points charged for HOLDING this pair. Charged whether or not both sides start.',
   })
   lambda!: number;
 
@@ -272,16 +271,11 @@ export class CollisionTakenDto {
 export class FixtureCollisionsDto {
   @ApiProperty({
     description:
-      'Horizon points charged per conflicting pair the squad HOLDS — the effective rate the ' +
-      'objective uses, which is benchWeight x lambdaConstant and not the constant itself.',
+      'Horizon points charged per conflicting pair the squad HOLDS. The policy constant itself: it ' +
+      'was briefly scaled by the bench weight (B-025) and a second field carried the constant ' +
+      'beside it, which B-026 undid — the scaling was exact only for a pair nobody starts.',
   })
   lambda!: number;
-
-  @ApiProperty({
-    description:
-      'The policy constant behind the effective rate, so a payload can be read against policy.ts.',
-  })
-  lambdaConstant!: number;
 
   @ApiProperty({
     description: 'Conflicting pairs across the whole candidate pool.',

@@ -15,12 +15,7 @@ import {
   SolvedSquad,
 } from './ilp';
 import { POSITIONS, Rules } from './rules';
-import {
-  MIN_APPEARANCES,
-  COLLISION_LAMBDA,
-  BENCH_WEIGHT,
-  chargedCollisionLambda,
-} from './policy';
+import { MIN_APPEARANCES, COLLISION_LAMBDA, BENCH_WEIGHT } from './policy';
 
 export const OPTIMIZER_VERSION = 'v1-ilp';
 const HORIZON = 5;
@@ -92,10 +87,8 @@ export interface RecommendationReasoning {
     statement: string;
   };
   fixtureCollisions: {
-    /** what a held pair actually costs the objective: `benchWeight × lambdaConstant` */
+    /** what a held pair costs the objective — the policy constant, unscaled (B-026) */
     lambda: number;
-    /** the policy constant behind it, so the payload can be read against `policy.ts` */
-    lambdaConstant: number;
     pairsConsidered: number;
     /** horizon EP charged to the squad for the pairs it HOLDS */
     penaltyEp: number;
@@ -214,9 +207,7 @@ export function arrangeSquad(
         starters.has(pair.attacker.key) && starters.has(pair.defender.key),
     }),
   );
-  const heldPenalty =
-    chargedCollisionLambda(benchWeight, collisions.lambda) *
-    heldCollisions.length;
+  const heldPenalty = collisions.lambda * heldCollisions.length;
 
   const bench = inSquad.filter((c) => !starters.has(c.key));
   const benchGk = bench.filter((c) => c.position === 'GKP');
@@ -429,18 +420,17 @@ export class OptimizerService {
         statement: FLOOR_STATEMENT,
       },
       fixtureCollisions: {
-        // The EFFECTIVE charge, not the constant. They differ since B-025 (`chargedCollisionLambda`),
-        // and a panel that printed 1.0 beside a penalty computed at 0.7 would be showing arithmetic
-        // that does not add up on screen.
-        lambda: round2(chargedCollisionLambda(BENCH_WEIGHT, COLLISION_LAMBDA)),
-        lambdaConstant: COLLISION_LAMBDA,
+        // The constant itself. Between B-025 and B-026 this was `benchWeight × λ` and the payload
+        // carried both numbers, because a panel printing 1.0 beside a penalty computed at 0.7 shows
+        // arithmetic that does not add up on screen. They are the same number again.
+        lambda: COLLISION_LAMBDA,
         pairsConsidered: collisions.pairs.length,
         penaltyEp: round2(heldPenalty),
         taken: heldCollisions.map(({ pair, bothStarted }) => ({
           fixture: pair.fixture,
           attacker: pair.attacker.webName,
           defender: pair.defender.webName,
-          lambda: round2(chargedCollisionLambda(BENCH_WEIGHT, COLLISION_LAMBDA)),
+          lambda: COLLISION_LAMBDA,
           bothStarted,
         })),
         statement: COLLISION_STATEMENT,
@@ -466,13 +456,10 @@ export class OptimizerService {
               projectionModel: modelVersion,
               minAppearances: MIN_APPEARANCES,
               collisionLambda: COLLISION_LAMBDA,
-              // The constant alone cannot reconstruct a run since B-025 — what the objective charged
-              // is `benchWeight × lambda`, and both halves have moved once already.
+              // Recorded even though the collision charge no longer reads it: it scales the whole
+              // objective, and a run whose stored inputs cannot reconstruct the program is a run
+              // nobody can argue with later.
               benchWeight: BENCH_WEIGHT,
-              collisionLambdaCharged: chargedCollisionLambda(
-                BENCH_WEIGHT,
-                COLLISION_LAMBDA,
-              ),
             },
             result: { squad, totalCost, formation },
             // The SAME object the caller gets. Built once: the persisted JSON and the API payload
