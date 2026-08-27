@@ -15,7 +15,7 @@ Trained on 2023-24 + 2024-25 (2024-25 rounds 20+ reserved for choosing shape par
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 28905 | 1.107 | 2.008 | 0.059 | 1.212 | 1.153 |
+| this model | 28905 | 1.130 | 2.009 | 0.112 | 1.265 | 1.153 |
 | baseline: form | 28905 | 1.042 | 2.131 | 0.012 | 1.166 | 1.153 |
 
 **Does not beat `form` on MAE** (it does on RMSE).
@@ -24,7 +24,7 @@ Trained on 2023-24 + 2024-25 (2024-25 rounds 20+ reserved for choosing shape par
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 11965 | 1.760 | 2.642 | 0.009 | 1.975 | 1.966 |
+| this model | 11965 | 1.791 | 2.643 | 0.089 | 2.055 | 1.966 |
 | baseline: last season points/90 | 11965 | 3.152 | 3.665 | 1.939 | 3.905 | 1.966 |
 
 **Beats last season's points per 90 on MAE.**
@@ -35,7 +35,7 @@ The same two predictors on the rows that also carry a prior-season baseline — 
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 11648 | 1.753 | 2.638 | 0.012 | 1.973 | 1.961 |
+| this model | 11648 | 1.783 | 2.638 | 0.091 | 2.052 | 1.961 |
 | baseline: form | 11648 | 1.742 | 2.813 | 0.019 | 1.980 | 1.961 |
 
 **Does not beat `form` here either**, which removes the "MAE is dominated by fringe players" explanation for the headline. That explanation is D-020's, and this is the test of it.
@@ -46,7 +46,7 @@ Not a comparison — three different populations. Kept because it is what was re
 
 | Model | n | MAE | RMSE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|---:|
-| this model | 29482 | 1.113 | 2.013 | 0.058 | 1.215 | 1.158 |
+| this model | 29482 | 1.136 | 2.014 | 0.111 | 1.269 | 1.158 |
 | baseline: form (trailing 4 rounds) | 28905 | 1.042 | 2.131 | 0.012 | 1.166 | 1.153 |
 | baseline: last season points/90 | 11965 | 3.152 | 3.665 | 1.939 | 3.905 | 1.966 |
 
@@ -78,10 +78,10 @@ The rows the `form` comparison had to leave out. A count invites the reader to a
 
 | Position | n | MAE | RMSE | bias |
 |---|---:|---:|---:|---:|
-| DEF | 9463 | 1.274 | 2.181 | 0.058 |
-| FWD | 3183 | 1.133 | 2.121 | -0.050 |
-| GKP | 3330 | 0.694 | 1.459 | 0.054 |
-| MID | 12929 | 1.085 | 1.970 | 0.088 |
+| DEF | 9463 | 1.298 | 2.181 | 0.111 |
+| FWD | 3183 | 1.157 | 2.119 | 0.001 |
+| GKP | 3330 | 0.709 | 1.460 | 0.083 |
+| MID | 12929 | 1.109 | 1.972 | 0.147 |
 
 ## By price band
 
@@ -89,11 +89,11 @@ A single mean hides a directional error, which is the kind that matters most to 
 
 | Band | n | MAE | bias | mean predicted | mean actual |
 |---|---:|---:|---:|---:|---:|
-| ≤ £5.0m | 20111 | 0.818 | 0.100 | 0.859 | 0.758 |
-| £5.1–7.0m | 7550 | 1.645 | 0.008 | 1.886 | 1.877 |
-| £7.1–9.0m | 1025 | 2.375 | -0.355 | 2.673 | 3.028 |
-| £9.1–11.0m | 145 | 2.803 | -0.261 | 2.946 | 3.207 |
-| > £11.0m | 74 | 3.819 | 0.328 | 4.936 | 4.608 |
+| ≤ £5.0m | 20111 | 0.837 | 0.139 | 0.898 | 0.758 |
+| £5.1–7.0m | 7550 | 1.679 | 0.092 | 1.969 | 1.877 |
+| £7.1–9.0m | 1025 | 2.399 | -0.269 | 2.759 | 3.028 |
+| £9.1–11.0m | 145 | 2.856 | -0.088 | 3.119 | 3.207 |
+| > £11.0m | 74 | 3.837 | 0.441 | 5.049 | 4.608 |
 
 ## Calibration
 
@@ -101,15 +101,15 @@ Error says how far off a prediction is; calibration says whether the model means
 
 | Predicted band | n | mean predicted | mean actual |
 |---|---:|---:|---:|
-| 0–1 | 15095 | 0.230 | 0.139 |
-| 1–2 | 6246 | 1.531 | 1.421 |
-| 2–3 | 4677 | 2.431 | 2.590 |
-| 3–4 | 2244 | 3.427 | 3.459 |
-| 4–5 | 531 | 4.328 | 3.778 |
-| 5–6 | 90 | 5.380 | 4.256 |
-| 6–8 | 18 | 6.469 | 4.778 |
-| 8–10 | 1 | 8.497 | 0.000 |
-| 10–∞ | 3 | 11.655 | 2.667 |
+| 0–1 | 14863 | 0.232 | 0.128 |
+| 1–2 | 5690 | 1.551 | 1.325 |
+| 2–3 | 5196 | 2.446 | 2.451 |
+| 3–4 | 2461 | 3.422 | 3.460 |
+| 4–5 | 574 | 4.321 | 3.732 |
+| 5–6 | 97 | 5.366 | 4.103 |
+| 6–8 | 20 | 6.451 | 4.950 |
+| 8–10 | 1 | 8.517 | 0.000 |
+| 10–∞ | 3 | 11.670 | 2.667 |
 
 ## Rows not scored
 

@@ -47,6 +47,10 @@ export interface HistoryRow {
   defensiveContribution: number | null;
   expectedGoals: number;
   expectedAssists: number;
+  /** the player's xG conceded while on the pitch — the defensive twin of `expectedGoals` */
+  expectedGoalsConceded: number;
+  /** FPL's ICT index for the match — carried for the v4 feature export (B-034), unread by v3 */
+  ictIndex: number;
   value: number;
 }
 

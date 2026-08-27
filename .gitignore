@@ -20,3 +20,4 @@ src/generated/
 # ~5 MB per season, fetched on demand; the source repo is ~182 MB under an unclear licence and
 # is deliberately not vendored here.
 .archive-cache/
+reports/datasets/*.csv

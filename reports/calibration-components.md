@@ -6,7 +6,7 @@ Every table carries `n` and the base rate. A Brier score alone is a trap for a r
 
 ## Verdict
 
-No single term dominates. Worst is P(60+ minutes) at reliability 0.0015 against a mean of 0.0007 for the rest (2.3×) — the miscalibration is spread across components, which is a different and equally publishable answer.
+No single term dominates. Worst is P(60+ minutes) at reliability 0.0015 against a mean of 0.0006 for the rest (2.5×) — the miscalibration is spread across components, which is a different and equally publishable answer.
 
 ## Binaries
 
@@ -17,7 +17,7 @@ No single term dominates. Worst is P(60+ minutes) at reliability 0.0015 against 
 | P(60+ minutes) | 29,482 | 0.264 | 0.267 | 0.1074 | **0.0015** | 0.0876 | 0.447 |
 | P(clean sheet credited) | 26,242 | 0.076 | 0.074 | 0.0635 | **0.0003** | 0.0058 | 0.092 |
 | P(defensive contribution ≥ threshold) | 26,086 | 0.054 | 0.063 | 0.0426 | **0.0001** | 0.0083 | 0.169 |
-| P(bonus ≥ 1) | 29,482 | 0.041 | 0.021 | 0.0374 | **0.0005** | 0.0011 | 0.038 |
+| P(bonus ≥ 1) | 29,482 | 0.041 | 0.048 | 0.0365 | **0.0001** | 0.0019 | 0.061 |
 
 ### P(start)
 
@@ -135,17 +135,17 @@ DERIVED from the expected bonus as `E[bonus] / 2`, not a number the model serves
 
 | predicted band | n | mean predicted | observed rate |
 |---|---:|---:|---:|
-| 0.0–0.1 | 27,100 | 0.009 | 0.031 |
-| 0.1–0.2 | 2,055 | 0.140 | 0.145 |
-| 0.2–0.3 | 283 | 0.228 | 0.170 |
-| 0.3–0.4 | 44 | 0.340 | 0.295 |
+| 0.0–0.1 | 24,153 | 0.026 | 0.021 |
+| 0.1–0.2 | 4,847 | 0.137 | 0.125 |
+| 0.2–0.3 | 427 | 0.229 | 0.180 |
+| 0.3–0.4 | 55 | 0.346 | 0.273 |
 
 | position | n | base rate | mean predicted | Brier | reliability |
 |---|---:|---:|---:|---:|---:|
-| GKP | 3,396 | 0.024 | 0.022 | 0.0231 | 0.0006 |
-| DEF | 9,653 | 0.037 | 0.018 | 0.0348 | 0.0004 |
-| MID | 13,193 | 0.041 | 0.022 | 0.0378 | 0.0005 |
-| FWD | 3,240 | 0.066 | 0.026 | 0.0586 | 0.0018 |
+| GKP | 3,396 | 0.024 | 0.037 | 0.0229 | 0.0005 |
+| DEF | 9,653 | 0.037 | 0.045 | 0.0342 | 0.0001 |
+| MID | 13,193 | 0.041 | 0.052 | 0.0370 | 0.0002 |
+| FWD | 3,240 | 0.066 | 0.052 | 0.0561 | 0.0003 |
 
 ## Count terms
 
@@ -155,7 +155,7 @@ DERIVED from the expected bonus as `E[bonus] / 2`, not a number the model serves
 | E[assists] | 29,482 | 0.029 | 0.032 | -0.003 |
 | E[saves] | 3,396 | 0.627 | 0.620 | 0.007 |
 | E[goals conceded while on the pitch] | 13,049 | 0.393 | 0.416 | -0.023 |
-| E[bonus] | 29,482 | 0.042 | 0.081 | -0.039 |
+| E[bonus] | 29,482 | 0.096 | 0.081 | 0.015 |
 | E[BPS] | 29,482 | 3.293 | 4.536 | -1.244 |
 | E[defensive actions] | 26,086 | 2.454 | 2.243 | 0.211 |
 | E[minutes] | 29,482 | 25.647 | 25.249 | 0.398 |
@@ -257,18 +257,23 @@ Fitted on 2023-24 and 2024-25 BPS distributions — two rule versions ago.
 
 | decile | n | mean predicted | mean actual |
 |---:|---:|---:|---:|
-| 1 | 20,398 | 0.000 | 0.023 |
-| 2 | 239 | 0.002 | 0.126 |
-| 3 | 2,949 | 0.031 | 0.132 |
-| 4 | 2,948 | 0.109 | 0.209 |
-| 5 | 2,948 | 0.284 | 0.305 |
+| 1 | 4,655 | 0.007 | 0.003 |
+| 2 | 1,344 | 0.009 | 0.004 |
+| 3 | 2,876 | 0.009 | 0.001 |
+| 4 | 3,623 | 0.011 | 0.004 |
+| 5 | 2,243 | 0.017 | 0.024 |
+| 6 | 2,948 | 0.067 | 0.062 |
+| 7 | 2,948 | 0.113 | 0.086 |
+| 8 | 2,949 | 0.160 | 0.122 |
+| 9 | 2,948 | 0.223 | 0.199 |
+| 10 | 2,948 | 0.344 | 0.313 |
 
 | position | n | mean predicted | mean actual |
 |---|---:|---:|---:|
-| GKP | 3,396 | 0.044 | 0.047 |
-| DEF | 9,653 | 0.036 | 0.069 |
-| MID | 13,193 | 0.045 | 0.083 |
-| FWD | 3,240 | 0.051 | 0.146 |
+| GKP | 3,396 | 0.074 | 0.047 |
+| DEF | 9,653 | 0.090 | 0.069 |
+| MID | 13,193 | 0.104 | 0.083 |
+| FWD | 3,240 | 0.103 | 0.146 |
 
 ### E[BPS]
 

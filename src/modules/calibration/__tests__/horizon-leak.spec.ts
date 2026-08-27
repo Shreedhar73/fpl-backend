@@ -24,6 +24,8 @@ const row = (over: Partial<HistoryRow> & { round: number }): HistoryRow => ({
   defensiveContribution: null,
   expectedGoals: 0.1,
   expectedAssists: 0.1,
+  expectedGoalsConceded: 0,
+  ictIndex: 0,
   value: 50,
   ...over,
 });
