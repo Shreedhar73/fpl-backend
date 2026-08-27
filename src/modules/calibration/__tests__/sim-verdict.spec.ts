@@ -26,6 +26,10 @@ const measured: SimVerdictInput = {
   holdVsForm: pair(14.84, 2.74),
   greedyVsForm: pair(3.24, 2.6),
   vsTemplate: pair(-1.27, 2.6),
+  plannerPoints: 1846,
+  plannerHitCost: 40,
+  plannerTransfers: 47,
+  plannerVsGreedy: pair(-0.95, 0.9),
   capturedWins: [11, 15, 30],
   ks: [11, 15, 30],
   objectiveAbEntry: 'B-031',
@@ -104,6 +108,33 @@ describe('simulatedSeasonVerdict', () => {
     expect(text(measured)).toContain('192 points');
   });
 
+  describe('the planner arm', () => {
+    it('says what it paid in hits beside what it scored', () => {
+      const out = text(measured);
+      expect(out).toContain('has now walked a season');
+      expect(out).toContain('35 behind');
+      expect(out).toContain('paid 40 points in hits');
+    });
+
+    it('changes when the planner is ahead instead of behind', () => {
+      const ahead = text({ ...measured, plannerPoints: 1950 });
+      expect(ahead).toContain('69 ahead');
+      expect(ahead).not.toContain('Read that against what it paid');
+      expect(ahead).not.toEqual(text(measured));
+    });
+
+    it('says the −4 path is still untested when no hit was taken', () => {
+      const out = text({ ...measured, plannerHitCost: 0 });
+      expect(out).toContain('exercised by nothing but a unit test');
+      expect(out).not.toEqual(text(measured));
+    });
+
+    it('is absent entirely when the arm did not run', () => {
+      const out = text({ ...measured, plannerPoints: null });
+      expect(out).not.toContain('has now walked a season');
+    });
+  });
+
   it('drops the paragraphs whose arms did not run rather than printing a null', () => {
     const out = text({
       ...measured,
@@ -112,6 +143,8 @@ describe('simulatedSeasonVerdict', () => {
       holdVsForm: null,
       templatePoints: null,
       vsTemplate: null,
+      plannerPoints: null,
+      plannerVsGreedy: null,
     });
     expect(out).not.toContain('Held all season');
     expect(out).not.toContain('crowd');

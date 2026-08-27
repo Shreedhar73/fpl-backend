@@ -106,7 +106,9 @@ So each row below is **paired by round** — both predictors faced the same fixt
 
 Each predictor picks its **own** opening fifteen and walks the season under the real rules — one free transfer a round banked to 5, the 50% sell-on fee, auto-substitutions on 0 minutes only, the vice taking the armband when the captain blanks and nobody doubling when both do. **This is the first metric where *which* fifteen you own is part of what is measured**, which is exactly where the ordering advantage should show up if it is real.
 
-**Both policies are deliberately weak, and the totals below are floors rather than estimates.** `no-transfer` holds the opening squad for the whole season. `greedy-1ft` takes at most one free transfer a round, on this round's projection, and **never takes a hit** — so the −4 path is exercised by a unit test and never by a walked season. The real planner shipped with B-008 and has still never walked a season: wiring it in as a third policy is B-032, and until that lands every total below measures a policy the product does not use.
+**Two of the policies below are deliberately weak, and their totals are floors rather than estimates.** `no-transfer` holds the opening squad for the whole season. `greedy-1ft` takes at most one free transfer a round, on this round's projection, and **never takes a hit**.
+
+**`planner` is not a floor — it is the transfer planner the product actually ships (B-008), walking a season for the first time (B-032).** It plans over a 5-gameweek discounted horizon with the −4 inside the objective, and its horizon is built at each deadline with the accumulators frozen there, never read off a later round's own context. It runs for the model only: `horizonEp` is the model's horizon, and inventing one for a baseline would be the planner competing with itself under another name.
 
 **Chips are unused.** A wildcard or free hit is a transfer policy (B-008); bench boost and triple captain are single-week variance bets needing B-017's distributions. An unused chip is a handicap applied equally to every predictor. A guessed one is a confound.
 
@@ -122,6 +124,7 @@ Each predictor picks its **own** opening fifteen and walks the season under the 
 | greedy-1ft | form | 37 | **1761** | 37 | 0 | £97.5m |
 | greedy-1ft | priorSeason | 37 | **1037** | 4 | 0 | £97.8m |
 | greedy-1ft | template (crowd proxy) | 37 | **1928** | 37 | 0 | £97.8m |
+| planner | model | 37 | **1846** | 47 | 40 | £98.8m |
 
 ### Is the difference bigger than the noise?
 
@@ -139,6 +142,7 @@ Every row is **paired by round** — both arms faced the same fixtures, blanks a
 | greedy-1ft | model − form | 37 | +3.24 | 2.60 | no | 192 pts |
 | greedy-1ft | model − priorSeason | 37 | +22.81 | 2.86 | **yes** | 212 pts |
 | greedy-1ft | model − template (crowd proxy) | 37 | -1.27 | 2.11 | no | 156 pts |
+| planner | planner − greedy-1ft, same opening fifteen | 37 | -0.95 | 1.51 | no | 112 pts |
 
 ### What the simulated season says
 
@@ -149,6 +153,10 @@ Every row is **paired by round** — both arms faced the same fixtures, blanks a
 **The crowd's opening fifteen scores 1928 against the model's 1881 — 47 points better. That difference does NOT clear this comparison's own noise floor of 156 points.** This report used to call the same number its headline finding and print it with no standard error at all. The number is unchanged; what can be concluded from it is not.
 
 So the next question is not "why is our squad worse" — it is **whether it is worse at all**, and this instrument cannot say. More archived seasons buy √n: three would take a 156-point floor to roughly 90, still not enough. Power for a difference this size comes from **pairing arms that hold the same players**, which is what **B-031** does.
+
+**The transfer planner the product actually ships has now walked a season, for the first time.** It scores 1846 against `greedy-1ft`'s 1881 from **the same opening fifteen** — 35 behind, against a noise floor of 112 points, which it does not clear. It made 47 transfers and paid 40 points in hits, so the −4 path is exercised by a walked season rather than by a unit test alone.
+
+**Read that against what it paid.** The planner is 35 points behind a policy that takes one free transfer a week on this round's number and never takes a hit, having spent 40 points on hits to get there. Both arms started from the identical fifteen and saw the identical predictions, so nothing but the policy separates them. The planner optimises a five-round discounted horizon and the baseline optimises this week; on this season, looking further ahead and paying for the privilege did not pay.
 
 **The bar B-012 set was: beat `form` on ordering AND on simulated season points, or say plainly that we did not.** Ordering: yes, on points captured at every k. Season points, once both sides may transfer: no — the difference does not clear the noise floor.
 

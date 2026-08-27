@@ -1,7 +1,9 @@
 import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
+import { buildTransferLp, OwnedCandidate } from '../transfers/transfer-lp';
 import {
   buildLp,
+  LpSolution,
   SquadObjective,
   Candidate,
   Concentration,
@@ -440,5 +442,148 @@ export function simulateSeason(
     totalHitCost: rounds.reduce((s, r) => s + r.hitCost, 0),
     totalTransfers: rounds.reduce((s, r) => s + r.transfersMade, 0),
     finalTeamValue: last ? last.squadValue + last.bank : 0,
+  };
+}
+
+/**
+ * The transfer planner the product actually ships, wrapped as a simulation policy (B-032).
+ *
+ * B-008 shipped an ILP with the −4 inside the objective, sell values reconstructed, and a cap on how
+ * many moves it will consider at once. It is what a user sees on `/squad/{id}`. Until this policy
+ * existed it had **never walked a season**: the simulator's two arms were `no-transfer` and
+ * `greedy-1ft`, and plan 010 was explicit that both are floors and that B-008 "plugs into this same
+ * simulator rather than bringing its own". That wiring was simply never done, so every season total
+ * this repo has reported measures a policy the product does not use — and the −4 path, which
+ * `fpl-optimizer` calls the most error-amplifying thing the product does, was exercised by a unit
+ * test and by nothing else.
+ *
+ * ## The horizon is the whole difficulty, and it is a leak if it is taken carelessly
+ *
+ * A transfer is a bet about the future: the planner maximises `Σ EP(gw + i) × decay^i`, so at each
+ * deadline it needs several rounds of projections. The obvious implementation — look up the later
+ * rounds in `rowsByRound` — reads predictions built from rounds that had not been played when the
+ * decision was made. That is plan 010's invariant 2 exactly, and it produces no error and nothing
+ * wrong-looking in the output; it just makes the planner clairvoyant.
+ *
+ * So the horizon comes from `PredictionRow.horizonEp`, which `walkRounds` builds at the deadline with
+ * the accumulators and the form window frozen there — only the fixture comes from the future row,
+ * because fixtures are published in advance and results are not. **This policy therefore refuses to
+ * run on rows that carry no `horizonEp`**, rather than falling back to the single round: a planner
+ * quietly demoted to a one-week horizon would take almost no hits and look like a cautious planner
+ * instead of a broken one.
+ */
+/** One name for the arm, shared by the policy and by every report that pairs against it. */
+export const PLANNER_LABEL = 'planner';
+
+export function plannerPolicy(
+  solve: (lp: string) => LpSolution,
+  options: { hitCost: number; maxTransfers: number },
+): SimPolicy {
+  return {
+    label: PLANNER_LABEL,
+    decide(state, market, prices, predictor, rules) {
+      const byCode = new Map<number, PredictionRow>();
+      for (const [code, row] of market) byCode.set(code, row);
+
+      const ep = (row: PredictionRow): number => {
+        if (row.horizonEp === null) {
+          throw new Error(
+            `the planner policy was handed rows with no horizon: player ${row.playerCode} in ` +
+              `round ${row.round}. Run the backtest with a horizon rather than letting the planner ` +
+              `fall back to a single round`,
+          );
+        }
+        return row.horizonEp;
+      };
+
+      const candidate = (row: PredictionRow): Candidate | null =>
+        row.teamCode === null
+          ? null
+          : {
+              key: `p_${row.playerCode}`,
+              playerId: String(row.playerCode),
+              webName: row.webName,
+              position: row.position as PositionCode,
+              teamId: String(row.teamCode),
+              teamShortName: `T${row.teamCode}`,
+              cost: prices.get(row.playerCode) ?? row.value,
+              ep: ep(row),
+              pPlay: row.pPlay,
+              appearances: row.appearances,
+            };
+
+      // An owned player with no row this round had no fixture. He is still owned, still sellable and
+      // still worth whatever his horizon says — but there is no row to say it, so he is priced at 0
+      // and at his carried price. Dropping him from the LP instead would let the solver return a
+      // fourteen-man squad.
+      const owned: OwnedCandidate[] = state.owned.map((o) => {
+        const row = byCode.get(o.playerCode);
+        const price = prices.get(o.playerCode) ?? o.purchasePrice;
+        return {
+          key: `p_${o.playerCode}`,
+          playerId: String(o.playerCode),
+          webName: row?.webName ?? `#${o.playerCode}`,
+          position: o.position,
+          teamId: row?.teamCode != null ? String(row.teamCode) : `own_${o.playerCode}`,
+          teamShortName: `T${row?.teamCode ?? 0}`,
+          cost: price,
+          ep: row ? ep(row) : 0,
+          pPlay: row?.pPlay ?? 0,
+          appearances: row?.appearances ?? 0,
+          sellValue: sellValue(o.purchasePrice, price),
+        };
+      });
+
+      const ownedCodes = new Set(state.owned.map((o) => o.playerCode));
+      const buyable: Candidate[] = [];
+      for (const [code, row] of market) {
+        if (ownedCodes.has(code)) continue;
+        const c = candidate(row);
+        if (c) buyable.push(c);
+      }
+
+      const solution = solve(
+        buildTransferLp({
+          owned,
+          market: buyable,
+          rules,
+          bank: state.bank,
+          freeTransfers: state.freeTransfers,
+          hitCost: options.hitCost,
+          maxTransfers: options.maxTransfers,
+        }),
+      );
+      if (solution.Status !== 'Optimal') {
+        throw new Error(
+          `the transfer solve returned ${solution.Status} over ${owned.length + buyable.length} candidates`,
+        );
+      }
+      const on = (key: string) => (solution.Columns[key]?.Primal ?? 0) > 0.5;
+
+      // Pair each sale with a purchase in the SAME position. The LP's position quotas guarantee the
+      // counts match; the simulator asserts the pairing, so getting it wrong fails loudly rather than
+      // drifting the squad's shape over a season.
+      const soldBy = new Map<PositionCode, number[]>();
+      for (const o of owned) {
+        if (on(o.key)) continue;
+        const at = soldBy.get(o.position) ?? [];
+        at.push(Number(o.playerId));
+        soldBy.set(o.position, at);
+      }
+      const moves: { out: number; in: number }[] = [];
+      for (const c of buyable) {
+        if (!on(c.key)) continue;
+        const at = soldBy.get(c.position);
+        const out = at?.shift();
+        if (out === undefined) {
+          throw new Error(
+            `the transfer solve bought a ${c.position} without selling one — the LP's position ` +
+              `quotas should make this impossible`,
+          );
+        }
+        moves.push({ out, in: Number(c.playerId) });
+      }
+      return moves;
+    },
   };
 }

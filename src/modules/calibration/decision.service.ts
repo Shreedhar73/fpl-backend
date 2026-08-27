@@ -29,9 +29,14 @@ import {
   RoundDecision,
 } from './xi-decision';
 import { detectableAt, simulatedSeasonVerdict } from './sim-verdict';
+import highsLoader from 'highs';
+import { HORIZON } from '../optimizer/policy';
+import { MAX_TRANSFERS } from '../transfers/transfer-lp';
 import {
   GREEDY_ONE_FT,
   NO_TRANSFER,
+  plannerPolicy,
+  PLANNER_LABEL,
   openingSquad,
   SeasonResult,
   simulateSeason,
@@ -103,6 +108,10 @@ export class DecisionService {
 
     const result = runBacktest(rows, params, scoringFor, {
       evaluate: (row) => row.season === TEST_SEASON,
+      // The planner arm below bets on several rounds at once, so every row carries the horizon the
+      // product plans over. It is built at the deadline by `walkRounds`, not looked up from a later
+      // round's context — see `PredictionRow.horizonEp`.
+      horizon: HORIZON,
     });
 
     // Ordering is a comparison, so it runs on the common population like every other comparison
@@ -186,6 +195,30 @@ export class DecisionService {
         ),
         squadLabel: 'template (crowd proxy)',
       });
+    }
+
+    // The planner the product actually ships (B-032). Model only: it plans on `horizonEp`, which is
+    // the model's horizon — `form` and `priorSeason` have no such thing, and inventing one for them
+    // would be comparing the planner against itself wearing a baseline's name.
+    //
+    // Its opening fifteen is the model's own, identical to the `greedy-1ft` model row, so the pairing
+    // between them isolates the POLICY. That is the comparison B-032 exists to make.
+    {
+      const highs = await highsLoader();
+      const planner = plannerPolicy((lp) => highs.solve(lp), {
+        hitCost: SIM_OPTIONS.hitCost,
+        maxTransfers: MAX_TRANSFERS,
+      });
+      const opening = await openingSquad(
+        [...squadPool.values()],
+        'model',
+        rules,
+        null,
+        benchWeight,
+      );
+      seasons.push(
+        simulateSeason(byRound, opening, 'model', rules, planner, SIM_OPTIONS),
+      );
     }
 
     const path =
@@ -554,15 +587,31 @@ export class DecisionService {
         `if it is real.`,
     );
     w();
-    w(
-      `**Both policies are deliberately weak, and the totals below are floors rather than ` +
-        `estimates.** \`no-transfer\` holds the opening squad for the whole season. \`greedy-1ft\` ` +
-        `takes at most one free transfer a round, on this round's projection, and **never takes a ` +
-        `hit** — so the −4 path is exercised by a unit test and never by a walked season. The real ` +
-        `planner shipped with B-008 and has still never walked a season: wiring it in as a third ` +
-        `policy is B-032, and until that lands every total below measures a policy the product does ` +
-        `not use.`,
-    );
+    {
+      const plannerRow = seasons.find(
+        (s2) => s2.policy === PLANNER_LABEL && !s2.squadLabel,
+      );
+      w(
+        `**Two of the policies below are deliberately weak, and their totals are floors rather ` +
+          `than estimates.** \`no-transfer\` holds the opening squad for the whole season. ` +
+          `\`greedy-1ft\` takes at most one free transfer a round, on this round's projection, and ` +
+          `**never takes a hit**.`,
+      );
+      w();
+      w(
+        plannerRow
+          ? `**\`planner\` is not a floor — it is the transfer planner the product actually ships ` +
+              `(B-008), walking a season for the first time (B-032).** It plans over a ` +
+              `${HORIZON}-gameweek discounted horizon with the −4 inside the objective, and its ` +
+              `horizon is built at each deadline with the accumulators frozen there, never read off ` +
+              `a later round's own context. It runs for the model only: \`horizonEp\` is the ` +
+              `model's horizon, and inventing one for a baseline would be the planner competing ` +
+              `with itself under another name.`
+          : `**The transfer planner the product ships (B-008) is not in this table.** Until it is ` +
+              `wired in as a policy (B-032), every total below measures a policy the product does ` +
+              `not use, and the −4 path is exercised by a unit test and by nothing else.`,
+      );
+    }
     w();
     w(
       `**Chips are unused.** A wildcard or free hit is a transfer policy (B-008); bench boost and ` +
@@ -662,6 +711,36 @@ export class DecisionService {
         );
       }
     }
+
+    // The planner against the policy it has to beat. Both arms are the model's own opening fifteen,
+    // so this pairing isolates the POLICY — which is the tightest comparison in this report and the
+    // only one that says anything about the transfer planner the product ships.
+    {
+      const planner = seasons.find(
+        (s2) => s2.policy === PLANNER_LABEL && !s2.squadLabel,
+      );
+      const greedy = seasons.find(
+        (s2) =>
+          s2.policy === GREEDY_ONE_FT.label &&
+          s2.predictor === 'model' &&
+          !s2.squadLabel,
+      );
+      if (planner && greedy) {
+        const d = pairedDifference(
+          asDecisions(planner.rounds),
+          asDecisions(greedy.rounds),
+        );
+        if (d) {
+          simPaired.set(`${PLANNER_LABEL}|greedy-1ft`, d);
+          w(
+            `| ${PLANNER_LABEL} | planner − greedy-1ft, same opening fifteen | ${d.rounds} | ` +
+              `${d.meanDifference >= 0 ? '+' : ''}${d.meanDifference.toFixed(2)} | ` +
+              `${d.standardError.toFixed(2)} | ${d.clearsNoise ? '**yes**' : 'no'} | ` +
+              `${detectableAt(d).toFixed(0)} pts |`,
+          );
+        }
+      }
+    }
     w();
     w(`### What the simulated season says`);
     w();
@@ -674,12 +753,19 @@ export class DecisionService {
             Boolean(x.squadLabel) === template,
         );
       const greedyTemplate = get('greedy-1ft', 'model', true);
+      const plannerArm = seasons.find(
+        (x) => x.policy === PLANNER_LABEL && !x.squadLabel,
+      );
       const paragraphs = simulatedSeasonVerdict({
         holdModelPoints: get('no-transfer', 'model')?.totalPoints ?? null,
         holdFormPoints: get('no-transfer', 'form')?.totalPoints ?? null,
         greedyModelPoints: get('greedy-1ft', 'model')?.totalPoints ?? null,
         greedyFormPoints: get('greedy-1ft', 'form')?.totalPoints ?? null,
         templatePoints: greedyTemplate?.totalPoints ?? null,
+        plannerPoints: plannerArm?.totalPoints ?? null,
+        plannerHitCost: plannerArm?.totalHitCost ?? null,
+        plannerTransfers: plannerArm?.totalTransfers ?? null,
+        plannerVsGreedy: simPaired.get(`${PLANNER_LABEL}|greedy-1ft`) ?? null,
         holdVsForm: simPaired.get('no-transfer|form') ?? null,
         greedyVsForm: simPaired.get('greedy-1ft|form') ?? null,
         vsTemplate: greedyTemplate?.squadLabel

@@ -50,6 +50,23 @@ import { POSITIONS, Rules } from '../optimizer/rules';
  * a recommendation are judged by one objective.
  */
 
+/** Points charged per transfer beyond the free ones. A rule, not a policy knob. */
+export const HIT_COST = 4;
+
+/**
+ * The most moves a single plan may propose.
+ *
+ * Three, not fifteen. Beyond about three a "transfer plan" is a wildcard by another name, and this
+ * planner does not hold one — recommending eight moves would be recommending a chip without saying so.
+ *
+ * **Both constants live here rather than in `transfers.service.ts`, where they were.** A harness that
+ * walks this planner over a season has to use the numbers the planner is served with, and importing
+ * them from the service means importing the service — its repository, its Prisma client and its Nest
+ * decorators — into a backtest. Copying them instead is how a harness ends up measuring a planner
+ * nobody is served.
+ */
+export const MAX_TRANSFERS = 3;
+
 export interface OwnedCandidate extends Candidate {
   /**
    * What this player sells for, in tenths. **Null when it could not be reconstructed**, and the
