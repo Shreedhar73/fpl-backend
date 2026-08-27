@@ -1,5 +1,10 @@
 # GW2 2026/27 — projection and best squad
 
+> **Superseded 2026-08-27 by [`gw2-recommendation-v3.md`](gw2-recommendation-v3.md).** This file is
+> the record of what was recommended on the day, from `v2-fitted-2026-08-26` and **before** the two
+> recommendation guards shipped — which is why Tzolakis and Emersonn are in the squad below and are
+> not in the current one. It is kept as it was rather than corrected.
+
 Produced 2026-08-26 with `pnpm project && pnpm optimize`, model version **`v2-fitted-2026-08-26`**.
 Deadline **2026-08-28 17:30 UTC**.
 
