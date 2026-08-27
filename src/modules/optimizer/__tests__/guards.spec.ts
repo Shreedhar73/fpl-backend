@@ -52,6 +52,7 @@ function mk(
     webName: id,
     position,
     teamId,
+    teamShortName: teamId.toUpperCase(),
     cost: 50,
     ep,
     pPlay: 0.9,
@@ -70,7 +71,14 @@ describe('buildConflictPairs — both sides of one fixture (B-011)', () => {
   const cheFwd = mk('joaoPedro', 'FWD', 'CHE', 6);
   const cheDef = mk('cucurella', 'DEF', 'CHE', 5);
   const roster = [bhaDef, bhaGk, bhaMid, cheMid, cheFwd, cheDef];
-  const fixture = [{ homeTeamId: 'BHA', awayTeamId: 'CHE' }];
+  const fixture = [
+    {
+      homeTeamId: 'BHA',
+      awayTeamId: 'CHE',
+      homeTeamShortName: 'BHA',
+      awayTeamShortName: 'CHE',
+    },
+  ];
 
   it('pairs every attacker against every opposing defender, in both directions', () => {
     const pairs = buildConflictPairs(roster, fixture);
@@ -117,7 +125,12 @@ describe('buildConflictPairs — both sides of one fixture (B-011)', () => {
     const single = buildConflictPairs(roster, fixture);
     const dgw = buildConflictPairs(roster, [
       ...fixture,
-      { homeTeamId: 'CHE', awayTeamId: 'BHA' }, // the reverse tie, same gameweek
+      {
+        homeTeamId: 'CHE',
+        awayTeamId: 'BHA',
+        homeTeamShortName: 'CHE',
+        awayTeamShortName: 'BHA',
+      }, // the reverse tie, same gameweek
     ]);
     expect(dgw.length).toBe(single.length * 2);
     expect(buildConflictPairs(roster, [])).toEqual([]);
@@ -132,7 +145,12 @@ describe('buildLp — the collision penalty is in the objective, not a post-hoc 
   ];
   const collisions = (lambda: number): Collisions => ({
     pairs: buildConflictPairs(squad(), [
-      { homeTeamId: 'BHA', awayTeamId: 'CHE' },
+      {
+        homeTeamId: 'BHA',
+        awayTeamId: 'CHE',
+        homeTeamShortName: 'BHA',
+        awayTeamShortName: 'CHE',
+      },
     ]),
     lambda,
   });
@@ -179,7 +197,14 @@ describe('the solver acts on the penalty', () => {
     for (let i = 0; i < 3; i++) list.push(mk(`f${i}`, 'FWD', `T${i + 3}`, 6));
     return list;
   }
-  const fixtures = [{ homeTeamId: 'BHA', awayTeamId: 'CHE' }];
+  const fixtures = [
+    {
+      homeTeamId: 'BHA',
+      awayTeamId: 'CHE',
+      homeTeamShortName: 'BHA',
+      awayTeamShortName: 'CHE',
+    },
+  ];
   const solveWith = async (edge: number, lambda: number) => {
     const cands = universe(edge);
     const collisions: Collisions = {
@@ -246,7 +271,12 @@ describe('pickBestXi — exact enumeration under a pairwise penalty', () => {
   }
   const collisions = (lambda: number, dCleanEp = 4): Collisions => ({
     pairs: buildConflictPairs(squad(dCleanEp), [
-      { homeTeamId: 'BHA', awayTeamId: 'CHE' },
+      {
+        homeTeamId: 'BHA',
+        awayTeamId: 'CHE',
+        homeTeamShortName: 'BHA',
+        awayTeamShortName: 'CHE',
+      },
     ]),
     lambda,
   });
@@ -312,7 +342,14 @@ describe('penalisedSquadEp — the quantity the ILP actually maximises', () => {
   const d = mk('d', 'DEF', 'BHA', 5);
   const pairs = buildConflictPairs(
     [a, d],
-    [{ homeTeamId: 'BHA', awayTeamId: 'CHE' }],
+    [
+      {
+        homeTeamId: 'BHA',
+        awayTeamId: 'CHE',
+        homeTeamShortName: 'BHA',
+        awayTeamShortName: 'CHE',
+      },
+    ],
   );
 
   it('charges lambda per held pair, and nothing when only one side is held', () => {
@@ -337,9 +374,7 @@ describe('the appearance floor applies to the pool and nowhere else (B-010)', ()
       for (let k = 0; k < n; k++)
         list.push(mk(`old${i++}`, pos, `T${i % 12}`, 5, { cost: 45 }));
     // the one-appearance forward the optimizer would otherwise start
-    list.push(
-      mk('newSigning', 'FWD', 'T20', 40, { appearances: 1, cost: 45 }),
-    );
+    list.push(mk('newSigning', 'FWD', 'T20', 40, { appearances: 1, cost: 45 }));
     return list;
   }
 
@@ -392,7 +427,14 @@ describe('the appearance floor applies to the pool and nowhere else (B-010)', ()
       loadPlayers: async () => players,
       appearanceCounts: async () =>
         new Map(universe().map((c) => [c.playerId, c.appearances])),
-      fixturesFor: async () => [{ homeTeamId: 'T20', awayTeamId: 'T1' }],
+      fixturesFor: async () => [
+        {
+          homeTeamId: 'T20',
+          awayTeamId: 'T1',
+          homeTeamShortName: 'T20',
+          awayTeamShortName: 'T1',
+        },
+      ],
     } as unknown as OptimizerRepository;
 
     const universeBuilt = await new OptimizerService(repo).buildUniverse();
@@ -405,5 +447,83 @@ describe('the appearance floor applies to the pool and nowhere else (B-010)', ()
     ).toBe(1);
     // and the collision context comes back with it, built over the whole universe
     expect(universeBuilt.collisions.pairs.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * B-018 — the payload a refusal is stated in.
+ *
+ * Plan 009 specified `collisions: [{ fixture, attacker, defender, lambda, taken }]` and what shipped
+ * emitted two team **cuids** instead. That defect is invisible in every test that checks a count, and
+ * only surfaces when somebody tries to render it — a cuid on screen looks like data. So the test is
+ * a shape test on the emitted strings, not on the count.
+ */
+describe('the reasoning payload can actually be rendered (B-018)', () => {
+  /** Prisma's cuid: `c` then 24 lowercase alphanumerics. The exact thing that must never be emitted. */
+  const CUID = /^c[a-z0-9]{24}$/;
+
+  const pairs = buildConflictPairs(
+    [
+      mk('striker', 'FWD', 'tChe', 6),
+      mk('keeper', 'GKP', 'tBha', 4),
+      mk('back', 'DEF', 'tBha', 4),
+    ],
+    [
+      {
+        homeTeamId: 'tChe',
+        awayTeamId: 'tBha',
+        homeTeamShortName: 'CHE',
+        awayTeamShortName: 'BHA',
+      },
+    ],
+  );
+
+  it('labels a pair with the match, home side first', () => {
+    expect(pairs.length).toBeGreaterThan(0);
+    for (const p of pairs) expect(p.fixture).toBe('CHE vs BHA');
+  });
+
+  it('labels the pair the same way whichever side attacks', () => {
+    // A pair is "our attacker against our defender in this match". The match does not change when
+    // the roles do, and two labels for one fixture would read as two fixtures.
+    const bothWays = buildConflictPairs(
+      [
+        mk('cheStriker', 'FWD', 'tChe', 6),
+        mk('cheBack', 'DEF', 'tChe', 4),
+        mk('bhaStriker', 'FWD', 'tBha', 6),
+        mk('bhaBack', 'DEF', 'tBha', 4),
+      ],
+      [
+        {
+          homeTeamId: 'tChe',
+          awayTeamId: 'tBha',
+          homeTeamShortName: 'CHE',
+          awayTeamShortName: 'BHA',
+        },
+      ],
+    );
+    expect(new Set(bothWays.map((p) => p.fixture))).toEqual(
+      new Set(['CHE vs BHA']),
+    );
+  });
+
+  it('emits no cuid anywhere in the rendered collision entry', () => {
+    // The entry as `RecommendationReasoning` builds it — names and a label, no ids.
+    const entries = pairs.map((p) => ({
+      fixture: p.fixture,
+      attacker: p.attacker.webName,
+      defender: p.defender.webName,
+      lambda: 1,
+    }));
+    for (const e of entries) {
+      for (const value of Object.values(e)) {
+        if (typeof value === 'string') expect(value).not.toMatch(CUID);
+      }
+    }
+  });
+
+  it('and the guard is not vacuous — a real cuid does match the shape it rejects', () => {
+    // If this pattern matched nothing, the test above would pass for every payload forever.
+    expect('cmt9x1wjf0006lp3t2s0z9qa2').toMatch(CUID);
   });
 });

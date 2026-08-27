@@ -9,6 +9,8 @@ export interface OptimizePlayer {
   webName: string;
   position: PositionCode;
   teamId: string;
+  /** e.g. "CHE" — the only team label safe to put in a payload; `teamId` is a cuid (B-018). */
+  teamShortName: string;
   nowCost: number;
 }
 
@@ -22,6 +24,8 @@ export interface ProjectionRowLite {
 export interface FixtureLite {
   homeTeamId: string;
   awayTeamId: string;
+  homeTeamShortName: string;
+  awayTeamShortName: string;
 }
 
 export interface OptimizerRunInput {
@@ -82,6 +86,9 @@ export class OptimizerRepository {
         position: true,
         teamId: true,
         nowCost: true,
+        // The short name, not only the id. A `teamId` is a cuid, and a cuid that reaches a payload
+        // reads as data on screen — which is exactly what B-018 was opened to fix.
+        team: { select: { shortName: true } },
       },
     });
     return rows.map((r) => ({
@@ -89,6 +96,7 @@ export class OptimizerRepository {
       webName: r.webName,
       position: r.position,
       teamId: r.teamId,
+      teamShortName: r.team.shortName,
       nowCost: r.nowCost,
     }));
   }
@@ -132,7 +140,10 @@ export class OptimizerRepository {
       counts.set(id, (counts.get(id) ?? 0) + row._count._all);
     }
     for (const row of live) {
-      counts.set(row.playerId, (counts.get(row.playerId) ?? 0) + row._count._all);
+      counts.set(
+        row.playerId,
+        (counts.get(row.playerId) ?? 0) + row._count._all,
+      );
     }
     return counts;
   }
@@ -145,11 +156,18 @@ export class OptimizerRepository {
   async fixturesFor(gameweekId: number): Promise<FixtureLite[]> {
     const rows = await this.prisma.fixture.findMany({
       where: { gameweekId },
-      select: { homeTeamId: true, awayTeamId: true },
+      select: {
+        homeTeamId: true,
+        awayTeamId: true,
+        homeTeam: { select: { shortName: true } },
+        awayTeam: { select: { shortName: true } },
+      },
     });
     return rows.map((r) => ({
       homeTeamId: r.homeTeamId,
       awayTeamId: r.awayTeamId,
+      homeTeamShortName: r.homeTeam.shortName,
+      awayTeamShortName: r.awayTeam.shortName,
     }));
   }
 

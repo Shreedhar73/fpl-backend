@@ -58,6 +58,7 @@ function universe(): Candidate[] {
     webName: `P${i}`,
     position,
     teamId,
+    teamShortName: teamId.toUpperCase(),
     cost,
     ep,
     pPlay: 0.9,

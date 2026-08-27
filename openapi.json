@@ -1321,6 +1321,156 @@
           "youHaveThatOptimalDoesNot"
         ]
       },
+      "FloorExcludedPlayerDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string"
+          },
+          "webName": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string",
+            "description": "e.g. \"CHE\". Never a team id — see the collision note below."
+          },
+          "appearances": {
+            "type": "number",
+            "description": "Premier League appearances, archive plus this season. Below the threshold, which is why this player was not eligible."
+          },
+          "epHorizon": {
+            "type": "number",
+            "description": "Horizon expected points the unguarded solve valued them at."
+          }
+        },
+        "required": [
+          "playerId",
+          "webName",
+          "position",
+          "teamShortName",
+          "appearances",
+          "epHorizon"
+        ]
+      },
+      "AppearanceFloorDto": {
+        "type": "object",
+        "properties": {
+          "threshold": {
+            "type": "number",
+            "description": "Minimum appearances to enter the candidate pool."
+          },
+          "excluded": {
+            "type": "number",
+            "description": "How many of the league the floor removed."
+          },
+          "costEp": {
+            "type": "number",
+            "nullable": true,
+            "description": "Horizon EP the floor cost, measured against the same solve with the floor lifted and the collision penalty unchanged — so the number isolates the floor. Null when not computed."
+          },
+          "wouldHaveMadeTheSquad": {
+            "description": "The excluded players an unguarded solve would actually have picked. Not \"everyone below the threshold\" — that list is hundreds long and says nothing about this recommendation.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FloorExcludedPlayerDto"
+            }
+          },
+          "statement": {
+            "type": "string",
+            "description": "What this guard IS, carried in the payload so a UI cannot restate it more confidently than the evidence allows."
+          }
+        },
+        "required": [
+          "threshold",
+          "excluded",
+          "costEp",
+          "wouldHaveMadeTheSquad",
+          "statement"
+        ]
+      },
+      "CollisionTakenDto": {
+        "type": "object",
+        "properties": {
+          "fixture": {
+            "type": "string",
+            "description": "The match, home side first — e.g. \"CHE vs BHA\". Plan 009 specified this and what shipped emitted two team cuids, which is why nothing could render it: a cuid on screen looks like data."
+          },
+          "attacker": {
+            "type": "string"
+          },
+          "defender": {
+            "type": "string"
+          },
+          "lambda": {
+            "type": "number",
+            "description": "Horizon points charged for holding this pair."
+          }
+        },
+        "required": [
+          "fixture",
+          "attacker",
+          "defender",
+          "lambda"
+        ]
+      },
+      "FixtureCollisionsDto": {
+        "type": "object",
+        "properties": {
+          "lambda": {
+            "type": "number",
+            "description": "Horizon points charged per conflicting pair held."
+          },
+          "pairsConsidered": {
+            "type": "number",
+            "description": "Conflicting pairs across the whole candidate pool."
+          },
+          "penaltyEp": {
+            "type": "number",
+            "description": "Horizon EP this XI was charged for the pairs it kept."
+          },
+          "taken": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollisionTakenDto"
+            }
+          },
+          "statement": {
+            "type": "string",
+            "description": "What this guard is, and — unlike the floor — what it is NOT. It was measured over 103 archived gameweeks and did not improve realised points. A UI must not present it as if it had."
+          }
+        },
+        "required": [
+          "lambda",
+          "pairsConsidered",
+          "penaltyEp",
+          "taken",
+          "statement"
+        ]
+      },
+      "ReasoningDto": {
+        "type": "object",
+        "properties": {
+          "appearanceFloor": {
+            "$ref": "#/components/schemas/AppearanceFloorDto"
+          },
+          "fixtureCollisions": {
+            "$ref": "#/components/schemas/FixtureCollisionsDto"
+          }
+        },
+        "required": [
+          "appearanceFloor",
+          "fixtureCollisions"
+        ]
+      },
       "AdviceDto": {
         "type": "object",
         "properties": {
@@ -1374,6 +1524,16 @@
           "comparison": {
             "$ref": "#/components/schemas/ComparisonDto"
           },
+          "reasoning": {
+            "nullable": true,
+            "description": "Why the RECOMMENDED squad is what it is — which players the appearance floor removed and what that cost, and which fixture collisions the recommendation kept and what it paid. It describes the optimal squad, not the one being advised on, and is null only if the solve produced none.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReasoningDto"
+              }
+            ]
+          },
           "notAdvisedOn": {
             "description": "What this advice deliberately does not answer, in plain language, so the gap is visible in the payload rather than only in a plan file.",
             "type": "array",
@@ -1391,6 +1551,7 @@
           "viceCaptain",
           "players",
           "comparison",
+          "reasoning",
           "notAdvisedOn"
         ]
       },

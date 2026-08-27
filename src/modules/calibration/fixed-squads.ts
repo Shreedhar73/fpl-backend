@@ -38,6 +38,9 @@ function candidate(row: PredictionRow, objective: number): Candidate {
     webName: row.webName,
     position: row.position as PositionCode,
     teamId: String(row.teamCode ?? 0),
+    // The archive carries team CODES and no short names. A backtest never renders a payload, so a
+    // stable stand-in is honest here in a way it would not be on a serving path.
+    teamShortName: `T${row.teamCode ?? 0}`,
     cost: row.value,
     ep: objective,
     pPlay: row.pPlay,

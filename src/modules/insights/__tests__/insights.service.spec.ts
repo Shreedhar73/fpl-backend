@@ -56,6 +56,7 @@ function squad(prefix: string, epOf: (i: number) => number): Candidate[] {
     webName: `${prefix}${i}`,
     position,
     teamId: `t${i % 8}`,
+    teamShortName: `T${i % 8}`,
     cost: 50,
     ep: epOf(i),
     pPlay: 1,
@@ -210,7 +211,12 @@ describe('InsightsService — the comparison', () => {
       squad('opt', () => 9),
     );
     await service.adviseManager(42);
-    expect(optimizer.run).toHaveBeenCalledWith({ persist: false });
+    // `persist: false` is the part that matters — a persisted run here would bury the solves a
+    // human asked for. `explain: true` is B-018's second solve, which is unpersisted too.
+    expect(optimizer.run).toHaveBeenCalledWith({
+      persist: false,
+      explain: true,
+    });
   });
 });
 
