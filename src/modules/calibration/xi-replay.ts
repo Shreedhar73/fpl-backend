@@ -217,11 +217,11 @@ export function heldCandidates(
  * What the LP's eleven and armband give up in projected points against the best the same fifteen
  * could field.
  *
- * **The counterfactual is `pickBestXi` with no collisions AND a bench weight of zero**, which makes
- * its objective `Σ EP over the XI + EP of the captain` — raw projected points, the eleven a manager
- * reading only the projections would field. Passing the real bench weight here would score the
- * counterfactual on `(1 − w)·Σ EP + captain`, an expression that ranks elevens differently and is
- * itself half of what is under test; the comparison would then move whenever the knob did.
+ * **The counterfactual is `pickBestXi` at a bench weight of zero**, which makes its objective
+ * `Σ EP over the XI + EP of the captain` — raw projected points, the eleven a manager reading only
+ * the projections would field. Passing the real bench weight here would score the counterfactual on
+ * `(1 − w)·Σ EP + captain`, an expression that ranks elevens differently and is itself half of what
+ * is under test; the comparison would then move whenever the knob did.
  *
  * **The armband is inside the total, and `swaps` itemises only the XI half.** A solve that starts the
  * right eleven and captains the wrong man has given up points too, and a metric blind to it would
@@ -235,7 +235,7 @@ export function epForgone(
   lpCaptainKey: string,
 ): { total: number; swaps: ForgoneSwap[] } {
   const byKey = new Map(squad.map((c) => [c.key, c]));
-  const best = pickBestXi(squad, rules, NO_COLLISIONS, 0);
+  const best = pickBestXi(squad, rules, 0);
 
   const epOf = (keys: Set<string>, captainKey: string | undefined) => {
     let sum = 0;

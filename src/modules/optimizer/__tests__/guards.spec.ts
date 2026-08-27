@@ -155,21 +155,30 @@ describe('buildLp — the collision penalty is in the objective, not a post-hoc 
     lambda,
   });
 
-  it('emits one z row per pair and carries -LAMBDA in the objective', () => {
-    const lp = buildLp(squad(), rules, collisions(1.5));
-    // On the XI variables, not the squad ones (B-023). Two of our players colliding where one of
-    // them is benched is not the bet B-011 is about — the rule is about betting both ways ON THE
-    // PITCH, and a `y` row says exactly that where a `x` row said something looser.
-    expect(lp).toMatch(/conf_0: y_p_a1 \+ y_p_d1 - z_0 <= 1/);
-    expect(lp).toMatch(/- 1\.5000 z_0/);
-    // And the captain's side of the same collision, which is what doubles his exposure.
-    expect(lp).toMatch(/capconf_a_0: k_p_a1 \+ y_p_d1 - w_0 <= 1/);
-    expect(lp).toMatch(/- 1\.5000 w_0/);
+  it('emits one z row per pair, on the SQUAD variables, at benchWeight x lambda', () => {
+    const lp = buildLp(squad(), rules, collisions(1.5), 0.7);
+    // On `x`, not on `y` (B-025). B-023 had put this row on the XI variables, and the solver
+    // answered it by benching one side while still paying for both. Holding is the bet B-011's own
+    // sentence describes, and holding is what `x` says.
+    expect(lp).toMatch(/conf_0: p_a1 \+ p_d1 - z_0 <= 1/);
+    expect(lp).not.toMatch(/conf_0: y_/);
+    // 0.7 x 1.5. The charge scales with the coefficient it is charged against; see
+    // `chargedCollisionLambda`.
+    expect(lp).toMatch(/- 1\.0500 z_0/);
+    // No row on the armband. A captain charge is one more thing a bench can dodge.
+    expect(lp).not.toMatch(/capconf/);
+    expect(lp).not.toMatch(/w_0/);
     // z is continuous — the -lambda objective pins it to its lower bound, so it must NOT be declared
     // binary. A z in the Binary section is a needless integer variable.
-    const binarySection = lp.slice(lp.indexOf('Binary'));
-    expect(binarySection).not.toMatch(/z_0/);
-    expect(binarySection).not.toMatch(/w_0/);
+    expect(lp.slice(lp.indexOf('Binary'))).not.toMatch(/z_0/);
+  });
+
+  it('charges nothing when the bench weight is zero, and says so in the objective', () => {
+    // The guard against the argument being forgotten: `buildLp` defaults `benchWeight` to the served
+    // value precisely because a forgotten 0 here would switch the collision penalty off entirely
+    // while every row still looked present.
+    expect(buildLp(squad(), rules, collisions(1.5), 0)).toMatch(/[+-] 0\.0000 z_0/);
+    expect(buildLp(squad(), rules, collisions(1.5))).toMatch(/- 1\.0500 z_0/);
   });
 
   it('emits no z row at LAMBDA = 0 (the sabotage: the collision tests below go red, these stay green)', () => {
@@ -247,15 +256,12 @@ describe('the solver acts on the penalty', () => {
   });
 });
 
-describe('pickBestXi — exact enumeration under a pairwise penalty', () => {
+describe('the eleven is chosen on points, and the pair is charged anyway (B-025)', () => {
   /**
-   * A 15 whose best XI under a penalty is NOT the top of each position. Our captain plays for
-   * Chelsea; our three best defenders all face him. `dClean` is the 4th defender by raw EP and faces
-   * nobody we own.
-   *
-   * `dCleanEp` tunes how much dropping the 3rd defender for the 4th costs, which is what separates
-   * the two things this describe block tests: at 4 the swap is cheap enough that the XI changes, at 1
-   * it is not, so the only thing left for the penalty to move is the armband.
+   * A fifteen whose three best defenders all face our captain's club. Before B-025 the penalty was
+   * charged against the XI, so the solver answered it by starting the 4th-best defender and benching
+   * the 3rd — paying for a player it would not field. `dCleanEp` tunes how much that swap would have
+   * cost, and every test here asserts it no longer happens.
    */
   function squad(dCleanEp = 4): Candidate[] {
     return [
@@ -288,59 +294,112 @@ describe('pickBestXi — exact enumeration under a pairwise penalty', () => {
     lambda,
   });
 
-  it('starts the 4th defender over the 3rd once the pairs are priced', () => {
-    // This is the case top-EP-per-position can never reach: dC and dClean are interchangeable by
-    // position and dC is strictly better on raw EP, so a greedy XI takes dC at every lambda. Only a
-    // penalty counted over the chosen SET can see that dC costs a pair and dClean does not.
-    const clean = pickBestXi(squad(), rules, NO_COLLISIONS);
-    expect(clean.starters.has('p_dClean')).toBe(false);
-    expect(clean.starters.has('p_dC')).toBe(true);
-
-    const penalised = pickBestXi(squad(), rules, collisions(2));
-    expect(penalised.starters.has('p_dClean')).toBe(true);
-    expect(penalised.starters.has('p_dC')).toBe(false);
-    expect(penalised.starters.size).toBe(11);
-    expect(penalised.penaltyPoints).toBeGreaterThan(0);
-  });
-
-  it('moves the armband off a captain who collides with our own back line', () => {
-    // dClean at 1 makes the defensive swap too expensive, so the XI is the same at both lambdas and
-    // the captaincy is the only thing that moves. The captain doubles, so his collision is counted
-    // twice: 12 - 2x3 = 6 is worth less than a midfielder facing nobody we own at 7.
-    const light = pickBestXi(squad(1), rules, NO_COLLISIONS);
-    expect(light.captainKey).toBe('p_star');
-
-    const penalised = pickBestXi(squad(1), rules, collisions(2, 1));
-    expect(penalised.starters.has('p_star')).toBe(true); // still worth starting
-    expect(penalised.captainKey).not.toBe('p_star'); // not worth doubling
-    expect(penalised.viceKey).toBeDefined();
-  });
-
-  it('stops starting the colliding premium altogether once the penalty is large enough', () => {
-    const heavy = pickBestXi(squad(), rules, collisions(3));
-    expect(heavy.starters.has('p_star')).toBe(false);
-    expect(heavy.penaltyPoints).toBe(0); // nothing left to charge
-  });
-
-  it('returns a legal XI in every case: one keeper, eleven players, a legal split', () => {
-    for (const lambda of [0, 1, 2, 4]) {
-      const xi = pickBestXi(squad(), rules, collisions(lambda));
-      const starters = squad().filter((c) => xi.starters.has(c.key));
-      expect(starters.length).toBe(11);
-      expect(starters.filter((c) => c.position === 'GKP').length).toBe(1);
-      expect(
-        starters.filter((c) => c.position === 'DEF').length,
-      ).toBeGreaterThanOrEqual(3);
-      expect(xi.formation).toMatch(/^\d-\d-\d$/);
+  it('starts the better-projected defender however large the penalty', () => {
+    // The old behaviour is the thing being asserted against: at lambda 2 this used to start dClean
+    // over dC, and at lambda 3 it used to drop `star` from the eleven altogether. The charge is on
+    // ownership now, so the fifteen is already paid for and the eleven is a pure points question.
+    for (const lambda of [0, 1, 2, 3, 4]) {
+      const xi = pickBestXi(squad(), rules);
+      expect(xi.starters.has('p_dC')).toBe(true);
+      expect(xi.starters.has('p_dClean')).toBe(false);
+      expect(xi.starters.has('p_star')).toBe(true);
+      expect(xi.captainKey).toBe('p_star');
+      // The lambda is in the loop only to make the point that nothing here reads it: `pickBestXi`
+      // no longer takes a collision context at all, which is the compile-time half of this test.
+      expect(collisions(lambda).lambda).toBe(lambda);
     }
   });
 
-  it('arrangeSquad reports the penalty it charged, and benches the rest', () => {
+  it('charges the pair the squad holds even when the eleven does not start both sides', () => {
+    // The B-025 case in one assertion. `dBench` is a defender at 1 point who never starts; make him
+    // the colliding one and the eleven contains only his opposite number, not him.
+    const held = squad().map((c) =>
+      c.playerId === 'dBench' ? mk('dBench', 'DEF', 'BHA', 1) : c,
+    );
+    const pairs = buildConflictPairs(held, [
+      {
+        homeTeamId: 'BHA',
+        awayTeamId: 'CHE',
+        homeTeamShortName: 'BHA',
+        awayTeamShortName: 'CHE',
+      },
+    ]);
+    const arranged = arrangeSquad(held, rules, { pairs, lambda: 1 });
+
+    const benched = arranged.heldCollisions.filter(
+      (h) => h.pair.defender.playerId === 'dBench',
+    );
+    expect(benched.length).toBeGreaterThan(0);
+    expect(benched.every((h) => h.bothStarted)).toBe(false);
+    // ...and it is still charged. Before B-025 this pair contributed nothing, and the payload said
+    // `taken: []` about a squad holding both sides of it.
+    expect(arranged.heldPenalty).toBeCloseTo(0.7 * pairs.length, 6);
+  });
+
+  it('charges the same whichever legal eleven is fielded — the charge is a fact about the fifteen', () => {
+    // Two fifteens holding the SAME pairs, differing only in a projection that moves a colliding
+    // defender in and out of the eleven. A charge that changed between them would be one the eleven
+    // could still dodge.
+    const starting = squad();
+    const benchedInstead = squad().map((c) =>
+      c.playerId === 'dC' ? mk('dC', 'DEF', 'BHA', 0.5) : c,
+    );
+    const pairsOf = (cands: Candidate[]) =>
+      buildConflictPairs(cands, [
+        {
+          homeTeamId: 'BHA',
+          awayTeamId: 'CHE',
+          homeTeamShortName: 'BHA',
+          awayTeamShortName: 'CHE',
+        },
+      ]);
+
+    const a = arrangeSquad(starting, rules, {
+      pairs: pairsOf(starting),
+      lambda: 1,
+    });
+    const b = arrangeSquad(benchedInstead, rules, {
+      pairs: pairsOf(benchedInstead),
+      lambda: 1,
+    });
+
+    // The elevens really do differ — otherwise this test proves nothing.
+    const startedIn = (arranged: typeof a, id: string) =>
+      arranged.squad.find((p) => p.playerId === id)?.role !== 'bench';
+    expect(startedIn(a, 'dC')).toBe(true);
+    expect(startedIn(b, 'dC')).toBe(false);
+
+    expect(b.heldPenalty).toBeCloseTo(a.heldPenalty, 6);
+    expect(b.heldCollisions.length).toBe(a.heldCollisions.length);
+  });
+
+  it('reports nothing at lambda 0 — the sabotage the two tests above go red under', () => {
+    const arranged = arrangeSquad(squad(), rules, collisions(0));
+    expect(arranged.heldPenalty).toBe(0);
+    // The pairs are still built; it is the price that is zero. A payload reporting an empty list
+    // here is reporting "nothing was charged", not "no conflict exists".
+    expect(collisions(0).pairs.length).toBeGreaterThan(0);
+    expect(arranged.heldCollisions.length).toBeGreaterThan(0);
+    expect(arranged.heldCollisions.every((h) => !h.bothStarted)).toBe(false);
+  });
+
+  it('returns a legal XI in every case: one keeper, eleven players, a legal split', () => {
+    const xi = pickBestXi(squad(), rules);
+    const starters = squad().filter((c) => xi.starters.has(c.key));
+    expect(starters.length).toBe(11);
+    expect(starters.filter((c) => c.position === 'GKP').length).toBe(1);
+    expect(
+      starters.filter((c) => c.position === 'DEF').length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(xi.formation).toMatch(/^\d-\d-\d$/);
+  });
+
+  it('arrangeSquad benches the four it did not start, and names one captain', () => {
     const arranged = arrangeSquad(squad(), rules, collisions(2));
     expect(arranged.squad.filter((p) => p.role === 'bench').length).toBe(4);
     expect(arranged.squad.filter((p) => p.role === 'captain').length).toBe(1);
-    expect(arranged.xiPenalty).toBeGreaterThan(0);
-    expect(arranged.xiCollisions.length).toBeGreaterThan(0);
+    expect(arranged.heldPenalty).toBeGreaterThan(0);
+    expect(arranged.heldCollisions.length).toBeGreaterThan(0);
   });
 });
 
@@ -359,10 +418,16 @@ describe('penalisedSquadEp — the quantity the ILP actually maximises', () => {
     ],
   );
 
-  it('charges lambda per held pair, and nothing when only one side is held', () => {
-    expect(penalisedSquadEp([a, d], { pairs, lambda: 2 })).toBeCloseTo(13, 6);
+  it('charges benchWeight x lambda per held pair, and nothing when only one side is held', () => {
+    // 15 raw, less 0.7 x 2 for the one pair. The scaling is the LP's, and this function exists to
+    // price a user's squad the same way the solve priced the recommendation — a comparison at a
+    // different rate would report its own arithmetic as a gap between two squads.
+    expect(penalisedSquadEp([a, d], { pairs, lambda: 2 })).toBeCloseTo(13.6, 6);
     expect(penalisedSquadEp([a], { pairs, lambda: 2 })).toBeCloseTo(10, 6);
     expect(penalisedSquadEp([a, d], NO_COLLISIONS)).toBeCloseTo(15, 6);
+    // At a bench weight of 1 a squad place is worth its full EP again, and the charge is the raw
+    // constant — which is what B-011 measured.
+    expect(penalisedSquadEp([a, d], { pairs, lambda: 2 }, 1)).toBeCloseTo(13, 6);
   });
 });
 
@@ -520,7 +585,8 @@ describe('the reasoning payload can actually be rendered (B-018)', () => {
       fixture: p.fixture,
       attacker: p.attacker.webName,
       defender: p.defender.webName,
-      lambda: 1,
+      lambda: 0.7,
+      bothStarted: true,
     }));
     for (const e of entries) {
       for (const value of Object.values(e)) {

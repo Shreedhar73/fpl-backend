@@ -1,6 +1,11 @@
 import { PositionCode } from '../fpl-sync/mappers';
 import { Rules, POSITIONS } from './rules';
-import { ATTACKING_POSITIONS, DEFENSIVE_POSITIONS } from './policy';
+import {
+  ATTACKING_POSITIONS,
+  BENCH_WEIGHT,
+  chargedCollisionLambda,
+  DEFENSIVE_POSITIONS,
+} from './policy';
 import { FixtureLite } from './optimizer.repository';
 
 /**
@@ -120,14 +125,23 @@ export function pairsWithin(
  * Exported because `insights` compares a user's squad against the recommendation, and comparing a
  * penalised optimum against an unpenalised squad is what makes a legitimately negative gap look like
  * a bug (Phase 3 of the plan).
+ *
+ * Charged at `benchWeight × λ`, the same as the LP row (B-025). A comparison that priced a pair
+ * differently from the solve it is comparing against would report part of its own arithmetic as a
+ * gap between two squads.
  */
 export function penalisedSquadEp(
   squad: Candidate[],
   collisions: Collisions,
+  benchWeight = BENCH_WEIGHT,
 ): number {
   const raw = squad.reduce((s, c) => s + c.ep, 0);
   const keys = new Set(squad.map((c) => c.key));
-  return raw - collisions.lambda * pairsWithin(keys, collisions.pairs).length;
+  return (
+    raw -
+    chargedCollisionLambda(benchWeight, collisions.lambda) *
+      pairsWithin(keys, collisions.pairs).length
+  );
 }
 
 /** Join additive terms as an LP expression, wrapping across lines but keeping the `+` at each break
@@ -163,29 +177,43 @@ function signedExpr(terms: { coef: number; name: string }[]): string {
  * **The program, as `fpl-optimizer` specifies it:**
  *
  * ```
- *   maximise  Σ EP_p (y_p + c_p)  +  benchWeight · Σ EP_p (x_p − y_p)  −  λ (Σ z + Σ w)
+ *   maximise  Σ EP_p (y_p + c_p)  +  benchWeight · Σ EP_p (x_p − y_p)  −  λ_charged · Σ z
  *   s.t.      Σ x = 15,  squad quotas on x,  budget,  ≤ 3 per club
  *             y_p ≤ x_p,  Σ y = 11,  formation min/max on y
  *             c_p ≤ y_p,  Σ c = 1
- *             z_ij ≥ y_i + y_j − 1                    a collision inside the XI
- *             w_ij ≥ c_i + y_j − 1                    the same collision, captain's side doubled
+ *             z_ij ≥ x_i + x_j − 1                    a collision the squad HOLDS
  * ```
  *
  * Collected per variable, the coefficients are `benchWeight · ep` on `x`, `(1 − benchWeight) · ep`
  * on `y`, and `ep` on `c`. Selecting a player into the XI therefore *reduces* his bench value, which
  * is right: a player you start cannot auto-sub in.
  *
- * **The collision penalty moved from the squad to the XI, and it is more correct there.** B-011's
- * rule is about betting on both outcomes of one match *on the pitch*; two of our players colliding
- * where one of them is benched is not that bet. `w` reproduces exactly what `pickBestXi` charges — the
- * captain's collisions counted twice — so the two now optimise the same expression rather than two
- * that happen to agree.
+ * **The collision penalty is charged on OWNERSHIP, and B-025 put it back there.** B-023 had moved it
+ * onto `y` and `c` on the argument that B-011 is about betting both ways *on the pitch*. The solver
+ * answered that by benching one side and keeping both: measured on the live GW2 solve, 3.30 horizon
+ * points given up in the eleven while £9.6m sat on two players it would not start, and measured over
+ * an archived season by `pnpm replay:xi`, a pair owned in all 38 rounds and both sides started in 8.
+ * B-011's sentence is about *holding* both sides, and holding is what `x` says. So there is one
+ * conflict row per held pair and none on the XI or the armband — a charge the eleven cannot dodge,
+ * and an eleven chosen on points once the fifteen is bought.
+ *
+ * `λ_charged` is `chargedCollisionLambda(benchWeight)`, not the raw constant: B-023 changed what a
+ * squad place is worth, and the reasoning for scaling with it — including the half of the arithmetic
+ * that does not work out cleanly — is on that function.
  */
 export function buildLp(
   candidates: Candidate[],
   rules: Rules,
   collisions: Collisions = NO_COLLISIONS,
-  benchWeight = 0,
+  /**
+   * Defaults to the SERVED weight, not to 0.
+   *
+   * It defaulted to 0 while B-023 was landing, which meant every caller that forgot the argument
+   * solved the pre-B-023 objective and got a plausible squad back. Since B-025 it would be worse than
+   * plausible: the collision charge is `benchWeight × λ`, so a forgotten argument would silently
+   * switch the guard off entirely and every collision test would still pass.
+   */
+  benchWeight = BENCH_WEIGHT,
 ): string {
   const clubs = [...new Set(candidates.map((c) => c.teamId))];
   const inPos = (pos: PositionCode) =>
@@ -208,6 +236,8 @@ export function buildLp(
   const xi = (c: Candidate) => `y_${c.key}`;
   const cap = (c: Candidate) => `k_${c.key}`;
 
+  const charged = chargedCollisionLambda(benchWeight, collisions.lambda);
+
   const lines: string[] = [];
   lines.push('Maximize');
   lines.push(
@@ -219,8 +249,7 @@ export function buildLp(
           name: xi(c),
         })),
         ...candidates.map((c) => ({ coef: c.ep, name: cap(c) })),
-        ...pairs.map((_, i) => ({ coef: -collisions.lambda, name: `z_${i}` })),
-        ...pairs.map((_, i) => ({ coef: -collisions.lambda, name: `w_${i}` })),
+        ...pairs.map((_, i) => ({ coef: -charged, name: `z_${i}` })),
       ]),
   );
 
@@ -257,21 +286,14 @@ export function buildLp(
     lines.push(` armband_${c.key}: ${cap(c)} - ${xi(c)} <= 0`);
   }
 
-  // z and w stay CONTINUOUS and out of the Binary section: the `-lambda` objective pushes each to its
-  // lower bound, so it lands on 0 unless its row forces it up, and the LP relaxation of a binary is
-  // not needed.
+  // One row per HELD pair, on the squad variables. There is deliberately no row on `y` and none on
+  // `c`: an XI charge is one the solver can answer by benching, which is what B-025 removed.
+  //
+  // z stays CONTINUOUS and out of the Binary section: the `-lambda` objective pushes it to its lower
+  // bound, so it lands on 0 unless its row forces it up, and the LP relaxation of a binary is not
+  // needed.
   pairs.forEach((p, i) => {
-    lines.push(
-      ` conf_${i}: ${xi(p.attacker)} + ${xi(p.defender)} - z_${i} <= 1`,
-    );
-    // The captain doubles the stake on the correlated outcome, not only the reward. Two rows, one
-    // per side, because either endpoint of the pair may be the one wearing the armband.
-    lines.push(
-      ` capconf_a_${i}: ${cap(p.attacker)} + ${xi(p.defender)} - w_${i} <= 1`,
-    );
-    lines.push(
-      ` capconf_d_${i}: ${cap(p.defender)} + ${xi(p.attacker)} - w_${i} <= 1`,
-    );
+    lines.push(` conf_${i}: ${p.attacker.key} + ${p.defender.key} - z_${i} <= 1`);
   });
 
   // Only when there is something to bound. An empty `Bounds` header followed straight by `Binary` is
@@ -279,10 +301,7 @@ export function buildLp(
   // different program, silently.
   if (pairs.length > 0) {
     lines.push('Bounds');
-    for (let i = 0; i < pairs.length; i++) {
-      lines.push(` z_${i} >= 0`);
-      lines.push(` w_${i} >= 0`);
-    }
+    for (let i = 0; i < pairs.length; i++) lines.push(` z_${i} >= 0`);
   }
 
   lines.push('Binary');
@@ -304,12 +323,18 @@ export interface XiResult {
   formation: string; // "DEF-MID-FWD"
   captainKey: string | undefined;
   viceKey: string | undefined;
-  /** raw EP of the XI plus the captain's double, before the penalty */
+  /** EP of the XI plus the captain's double */
   rawEp: number;
-  /** the collision points charged against this XI, captain doubling included */
-  penaltyPoints: number;
-  collisions: ConflictPair[];
 }
+
+/**
+ * `penaltyPoints` and `collisions` used to live on `XiResult` and are deliberately gone (B-025).
+ *
+ * Nothing is charged against an XI any more, so both would have been zero and empty on every
+ * arrangement the optimizer produces — a field that can only report one value is not a report, it is
+ * a number that looks healthy because it cannot be anything else. What a pair costs is a fact about
+ * the fifteen, and `arrangeSquad` states it there.
+ */
 
 /** Every k-subset of a list, as index combinations. */
 function combinations<T>(items: T[], k: number): T[][] {
@@ -335,23 +360,24 @@ function combinations<T>(items: T[], k: number): T[][] {
  * Best legal starting XI from the chosen 15, with its captain — exactly 1 GKP and a DEF/MID/FWD split
  * within each position's min/max play that sums to 10 outfield.
  *
- * **Exact subset enumeration, not top-EP-per-position.** A pairwise penalty breaks separability: once
- * holding two players costs more than the sum of holding each, the penalty-optimal XI may want the
- * 4th-best defender over the 3rd, and picking the top of each position can never find that. The
- * enumeration is `2 × C(5,d) × C(5,m) × C(3,f)` over a 15-man squad — a few thousand combinations,
- * still trivial. Both keepers are enumerated because a keeper is a defensive position and collides.
+ * **Exact subset enumeration rather than top-EP-per-position, and the reason changed with B-025.**
+ * The original reason was the pairwise collision penalty: once holding two players costs more than
+ * holding each, the penalty-optimal XI may want the 4th-best defender over the 3rd, and picking the
+ * top of each position can never find that. The penalty is on ownership now, so the XI is separable
+ * again and a greedy pick would in fact agree. The enumeration stays because it is `2 × C(5,d) ×
+ * C(5,m) × C(3,f)` — a few thousand combinations, trivially cheap — and because it is the second
+ * implementation the served solve is checked against in `optimizer.service`. A greedy version would
+ * be a check that agrees with the LP for a weaker reason.
  *
- * **The captain is chosen here, not afterwards, and his collision counts twice.** The captain doubles,
- * so a captain colliding with two of our own starting defenders is the worst version of this — and a
- * captain picked by raw EP after the XI is fixed cannot see it. Doubling his exposure alongside his
- * points is a policy choice, consistent with `COLLISION_LAMBDA` itself being one: it says the stake
- * on that correlated outcome is what doubled, not just the reward. The vice is the runner-up on the
- * same penalised score.
+ * **Nothing here is charged for a collision.** This function reproduces the LP's XI-and-armband
+ * choice, and since B-025 the LP charges pairs against `x`, which is fixed by the time a fifteen is
+ * in hand. Charging them here as well would make the enumeration optimise an expression the solve
+ * does not, and the two would disagree about who starts — which is precisely the drift the
+ * verification in `optimizer.service` exists to catch.
  */
 export function pickBestXi(
   squad: Candidate[],
   rules: Rules,
-  collisions: Collisions = NO_COLLISIONS,
   /**
    * The same bench weight the squad LP uses (B-023).
    *
@@ -359,10 +385,9 @@ export function pickBestXi(
    * `− benchWeight · Σ EP·y` half of the bench term is not: starting a player REMOVES his bench
    * value, because a player you start cannot auto-sub in. Scoring the XI without it would make this
    * function maximise a different expression from the solve that chose the fifteen, and the two
-   * would disagree on which XI is best — which is precisely what this function's comment says it
-   * exists to prevent.
+   * would disagree on which XI is best — which is precisely what this function exists to prevent.
    */
-  benchWeight = 0,
+  benchWeight = BENCH_WEIGHT,
 ): XiResult {
   const byPos = (pos: PositionCode) =>
     squad.filter((c) => c.position === pos).sort((a, b) => b.ep - a.ep);
@@ -371,50 +396,26 @@ export function pickBestXi(
   const mid = byPos('MID');
   const fwd = byPos('FWD');
 
-  const held = new Set(squad.map((c) => c.key));
-  const relevant = collisions.pairs.filter(
-    (p) => held.has(p.attacker.key) && held.has(p.defender.key),
-  );
-
   let best: (XiResult & { score: number }) | null = null;
 
   const consider = (chosen: Candidate[], formation: string) => {
-    const keys = new Set(chosen.map((c) => c.key));
-    const inXi = relevant.filter(
-      (p) => keys.has(p.attacker.key) && keys.has(p.defender.key),
-    );
-    const conflictsOf = (key: string) =>
-      inXi.filter((p) => p.attacker.key === key || p.defender.key === key)
-        .length;
-
     const baseEp = chosen.reduce((s, c) => s + c.ep, 0);
-    const scored = chosen
-      .map((c) => ({
-        c,
-        // what adding the armband to this player is worth, net of doubling his exposure
-        gain: c.ep - collisions.lambda * conflictsOf(c.key),
-      }))
-      .sort((a, b) => b.gain - a.gain);
+    const scored = [...chosen].sort((a, b) => b.ep - a.ep);
     const captain = scored[0];
     const vice = scored[1];
     if (!captain) return;
 
-    const penaltyPoints =
-      collisions.lambda * (inXi.length + conflictsOf(captain.c.key));
-    const rawEp = baseEp + captain.c.ep;
-    // The LP's expression exactly: (1 − w)·Σ EP·y + EP·captain − λ(z + w). The constant w·Σ EP·x is
-    // dropped because the fifteen is fixed here and a constant cannot change an argmax.
-    const score = (1 - benchWeight) * baseEp + captain.c.ep - penaltyPoints;
+    // The LP's expression exactly: (1 − w)·Σ EP·y + EP·captain. The constant w·Σ EP·x is dropped
+    // because the fifteen is fixed here and a constant cannot change an argmax.
+    const score = (1 - benchWeight) * baseEp + captain.ep;
 
     if (!best || score > best.score) {
       best = {
-        starters: keys,
+        starters: new Set(chosen.map((c) => c.key)),
         formation,
-        captainKey: captain.c.key,
-        viceKey: vice?.c.key,
-        rawEp,
-        penaltyPoints,
-        collisions: inXi,
+        captainKey: captain.key,
+        viceKey: vice?.key,
+        rawEp: baseEp + captain.ep,
         score,
       };
     }

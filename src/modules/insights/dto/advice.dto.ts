@@ -253,15 +253,35 @@ export class CollisionTakenDto {
   @ApiProperty()
   defender!: string;
 
-  @ApiProperty({ description: 'Horizon points charged for holding this pair.' })
+  @ApiProperty({
+    description:
+      'Horizon points charged for HOLDING this pair — the effective rate, benchWeight x the policy ' +
+      'constant. Charged whether or not both sides start.',
+  })
   lambda!: number;
+
+  @ApiProperty({
+    description:
+      'Whether the eleven started both sides of this pair. Holding is what is charged and starting ' +
+      'is a separate fact (B-025): a squad can pay for a pair and field only one half of it, which ' +
+      'is a state the payload had no way to express before — it reported no conflict at all.',
+  })
+  bothStarted!: boolean;
 }
 
 export class FixtureCollisionsDto {
   @ApiProperty({
-    description: 'Horizon points charged per conflicting pair held.',
+    description:
+      'Horizon points charged per conflicting pair the squad HOLDS — the effective rate the ' +
+      'objective uses, which is benchWeight x lambdaConstant and not the constant itself.',
   })
   lambda!: number;
+
+  @ApiProperty({
+    description:
+      'The policy constant behind the effective rate, so a payload can be read against policy.ts.',
+  })
+  lambdaConstant!: number;
 
   @ApiProperty({
     description: 'Conflicting pairs across the whole candidate pool.',
@@ -269,11 +289,19 @@ export class FixtureCollisionsDto {
   pairsConsidered!: number;
 
   @ApiProperty({
-    description: 'Horizon EP this XI was charged for the pairs it kept.',
+    description:
+      'Horizon EP this SQUAD was charged for the pairs it holds. Before B-025 this was charged ' +
+      'against the eleven, so a squad that owned both sides of a conflict and started one of them ' +
+      'reported zero — a user told there was no conflict in a squad holding one.',
   })
   penaltyEp!: number;
 
-  @ApiProperty({ type: [CollisionTakenDto] })
+  @ApiProperty({
+    type: [CollisionTakenDto],
+    description:
+      'Every pair the squad holds, each with whether both sides started. Empty means the squad ' +
+      'holds no conflicting pair — not that none was charged.',
+  })
   taken!: CollisionTakenDto[];
 
   @ApiProperty({

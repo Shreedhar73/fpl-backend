@@ -85,8 +85,10 @@ export class InsightsService {
     const nextGw = universe.gameweekIds[0];
 
     const mine = this.candidatesFor(squad, universe);
-    // The user's squad is arranged under the SAME penalised objective the recommendation was solved
-    // under, so the two XIs and the two captains mean the same thing.
+    // The user's squad is arranged under the SAME objective the recommendation was solved under, so
+    // the two XIs and the two captains mean the same thing. Since B-025 the collision penalty is
+    // charged on ownership and the eleven is chosen on points, so the context is passed for what it
+    // still decides here — which pairs this squad HOLDS, and what they cost it.
     const arranged = arrangeSquad(mine, universe.rules, universe.collisions);
 
     // A fresh optimal solve, unpersisted: this runs on every advice request purely to measure a
@@ -126,7 +128,8 @@ export class InsightsService {
     // as a bug. Three things let a user squad out-score the recommendation on raw EP:
     //
     //   1. the appearance floor (B-010) — a squad may hold players the optimizer refuses to bet on;
-    //   2. the collision penalty (B-011) — the optimizer maximises `EP - lambda x pairs`, not `EP`;
+    //   2. the collision penalty (B-011/B-025) — the optimizer maximises `EP - charged x pairs HELD`,
+    //      not `EP`, where `charged` is `benchWeight x lambda`;
     //   3. pool pruning, which predates both and was always a (much smaller) hole in the old claim.
     //
     // What is still an invariant, and what is logged: over a squad the optimizer *could* have chosen
