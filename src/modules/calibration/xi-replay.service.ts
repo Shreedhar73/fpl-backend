@@ -3,18 +3,16 @@ import highsLoader from 'highs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { FittedParams } from '../projections/fitted';
-import { BENCH_WEIGHT, COLLISION_LAMBDA } from '../optimizer/policy';
+import {
+  BENCH_WEIGHT,
+  DEFENCE_CONCENTRATION_LAMBDA,
+} from '../optimizer/policy';
 import { CalibrationRepository } from './calibration.repository';
 import { DecisionService } from './decision.service';
 import { TEST_SEASON, TRAIN_SEASONS } from './calibration.service';
 import { PredictionRow, runBacktest } from './harness';
 import { openingSquad } from './season-sim';
-import {
-  fixturesForRound,
-  replaySeason,
-  ReplayResult,
-  ReplayRound,
-} from './xi-replay';
+import { replaySeason, ReplayResult, ReplayRound } from './xi-replay';
 
 /**
  * `pnpm replay:xi` — the harness B-025 exists to build, wired to the archive.
@@ -52,12 +50,13 @@ export class XiReplayService {
     params: FittedParams,
     options: {
       benchWeight?: number;
-      collisionLambda?: number;
+      concentrationLambda?: number;
       write?: boolean;
     } = {},
   ): Promise<ReplayReport> {
     const benchWeight = options.benchWeight ?? BENCH_WEIGHT;
-    const collisionLambda = options.collisionLambda ?? COLLISION_LAMBDA;
+    const concentrationLambda =
+      options.concentrationLambda ?? DEFENCE_CONCENTRATION_LAMBDA;
 
     const before = await this.repo.projectionCount();
     const beforeRuns = await this.repo.optimizerRunCount();
@@ -93,10 +92,7 @@ export class XiReplayService {
       rules,
       null,
       benchWeight,
-      {
-        fixtures: fixturesForRound(byRound.get(squadRound)!),
-        lambda: collisionLambda,
-      },
+      concentrationLambda,
     );
 
     const highs = await highsLoader();
@@ -107,7 +103,7 @@ export class XiReplayService {
       'model',
       rules,
       (lp) => highs.solve(lp),
-      { label, benchWeight, collisionLambda },
+      { label, benchWeight, concentrationLambda },
     );
 
     const after = await this.repo.projectionCount();
@@ -159,7 +155,7 @@ export class XiReplayService {
     const w = (s = '') => lines.push(s);
 
     w(
-      `Bench weight ${result.benchWeight}, collision lambda ${result.collisionLambda}. Season ${TEST_SEASON}, ` +
+      `Bench weight ${result.benchWeight}, concentration lambda ${result.concentrationLambda}. Season ${TEST_SEASON}, ` +
         `fifteen bought in round ${squadRound} and held — no transfers, so every difference between ` +
         `arms is the objective.`,
     );
@@ -172,8 +168,8 @@ export class XiReplayService {
     w(
       `| XI efficiency | ${result.xiEfficiency === null ? '—' : `${(result.xiEfficiency * 100).toFixed(1)}%`} |`,
     );
-    w(`| rounds owning a conflicting pair | ${result.roundsOwningAPair} |`);
-    w(`| rounds starting both sides of one | ${result.roundsStartingAPair} |`);
+    w(`| rounds holding a same-club defensive pair | ${result.roundsOwningAPair} |`);
+    w(`| rounds starting both of one | ${result.roundsStartingAPair} |`);
     w(
       `| projected points forgone in the XI and armband | ${result.totalEpForgone.toFixed(2)} |`,
     );
@@ -214,8 +210,8 @@ export class XiReplayService {
 
     w('<details><summary>Every round</summary>');
     w();
-    w('| round | points | ceiling | formation | owned pairs | started | captain exposure | forgone |');
-    w('|---:|---:|---:|---|---:|---:|---:|---:|');
+    w('| round | points | ceiling | formation | pairs held | started | forgone |');
+    w('|---:|---:|---:|---|---:|---:|---:|');
     for (const r of result.rounds) w(roundRow(r));
     w();
     w('</details>');
@@ -256,7 +252,7 @@ export class XiReplayService {
 
 function roundRow(r: ReplayRound): string {
   return (
-    `| ${r.round} | ${r.points} | ${r.ceiling} | ${r.formation} | ${r.ownedPairs} | ` +
-    `${r.startedPairs} | ${r.captainConflicts} | ${r.epForgone.toFixed(2)} |`
+    `| ${r.round} | ${r.points} | ${r.ceiling} | ${r.formation} | ${r.heldPairs} | ` +
+    `${r.startedPairs} | ${r.epForgone.toFixed(2)} |`
   );
 }

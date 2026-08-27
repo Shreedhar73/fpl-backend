@@ -18,14 +18,13 @@ import {
 } from '../modules/optimizer/optimizer.service';
 import {
   buildLp,
-  penalisedSquadEp,
   Candidate,
-  Collisions,
-  NO_COLLISIONS,
+  Concentration,
+  NO_CONCENTRATION,
 } from '../modules/optimizer/ilp';
 import {
   MIN_APPEARANCES,
-  COLLISION_LAMBDA,
+  DEFENCE_CONCENTRATION_LAMBDA,
 } from '../modules/optimizer/policy';
 import { Rules } from '../modules/optimizer/rules';
 
@@ -36,12 +35,12 @@ async function main(): Promise<void> {
   });
   try {
     const universe = await app.get(OptimizerService).buildUniverse();
-    const { candidates, rules, gameweekIds, collisions } = universe;
+    const { candidates, rules, gameweekIds, concentration } = universe;
     const highs = await highsLoader();
 
     const solve = (
       floor: boolean,
-      penalty: Collisions,
+      penalty: Concentration,
     ): { squad: Candidate[]; rules: Rules } => {
       const pool = prunePool(candidates, { floor });
       const sol = highs.solve(buildLp(pool, rules, penalty));
@@ -54,30 +53,33 @@ async function main(): Promise<void> {
       };
     };
 
-    const cases: [string, boolean, Collisions][] = [
-      ['neither guard', false, NO_COLLISIONS],
-      [`floor only (>=${MIN_APPEARANCES} apps)`, true, NO_COLLISIONS],
-      [`penalty only (lambda ${COLLISION_LAMBDA})`, false, collisions],
-      ['both guards (what we serve)', true, collisions],
+    const cases: [string, boolean, Concentration][] = [
+      ['neither guard', false, NO_CONCENTRATION],
+      [`floor only (>=${MIN_APPEARANCES} apps)`, true, NO_CONCENTRATION],
+      [
+        `concentration only (lambda ${DEFENCE_CONCENTRATION_LAMBDA})`,
+        false,
+        concentration,
+      ],
+      ['both guards (what we serve)', true, concentration],
     ];
 
     console.log(`\nGW${gameweekIds[0]}, horizon ${gameweekIds.length}, model ${universe.modelVersion}`);
     console.log(
       `${candidates.length} players, ${candidates.filter((c) => c.appearances < MIN_APPEARANCES).length} under the floor, ` +
-        `${collisions.pairs.length} conflicting pairs in the universe\n`,
+        `${concentration.pairs.length} same-club defensive pairs in the universe\n`,
     );
 
     for (const [name, floor, penalty] of cases) {
       const { squad } = solve(floor, penalty);
       const arranged = arrangeSquad(squad, rules, penalty);
       const rawEp = squad.reduce((s, c) => s + c.ep, 0);
-      const heldPairs = penalisedSquadEp(squad, collisions);
       const under = squad.filter((c) => c.appearances < MIN_APPEARANCES);
       console.log(`--- ${name}`);
       console.log(
         `    £${(squad.reduce((s, c) => s + c.cost, 0) / 10).toFixed(1)}m  ${arranged.formation}  ` +
-          `raw horizon EP ${rawEp.toFixed(2)}  penalised ${heldPairs.toFixed(2)}  ` +
-          `pairs held ${((rawEp - heldPairs) / (collisions.lambda || 1)).toFixed(0)}  ` +
+          `raw horizon EP ${rawEp.toFixed(2)}  charged ${arranged.concentrationPenalty.toFixed(2)}  ` +
+          `pairs held ${arranged.heldPairs.length}  ` +
           `sub-floor players ${under.length}`,
       );
       for (const p of arranged.squad
@@ -90,18 +92,16 @@ async function main(): Promise<void> {
             `${p.role === 'bench' ? `bench ${p.benchOrder}` : p.role}`,
         );
       }
-      if (arranged.heldCollisions.length) {
-        // Held, and separately whether the eleven started both sides. Since B-025 holding is the
-        // charged event; "kept in the XI" was the old wording and is now a different fact.
+      if (arranged.heldPairs.length) {
+        // Held, and separately whether the eleven started both. Only the started ones are charged
+        // (B-029) — benching one genuinely removes the exposure.
         console.log(
-          `    collisions held (charged ${arranged.heldPenalty.toFixed(2)} for holding, ` +
-            `${arranged.armbandPenalty.toFixed(2)} for the armband):`,
+          `    same-club defensive pairs held (charged ${arranged.concentrationPenalty.toFixed(2)}):`,
         );
-        for (const { pair, bothStarted, captained } of arranged.heldCollisions)
+        for (const { pair, bothStarted } of arranged.heldPairs)
           console.log(
-            `      ${pair.attacker.webName} vs ${pair.defender.webName}` +
-              `${bothStarted ? ' — both started' : ' — one of them benched'}` +
-              `${captained ? ', OUR CAPTAIN is one side' : ''}`,
+            `      ${pair.club}: ${pair.a.webName} + ${pair.b.webName}` +
+              `${bothStarted ? ' — both started, CHARGED' : ' — one of them benched, free'}`,
           );
       }
       console.log('');

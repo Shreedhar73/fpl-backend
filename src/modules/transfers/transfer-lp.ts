@@ -1,5 +1,5 @@
 import { PositionCode } from '../fpl-sync/mappers';
-import { Candidate, Collisions, NO_COLLISIONS } from '../optimizer/ilp';
+import { Candidate } from '../optimizer/ilp';
 import { POSITIONS, Rules } from '../optimizer/rules';
 
 /**
@@ -69,7 +69,6 @@ export interface TransferLpInput {
   freeTransfers: number;
   /** points charged per transfer beyond the free ones */
   hitCost: number;
-  collisions?: Collisions;
   /** cap on transfers considered at once; keeps the LP small and the advice human-sized */
   maxTransfers: number;
 }
@@ -84,7 +83,6 @@ export interface TransferLpInput {
  */
 export function buildTransferLp(input: TransferLpInput): string {
   const { owned, market, rules, bank, freeTransfers, hitCost } = input;
-  const collisions = input.collisions ?? NO_COLLISIONS;
   const all = [...owned, ...market];
   const ownedKeys = new Set(owned.map((c) => c.key));
 
@@ -97,14 +95,6 @@ export function buildTransferLp(input: TransferLpInput): string {
   const clubs = [...new Set(all.map((c) => c.teamId))];
   const inClub = (teamId: string) => all.filter((c) => c.teamId === teamId);
 
-  const inLp = new Set(all.map((c) => c.key));
-  const pairs =
-    collisions.lambda === 0
-      ? []
-      : collisions.pairs.filter(
-          (p) => inLp.has(p.attacker.key) && inLp.has(p.defender.key),
-        );
-
   const join = (parts: string[]) => parts.join(' +\n  ');
   const lines: string[] = [];
 
@@ -115,7 +105,6 @@ export function buildTransferLp(input: TransferLpInput): string {
   const terms: { coef: number; name: string }[] = [
     ...all.map((c) => ({ coef: c.ep, name: c.key })),
     { coef: -hitCost, name: 'h' },
-    ...pairs.map((_, i) => ({ coef: -collisions.lambda, name: `z_${i}` })),
   ];
   lines.push(
     ' obj: ' +
@@ -159,15 +148,14 @@ export function buildTransferLp(input: TransferLpInput): string {
     ` maxmoves: ${join(owned.map((c) => c.key))} >= ${Math.max(0, owned.length - input.maxTransfers)}`,
   );
 
-  pairs.forEach((p, i) => {
-    lines.push(
-      ` conf_${i}: ${p.attacker.key} + ${p.defender.key} - z_${i} <= 1`,
-    );
-  });
-
+  // **No penalty rows at all since B-029, and that is a real divergence rather than a tidy-up.** This
+  // LP carried B-011's collision rows on `x`; B-028 measured that rule to be pricing a hedge and it
+  // was retired. Its replacement — the defensive-concentration charge — keys off `y`, and this
+  // program has no `y`: it chooses a fifteen and never an eleven. So the transfer planner now
+  // optimises raw horizon EP less the hit, while the recommendation also prices the bench, the
+  // armband and the concentration. That gap is B-024's, and it got wider here, not narrower.
   lines.push('Bounds');
   lines.push(' h >= 0');
-  for (let i = 0; i < pairs.length; i++) lines.push(` z_${i} >= 0`);
 
   lines.push('Binary');
   lines.push('  ' + all.map((c) => c.key).join('\n  '));

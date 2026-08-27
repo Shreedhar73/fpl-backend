@@ -2,12 +2,12 @@ import highsLoader from 'highs';
 import { Rules } from '../rules';
 import {
   buildLp,
-  buildConflictPairs,
+  defencePairs,
   pickBestXi,
   penalisedSquadEp,
   Candidate,
-  Collisions,
-  NO_COLLISIONS,
+  Concentration,
+  NO_CONCENTRATION,
 } from '../ilp';
 import {
   OptimizerService,
@@ -61,214 +61,88 @@ function mk(
   };
 }
 
-describe('buildConflictPairs — both sides of one fixture (B-011)', () => {
-  // Brighton host Chelsea. Palmer is a MID, which is the whole point of the FWD+MID rule: the
-  // measured case was a MID captain against two of our own Brighton defenders.
-  const bhaDef = mk('deCuyper', 'DEF', 'BHA', 5);
-  const bhaGk = mk('verbruggen', 'GKP', 'BHA', 4);
-  const bhaMid = mk('mitoma', 'MID', 'BHA', 5);
-  const cheMid = mk('palmer', 'MID', 'CHE', 8);
-  const cheFwd = mk('joaoPedro', 'FWD', 'CHE', 6);
-  const cheDef = mk('cucurella', 'DEF', 'CHE', 5);
-  const roster = [bhaDef, bhaGk, bhaMid, cheMid, cheFwd, cheDef];
-  const fixture = [
-    {
-      homeTeamId: 'BHA',
-      awayTeamId: 'CHE',
-      homeTeamShortName: 'BHA',
-      awayTeamShortName: 'CHE',
-    },
-  ];
-
-  it('pairs every attacker against every opposing defender, in both directions', () => {
-    const pairs = buildConflictPairs(roster, fixture);
-    const shape = pairs
-      .map((p) => `${p.attacker.playerId}>${p.defender.playerId}`)
-      .sort();
-    expect(shape).toEqual(
-      [
-        // Chelsea attack, Brighton defend
-        'palmer>deCuyper',
-        'palmer>verbruggen',
-        'joaoPedro>deCuyper',
-        'joaoPedro>verbruggen',
-        // Brighton attack, Chelsea defend
-        'mitoma>cucurella',
-      ].sort(),
-    );
-  });
-
-  it('includes the MID×DEF pair (sabotage: restrict the rule to FWD and this goes red)', () => {
-    const pairs = buildConflictPairs(roster, fixture);
-    expect(
-      pairs.some(
-        (p) =>
-          p.attacker.position === 'MID' && p.defender.playerId === 'deCuyper',
-      ),
-    ).toBe(true);
-  });
-
-  it('never pairs two players of the same club, or players not in the fixture', () => {
-    const other = mk('outsider', 'DEF', 'ARS', 5);
-    const pairs = buildConflictPairs([...roster, other], fixture);
-    expect(pairs.every((p) => p.attacker.teamId !== p.defender.teamId)).toBe(
-      true,
-    );
-    expect(
-      pairs.some(
-        (p) => p.attacker.teamId === 'ARS' || p.defender.teamId === 'ARS',
-      ),
-    ).toBe(false);
-  });
-
-  it('a double gameweek contributes the pairs of both fixtures; a blank contributes none', () => {
-    const single = buildConflictPairs(roster, fixture);
-    const dgw = buildConflictPairs(roster, [
-      ...fixture,
-      {
-        homeTeamId: 'CHE',
-        awayTeamId: 'BHA',
-        homeTeamShortName: 'CHE',
-        awayTeamShortName: 'BHA',
-      }, // the reverse tie, same gameweek
-    ]);
-    expect(dgw.length).toBe(single.length * 2);
-    expect(buildConflictPairs(roster, [])).toEqual([]);
-  });
-});
-
-describe('buildLp — the collision penalty is in the objective, not a post-hoc filter', () => {
+describe('defencePairs — two of one club\'s defence (B-029)', () => {
   const squad = () => [
-    mk('a1', 'MID', 'CHE', 8),
+    mk('gk', 'GKP', 'BHA', 4),
     mk('d1', 'DEF', 'BHA', 5),
-    mk('d2', 'DEF', 'ARS', 5),
+    mk('d2', 'DEF', 'BHA', 5),
+    mk('d3', 'DEF', 'ARS', 5),
+    mk('m1', 'MID', 'BHA', 8),
   ];
-  const collisions = (lambda: number): Collisions => ({
-    pairs: buildConflictPairs(squad(), [
-      {
-        homeTeamId: 'BHA',
-        awayTeamId: 'CHE',
-        homeTeamShortName: 'BHA',
-        awayTeamShortName: 'CHE',
-      },
-    ]),
-    lambda,
+
+  it('pairs every defensive player of a club with every other, keeper included', () => {
+    const pairs = defencePairs(squad());
+    // GKP+d1, GKP+d2, d1+d2. The keeper counts: he shares the clean sheet exactly.
+    expect(pairs).toHaveLength(3);
+    expect(pairs.every((p) => p.club === 'BHA')).toBe(true);
   });
 
-  it('emits one z row per pair, on the SQUAD variables, at the policy lambda', () => {
-    const lp = buildLp(squad(), rules, collisions(1.5), 0.7);
-    // On `x`, not on `y` (B-025). B-023 had put this row on the XI variables, and the solver
-    // answered it by benching one side while still paying for both. Holding is the bet B-011's own
-    // sentence describes, and holding is what `x` says.
-    expect(lp).toMatch(/conf_0: p_a1 \+ p_d1 - z_0 <= 1/);
-    expect(lp).not.toMatch(/conf_0: y_/);
-    // 1.5 flat. The charge does NOT scale with the bench weight (B-026) — passing 0.7 above is what
-    // makes that assertion mean something rather than merely being satisfied by the default.
-    expect(lp).toMatch(/- 1\.5000 z_0/);
-    // The armband IS charged, and keyed to ownership rather than to starting (B-027): our captain
-    // against a player we OWN. `c + y` was B-023's version and benching answered it, which is the
-    // whole reason the penalty moved to `x`.
-    expect(lp).toMatch(/capconf_a_0: k_p_a1 \+ p_d1 - w_0 <= 1/);
-    expect(lp).toMatch(/capconf_d_0: k_p_d1 \+ p_a1 - w_0 <= 1/);
-    expect(lp).not.toMatch(/capconf_a_0: k_p_a1 \+ y_/);
-    expect(lp).toMatch(/- 1\.5000 w_0/);
-    // z and w are continuous — the -lambda objective pins each to its lower bound, so neither may be
-    // declared binary. A z in the Binary section is a needless integer variable.
-    expect(lp.slice(lp.indexOf('Binary'))).not.toMatch(/z_0/);
-    expect(lp.slice(lp.indexOf('Binary'))).not.toMatch(/w_0/);
-  });
-
-  it('charges the same lambda at every bench weight — the two knobs are uncoupled (B-026)', () => {
-    // They were coupled for exactly one change. A sweep of either knob has to be readable on its own,
-    // and the harness that can see what the bench weight does to the XI is one season old.
-    for (const weight of [0, 0.3, 0.7, 1]) {
-      expect(buildLp(squad(), rules, collisions(1.5), weight)).toMatch(
-        /- 1\.5000 z_0/,
-      );
+  it('never pairs across clubs, and never pairs an attacker', () => {
+    for (const p of defencePairs(squad())) {
+      expect(p.a.teamId).toBe(p.b.teamId);
+      for (const side of [p.a, p.b]) {
+        expect(['DEF', 'GKP']).toContain(side.position);
+      }
     }
   });
 
-  it('emits no z row at LAMBDA = 0 (the sabotage: the collision tests below go red, these stay green)', () => {
-    const lp = buildLp(squad(), rules, collisions(0));
+  it('finds nothing in a squad with one defender per club (sabotage: the tests below go green)', () => {
+    const spread = [
+      mk('a', 'DEF', 'T1', 5),
+      mk('b', 'DEF', 'T2', 5),
+      mk('c', 'GKP', 'T3', 4),
+    ];
+    expect(defencePairs(spread)).toEqual([]);
+  });
+});
+
+describe('buildLp — the concentration charge is on the XI, not on ownership', () => {
+  const squad = () => [
+    mk('d1', 'DEF', 'BHA', 5),
+    mk('d2', 'DEF', 'BHA', 5),
+    mk('m1', 'MID', 'CHE', 8),
+  ];
+  const concentration = (lambda: number): Concentration => ({
+    pairs: defencePairs(squad()),
+    lambda,
+  });
+
+  it('emits one d row per pair, on the XI variables, at the policy lambda', () => {
+    const lp = buildLp(squad(), rules, concentration(1.5), 0.7);
+    // On `y`, deliberately — and this is the assertion that separates B-029 from B-011. A benched
+    // player carries no variance, so benching IS an answer to this charge; owning both sides of a
+    // fixture was a bet you had already placed, which is why that one lived on `x`.
+    expect(lp).toMatch(/conc_0: y_p_d1 \+ y_p_d2 - d_0 <= 1/);
+    expect(lp).not.toMatch(/conc_0: p_d1/);
+    expect(lp).toMatch(/- 1\.5000 d_0/);
+    // Nothing survives of the retired rule.
     expect(lp).not.toMatch(/conf_/);
+    expect(lp).not.toMatch(/capconf/);
+    expect(lp).not.toMatch(/z_0/);
+    expect(lp).not.toMatch(/w_0/);
+    // d is continuous — the -lambda objective pins it to its lower bound.
+    expect(lp.slice(lp.indexOf('Binary'))).not.toMatch(/d_0/);
+  });
+
+  it('emits no d row at lambda 0 (the sabotage: the charge tests below go red, these stay green)', () => {
+    const lp = buildLp(squad(), rules, concentration(0));
+    expect(lp).not.toMatch(/conc_/);
     expect(lp).toMatch(/budget:[\s\S]*<= 1000/);
     expect(lp).toMatch(/squad:[\s\S]*= 15/);
   });
 
   it('never names a player the LP does not contain (an implicit free variable with no meaning)', () => {
-    // The pair set is built over the whole universe; only the two players in this LP may appear.
-    const pool = [mk('a1', 'MID', 'CHE', 8)];
-    const lp = buildLp(pool, rules, collisions(1));
-    expect(lp).not.toMatch(/conf_/);
-    expect(lp).not.toMatch(/p_d1/);
+    const pool = [mk('d1', 'DEF', 'BHA', 5)];
+    const lp = buildLp(pool, rules, concentration(1));
+    expect(lp).not.toMatch(/conc_/);
+    expect(lp).not.toMatch(/p_d2/);
   });
 });
 
-describe('the solver acts on the penalty', () => {
-  /** A universe with two interchangeable defenders: one collides with our best midfielder, one does
-   * not, and the colliding one is worth `edge` more points. */
-  function universe(edge: number): Candidate[] {
-    const list: Candidate[] = [
-      mk('gk1', 'GKP', 'T1', 4),
-      mk('gk2', 'GKP', 'T2', 4),
-      mk('star', 'MID', 'CHE', 20),
-    ];
-    for (let i = 0; i < 4; i++) list.push(mk(`d${i}`, 'DEF', `T${i + 3}`, 6));
-    list.push(mk('dCollide', 'DEF', 'BHA', 6 + edge));
-    list.push(mk('dClean', 'DEF', 'ARS', 6));
-    for (let i = 0; i < 4; i++) list.push(mk(`m${i}`, 'MID', `T${i + 3}`, 6));
-    for (let i = 0; i < 3; i++) list.push(mk(`f${i}`, 'FWD', `T${i + 3}`, 6));
-    return list;
-  }
-  const fixtures = [
-    {
-      homeTeamId: 'BHA',
-      awayTeamId: 'CHE',
-      homeTeamShortName: 'BHA',
-      awayTeamShortName: 'CHE',
-    },
-  ];
-  const solveWith = async (edge: number, lambda: number) => {
-    const cands = universe(edge);
-    const collisions: Collisions = {
-      pairs: buildConflictPairs(cands, fixtures),
-      lambda,
-    };
-    const highs = await highsLoader();
-    const sol = highs.solve(buildLp(cands, rules, collisions));
-    expect(sol.Status).toBe('Optimal');
-    return cands.filter(
-      (c) => ((sol.Columns[c.key] as { Primal?: number })?.Primal ?? 0) > 0.5,
-    );
-  };
-
-  it('drops the colliding defender when the pair costs more than it is worth', async () => {
-    const chosen = await solveWith(0.5, 2);
-    const ids = chosen.map((c) => c.playerId);
-    expect(ids).toContain('star');
-    expect(ids).toContain('dClean');
-    expect(ids).not.toContain('dCollide');
-  });
-
-  it('still takes the pair when it is worth more than LAMBDA — a penalty, not an exclusion', async () => {
-    const chosen = await solveWith(3, 1);
-    const ids = chosen.map((c) => c.playerId);
-    expect(ids).toContain('star');
-    expect(ids).toContain('dCollide');
-  });
-
-  it('takes the colliding defender at LAMBDA = 0 (sabotage: the first case above goes red)', async () => {
-    const chosen = await solveWith(0.5, 0);
-    expect(chosen.map((c) => c.playerId)).toContain('dCollide');
-  });
-});
-
-describe('the eleven is chosen on points, and the pair is charged anyway (B-025)', () => {
+describe('the eleven pays for a concentrated defence, and benching answers it (B-029)', () => {
   /**
-   * A fifteen whose three best defenders all face our captain's club. Before B-025 the penalty was
-   * charged against the XI, so the solver answered it by starting the 4th-best defender and benching
-   * the 3rd — paying for a player it would not field. `dCleanEp` tunes how much that swap would have
-   * cost, and every test here asserts it no longer happens.
+   * Five defenders, three of them Brighton's. The best XI on raw points would start all three; the
+   * charge is what makes starting the third cost something.
    */
   function squad(dCleanEp = 4): Candidate[] {
     return [
@@ -289,203 +163,88 @@ describe('the eleven is chosen on points, and the pair is charged anyway (B-025)
       mk('f3', 'FWD', 'T10', 5),
     ];
   }
-  const collisions = (lambda: number, dCleanEp = 4): Collisions => ({
-    pairs: buildConflictPairs(squad(dCleanEp), [
-      {
-        homeTeamId: 'BHA',
-        awayTeamId: 'CHE',
-        homeTeamShortName: 'BHA',
-        awayTeamShortName: 'CHE',
-      },
-    ]),
+  const concentration = (lambda: number, dCleanEp = 4): Concentration => ({
+    pairs: defencePairs(squad(dCleanEp)),
     lambda,
   });
 
-  it('starts the better-projected defender however large the penalty', () => {
-    // The old behaviour is the thing being asserted against: at lambda 2 this used to start dClean
-    // over dC, and at lambda 3 it used to drop `star` from the eleven altogether. The charge is on
-    // ownership now, so the fifteen is already paid for and the eleven is a pure points question.
-    for (const lambda of [0, 1, 2, 3, 4]) {
-      const xi = pickBestXi(squad(), rules);
-      expect(xi.starters.has('p_dC')).toBe(true);
-      expect(xi.starters.has('p_dClean')).toBe(false);
-      expect(xi.starters.has('p_star')).toBe(true);
-      expect(xi.captainKey).toBe('p_star');
-      // The lambda is in the loop only to make the point that nothing here reads it: `pickBestXi`
-      // no longer takes a collision context at all, which is the compile-time half of this test.
-      expect(collisions(lambda).lambda).toBe(lambda);
-    }
+  it('starts a worse defender from another club once the pairs are priced', () => {
+    // Unpenalised, the three Brighton defenders start and dClean does not.
+    const clean = pickBestXi(squad(), rules, 0.7, NO_CONCENTRATION);
+    expect(clean.starters.has('p_dC')).toBe(true);
+    expect(clean.starters.has('p_dClean')).toBe(false);
+
+    // Priced, starting all three costs 3 pairs; starting two costs 1. The swap buys that back.
+    const charged = pickBestXi(squad(), rules, 0.7, concentration(3));
+    expect(charged.starters.has('p_dClean')).toBe(true);
+    expect(charged.starters.size).toBe(11);
   });
 
-  it('charges the pair the squad holds even when the eleven does not start both sides', () => {
-    // The B-025 case in one assertion. `dBench` is a defender at 1 point who never starts; make him
-    // the colliding one and the eleven contains only his opposite number, not him.
-    const held = squad().map((c) =>
-      c.playerId === 'dBench' ? mk('dBench', 'DEF', 'BHA', 1) : c,
+  it('charges the STARTED pairs only — benching one member is a real answer here', () => {
+    // The contrast with B-011 in one assertion. `dBench` at 1 point never starts, so his two pairs
+    // with the other Brighton defenders are held and cost nothing.
+    const arranged = arrangeSquad(
+      squad(),
+      rules,
+      { pairs: defencePairs(squad()), lambda: 1 },
     );
-    const pairs = buildConflictPairs(held, [
-      {
-        homeTeamId: 'BHA',
-        awayTeamId: 'CHE',
-        homeTeamShortName: 'BHA',
-        awayTeamShortName: 'CHE',
-      },
-    ]);
-    const arranged = arrangeSquad(held, rules, { pairs, lambda: 1 });
-
-    const benched = arranged.heldCollisions.filter(
-      (h) => h.pair.defender.playerId === 'dBench',
-    );
-    expect(benched.length).toBeGreaterThan(0);
-    expect(benched.every((h) => h.bothStarted)).toBe(false);
-    // ...and it is still charged. Before B-025 this pair contributed nothing, and the payload said
-    // `taken: []` about a squad holding both sides of it.
-    expect(arranged.heldPenalty).toBeCloseTo(1 * pairs.length, 6);
+    const held = arranged.heldPairs;
+    const started = held.filter((h) => h.bothStarted);
+    expect(held.length).toBeGreaterThan(started.length);
+    expect(arranged.concentrationPenalty).toBeCloseTo(started.length, 6);
   });
 
-  it('charges the same whichever legal eleven is fielded — the charge is a fact about the fifteen', () => {
-    // Two fifteens holding the SAME pairs, differing only in a projection that moves a colliding
-    // defender in and out of the eleven. A charge that changed between them would be one the eleven
-    // could still dodge.
-    const starting = squad();
-    const benchedInstead = squad().map((c) =>
-      c.playerId === 'dC' ? mk('dC', 'DEF', 'BHA', 0.5) : c,
+  it('reports the pairs it holds but did not start, so the money spent is still visible', () => {
+    const withBenchedBrighton = squad().map((c) =>
+      c.playerId === 'dBench' ? mk('dBench', 'DEF', 'BHA', 0.5) : c,
     );
-    const pairsOf = (cands: Candidate[]) =>
-      buildConflictPairs(cands, [
-        {
-          homeTeamId: 'BHA',
-          awayTeamId: 'CHE',
-          homeTeamShortName: 'BHA',
-          awayTeamShortName: 'CHE',
-        },
-      ]);
-
-    const a = arrangeSquad(starting, rules, {
-      pairs: pairsOf(starting),
+    const arranged = arrangeSquad(withBenchedBrighton, rules, {
+      pairs: defencePairs(withBenchedBrighton),
       lambda: 1,
     });
-    const b = arrangeSquad(benchedInstead, rules, {
-      pairs: pairsOf(benchedInstead),
-      lambda: 1,
-    });
-
-    // The elevens really do differ — otherwise this test proves nothing.
-    const startedIn = (arranged: typeof a, id: string) =>
-      arranged.squad.find((p) => p.playerId === id)?.role !== 'bench';
-    expect(startedIn(a, 'dC')).toBe(true);
-    expect(startedIn(b, 'dC')).toBe(false);
-
-    expect(b.heldPenalty).toBeCloseTo(a.heldPenalty, 6);
-    expect(b.heldCollisions.length).toBe(a.heldCollisions.length);
+    const benchedPairs = arranged.heldPairs.filter((h) => !h.bothStarted);
+    expect(benchedPairs.length).toBeGreaterThan(0);
+    expect(
+      benchedPairs.every(
+        (h) => h.pair.a.teamId === 'BHA' && h.pair.b.teamId === 'BHA',
+      ),
+    ).toBe(true);
   });
 
-  it('moves the armband off a captain who doubles a collision the squad owns (B-027)', () => {
-    // `star` projects 12 against midfielders on 7, so nothing but the armband charge can move it. He
-    // faces three defenders we own: captaining him costs 3 x lambda on top of what the squad already
-    // pays for holding them.
-    const withoutCharge = pickBestXi(squad(), rules, 0.7, NO_COLLISIONS);
-    expect(withoutCharge.captainKey).toBe('p_star');
-
-    const charged = pickBestXi(squad(), rules, 0.7, collisions(2));
-    expect(charged.starters.has('p_star')).toBe(true); // still worth starting
-    expect(charged.captainKey).not.toBe('p_star'); // not worth doubling
-    expect(charged.viceKey).toBeDefined();
-  });
-
-  it('charges the armband even when the other side is BENCHED — the B-025 regression', () => {
-    // This is the assertion the whole entry exists for. B-023 keyed the captain charge off `y`, so
-    // benching the other side answered it; B-025 deleted the row rather than re-keying it, and the
-    // live recommendation then captained a Chelsea midfielder into two Brighton defenders it owned
-    // and started, paying nothing. The charge now keys off `x`: owning him was the bet.
-    const held = squad().map((c) =>
-      c.playerId === 'dA'
-        ? mk('dA', 'DEF', 'BHA', 0.1) // owned, far too weak to start
-        : c,
-    );
-    const pairs = buildConflictPairs(held, [
-      {
-        homeTeamId: 'BHA',
-        awayTeamId: 'CHE',
-        homeTeamShortName: 'BHA',
-        awayTeamShortName: 'CHE',
-      },
-    ]);
-    const arranged = arrangeSquad(held, rules, { pairs, lambda: 1 });
-
-    const benchedSide = arranged.squad.find((p) => p.playerId === 'dA');
-    expect(benchedSide?.role).toBe('bench');
-
-    const withDa = arranged.heldCollisions.filter(
-      (h) => h.pair.defender.playerId === 'dA',
-    );
-    expect(withDa.length).toBe(1);
-    expect(withDa[0].bothStarted).toBe(false);
-    // Held and benched, and still charged twice over: once for owning it, once for the armband.
-    expect(withDa[0].captained).toBe(true);
-    expect(arranged.armbandPenalty).toBeGreaterThan(0);
-  });
-
-  it('adds the armband charge on top of the ownership charge, never instead of it', () => {
-    const arranged = arrangeSquad(squad(), rules, collisions(1));
-    const captainedPairs = arranged.heldCollisions.filter((h) => h.captained);
-    expect(arranged.heldPenalty).toBeCloseTo(arranged.heldCollisions.length, 6);
-    expect(arranged.armbandPenalty).toBeCloseTo(captainedPairs.length, 6);
-  });
-
-  it('reports nothing at lambda 0 — the sabotage the two tests above go red under', () => {
-    const arranged = arrangeSquad(squad(), rules, collisions(0));
-    expect(arranged.heldPenalty).toBe(0);
-    expect(arranged.armbandPenalty).toBe(0);
-    // The pairs are still built; it is the price that is zero. A payload reporting an empty list
-    // here is reporting "nothing was charged", not "no conflict exists".
-    expect(collisions(0).pairs.length).toBeGreaterThan(0);
-    expect(arranged.heldCollisions.length).toBeGreaterThan(0);
-    expect(arranged.heldCollisions.every((h) => !h.bothStarted)).toBe(false);
+  it('charges nothing at lambda 0 — the sabotage the two tests above go red under', () => {
+    const arranged = arrangeSquad(squad(), rules, concentration(0));
+    expect(arranged.concentrationPenalty).toBe(0);
+    // The pairs are still built; it is the price that is zero.
+    expect(concentration(0).pairs.length).toBeGreaterThan(0);
+    expect(arranged.heldPairs.length).toBeGreaterThan(0);
   });
 
   it('returns a legal XI in every case: one keeper, eleven players, a legal split', () => {
-    const xi = pickBestXi(squad(), rules);
-    const starters = squad().filter((c) => xi.starters.has(c.key));
-    expect(starters.length).toBe(11);
-    expect(starters.filter((c) => c.position === 'GKP').length).toBe(1);
-    expect(
-      starters.filter((c) => c.position === 'DEF').length,
-    ).toBeGreaterThanOrEqual(3);
-    expect(xi.formation).toMatch(/^\d-\d-\d$/);
+    for (const lambda of [0, 1, 3, 6]) {
+      const xi = pickBestXi(squad(), rules, 0.7, concentration(lambda));
+      const starters = squad().filter((c) => xi.starters.has(c.key));
+      expect(starters.length).toBe(11);
+      expect(starters.filter((c) => c.position === 'GKP').length).toBe(1);
+      expect(xi.formation).toMatch(/^\d-\d-\d$/);
+    }
   });
 
   it('arrangeSquad benches the four it did not start, and names one captain', () => {
-    const arranged = arrangeSquad(squad(), rules, collisions(2));
+    const arranged = arrangeSquad(squad(), rules, concentration(1));
     expect(arranged.squad.filter((p) => p.role === 'bench').length).toBe(4);
     expect(arranged.squad.filter((p) => p.role === 'captain').length).toBe(1);
-    expect(arranged.heldPenalty).toBeGreaterThan(0);
-    expect(arranged.heldCollisions.length).toBeGreaterThan(0);
   });
 });
 
-describe('penalisedSquadEp — the quantity the ILP actually maximises', () => {
+describe('penalisedSquadEp — raw horizon EP, and it says so (B-029)', () => {
   const a = mk('a', 'MID', 'CHE', 10);
   const d = mk('d', 'DEF', 'BHA', 5);
-  const pairs = buildConflictPairs(
-    [a, d],
-    [
-      {
-        homeTeamId: 'BHA',
-        awayTeamId: 'CHE',
-        homeTeamShortName: 'BHA',
-        awayTeamShortName: 'CHE',
-      },
-    ],
-  );
 
-  it('charges benchWeight x lambda per held pair, and nothing when only one side is held', () => {
-    // 15 raw, less 2 for the one pair. This function exists to price a user's squad the same way the
-    // solve priced the recommendation — a comparison at a different rate would report its own
-    // arithmetic as a gap between two squads.
-    expect(penalisedSquadEp([a, d], { pairs, lambda: 2 })).toBeCloseTo(13, 6);
-    expect(penalisedSquadEp([a], { pairs, lambda: 2 })).toBeCloseTo(10, 6);
-    expect(penalisedSquadEp([a, d], NO_COLLISIONS)).toBeCloseTo(15, 6);
+  it('charges nothing, because the only penalty left is charged on the eleven', () => {
+    // Not an oversight and not dead code: this is handed a fifteen with no eleven chosen, and there
+    // is no honest way to price a starting decision that has not been made.
+    expect(penalisedSquadEp([a, d])).toBeCloseTo(15, 6);
+    expect(penalisedSquadEp([a])).toBeCloseTo(10, 6);
   });
 });
 
@@ -536,11 +295,18 @@ describe('the appearance floor applies to the pool and nowhere else (B-010)', ()
   it('buildUniverse keeps every player — a user squad holding a new signing must still score', async () => {
     // Sabotage: move the filter from prunePool into buildUniverse and this goes red, because the
     // new signing loses his candidate and `insights` would score him as a removed player at zero.
-    const players = universe().map((c) => ({
+    const players = [
+      ...universe(),
+      // A second defender of a club that already has one, so the concentration context has something
+      // to find. Without it this universe holds one defensive player per club and the assertion at
+      // the foot of this test would pass on an empty list forever.
+      mk('clubmate', 'DEF', 'T5', 5, { appearances: 40, cost: 45 }),
+    ].map((c) => ({
       id: c.playerId,
       webName: c.webName,
       position: c.position,
       teamId: c.teamId,
+      teamShortName: c.teamShortName,
       nowCost: c.cost,
     }));
     const repo = {
@@ -556,15 +322,11 @@ describe('the appearance floor applies to the pool and nowhere else (B-010)', ()
         })),
       loadPlayers: async () => players,
       appearanceCounts: async () =>
-        new Map(universe().map((c) => [c.playerId, c.appearances])),
-      fixturesFor: async () => [
-        {
-          homeTeamId: 'T20',
-          awayTeamId: 'T1',
-          homeTeamShortName: 'T20',
-          awayTeamShortName: 'T1',
-        },
-      ],
+        new Map(
+          [...universe(), mk('clubmate', 'DEF', 'T5', 5, { appearances: 40 })].map(
+            (c) => [c.playerId, c.appearances],
+          ),
+        ),
     } as unknown as OptimizerRepository;
 
     const universeBuilt = await new OptimizerService(repo).buildUniverse();
@@ -575,82 +337,63 @@ describe('the appearance floor applies to the pool and nowhere else (B-010)', ()
       universeBuilt.candidates.find((c) => c.playerId === 'newSigning')
         ?.appearances,
     ).toBe(1);
-    // and the collision context comes back with it, built over the whole universe
-    expect(universeBuilt.collisions.pairs.length).toBeGreaterThan(0);
+    // and the concentration context comes back with it, built over the whole universe — including
+    // players the pool would prune, because `insights` scores squads the optimizer did not choose.
+    expect(universeBuilt.concentration.pairs.length).toBeGreaterThan(0);
+    expect(
+      universeBuilt.concentration.pairs.every((p) => p.a.teamId === p.b.teamId),
+    ).toBe(true);
   });
 });
 
 /**
  * B-018 — the payload a refusal is stated in.
  *
- * Plan 009 specified `collisions: [{ fixture, attacker, defender, lambda, taken }]` and what shipped
- * emitted two team **cuids** instead. That defect is invisible in every test that checks a count, and
- * only surfaces when somebody tries to render it — a cuid on screen looks like data. So the test is
- * a shape test on the emitted strings, not on the count.
+ * Plan 009 specified a collision entry and what shipped emitted two team **cuids** instead. That
+ * defect is invisible in every test that checks a count, and only surfaces when somebody tries to
+ * render it — a cuid on screen looks like data. The rule those entries described is retired (B-029),
+ * and the shape test moved with it rather than being deleted: the concentration entry names a club
+ * and two players, and a club id would break it in exactly the same way.
  */
 describe('the reasoning payload can actually be rendered (B-018)', () => {
   /** Prisma's cuid: `c` then 24 lowercase alphanumerics. The exact thing that must never be emitted. */
   const CUID = /^c[a-z0-9]{24}$/;
 
-  const pairs = buildConflictPairs(
-    [
-      mk('striker', 'FWD', 'tChe', 6),
-      mk('keeper', 'GKP', 'tBha', 4),
-      mk('back', 'DEF', 'tBha', 4),
-    ],
-    [
-      {
-        homeTeamId: 'tChe',
-        awayTeamId: 'tBha',
-        homeTeamShortName: 'CHE',
-        awayTeamShortName: 'BHA',
-      },
-    ],
-  );
+  // Two of one club's defence, with the club carried as its SHORT NAME rather than its id.
+  const pairs = defencePairs([
+    mk('keeper', 'GKP', 'tBha', 4, { teamShortName: 'BHA' }),
+    mk('back', 'DEF', 'tBha', 4, { teamShortName: 'BHA' }),
+    mk('striker', 'FWD', 'tChe', 6, { teamShortName: 'CHE' }),
+  ]);
 
-  it('labels a pair with the match, home side first', () => {
-    expect(pairs.length).toBeGreaterThan(0);
-    for (const p of pairs) expect(p.fixture).toBe('CHE vs BHA');
+  it('labels a pair with the club, by short name', () => {
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].club).toBe('BHA');
   });
 
-  it('labels the pair the same way whichever side attacks', () => {
-    // A pair is "our attacker against our defender in this match". The match does not change when
-    // the roles do, and two labels for one fixture would read as two fixtures.
-    const bothWays = buildConflictPairs(
-      [
-        mk('cheStriker', 'FWD', 'tChe', 6),
-        mk('cheBack', 'DEF', 'tChe', 4),
-        mk('bhaStriker', 'FWD', 'tBha', 6),
-        mk('bhaBack', 'DEF', 'tBha', 4),
-      ],
-      [
-        {
-          homeTeamId: 'tChe',
-          awayTeamId: 'tBha',
-          homeTeamShortName: 'CHE',
-          awayTeamShortName: 'BHA',
-        },
-      ],
+  it('pairs only within a club, so a label is never ambiguous', () => {
+    const twoClubs = defencePairs([
+      mk('bhaKeeper', 'GKP', 'tBha', 4, { teamShortName: 'BHA' }),
+      mk('bhaBack', 'DEF', 'tBha', 4, { teamShortName: 'BHA' }),
+      mk('cheKeeper', 'GKP', 'tChe', 4, { teamShortName: 'CHE' }),
+      mk('cheBack', 'DEF', 'tChe', 4, { teamShortName: 'CHE' }),
+    ]);
+    expect(new Set(twoClubs.map((p) => p.club))).toEqual(
+      new Set(['BHA', 'CHE']),
     );
-    expect(new Set(bothWays.map((p) => p.fixture))).toEqual(
-      new Set(['CHE vs BHA']),
-    );
+    for (const p of twoClubs) expect(p.a.teamId).toBe(p.b.teamId);
   });
 
-  it('emits no cuid anywhere in the rendered collision entry', () => {
-    // The entry as `RecommendationReasoning` builds it — names and a label, no ids.
+  it('emits no cuid anywhere in the rendered concentration entry', () => {
+    // The entry as `RecommendationReasoning` builds it — a club short name and two web names, no ids.
     const entries = pairs.map((p) => ({
-      fixture: p.fixture,
-      attacker: p.attacker.webName,
-      defender: p.defender.webName,
+      club: p.club,
+      players: [p.a.webName, p.b.webName],
       lambda: 1,
-      bothStarted: true,
-      captained: false,
     }));
     for (const e of entries) {
-      for (const value of Object.values(e)) {
-        if (typeof value === 'string') expect(value).not.toMatch(CUID);
-      }
+      expect(e.club).not.toMatch(CUID);
+      for (const name of e.players) expect(name).not.toMatch(CUID);
     }
   });
 

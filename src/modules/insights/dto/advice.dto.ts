@@ -239,84 +239,60 @@ export class AppearanceFloorDto {
   statement!: string;
 }
 
-export class CollisionTakenDto {
+export class DefencePairDto {
+  @ApiProperty({ description: 'The club both play for — e.g. "BHA". Never a team id.' })
+  club!: string;
+
   @ApiProperty({
-    description:
-      'The match, home side first — e.g. "CHE vs BHA". Plan 009 specified this and what shipped ' +
-      'emitted two team cuids, which is why nothing could render it: a cuid on screen looks like data.',
+    type: [String],
+    description: 'The two defensive players, by web name.',
   })
-  fixture!: string;
-
-  @ApiProperty()
-  attacker!: string;
-
-  @ApiProperty()
-  defender!: string;
+  players!: string[];
 
   @ApiProperty({
-    description:
-      'Horizon points charged for HOLDING this pair. Charged whether or not both sides start.',
+    description: 'Horizon points charged for starting this pair together.',
   })
   lambda!: number;
-
-  @ApiProperty({
-    description:
-      'Whether the eleven started both sides of this pair. Holding is what is charged and starting ' +
-      'is a separate fact (B-025): a squad can pay for a pair and field only one half of it, which ' +
-      'is a state the payload had no way to express before — it reported no conflict at all.',
-  })
-  bothStarted!: boolean;
-
-  @ApiProperty({
-    description:
-      'Whether OUR captain is one side of this pair. The armband doubles the stake on a correlated ' +
-      'outcome, not only the reward, so a captained pair is charged a second time (B-027) — and, ' +
-      'like the first charge, against a player we own rather than one we start.',
-  })
-  captained!: boolean;
 }
 
-export class FixtureCollisionsDto {
+export class HeldDefencePairDto {
+  @ApiProperty({ description: 'The club both play for — e.g. "BHA".' })
+  club!: string;
+
+  @ApiProperty({ type: [String] })
+  players!: string[];
+}
+
+export class DefenceConcentrationDto {
   @ApiProperty({
     description:
-      'Horizon points charged per conflicting pair the squad HOLDS. The policy constant itself: it ' +
-      'was briefly scaled by the bench weight (B-025) and a second field carried the constant ' +
-      'beside it, which B-026 undid — the scaling was exact only for a pair nobody starts.',
+      'Horizon points charged per pair of our defensive players who START for the same club.',
   })
   lambda!: number;
 
   @ApiProperty({
-    description: 'Conflicting pairs across the whole candidate pool.',
+    description:
+      'Same-club defensive pairs the fifteen holds, started or not. A pair with one member benched ' +
+      'is held and not charged — a user should still see it, because the money was spent.',
   })
-  pairsConsidered!: number;
+  pairsHeld!: number;
 
   @ApiProperty({
-    description:
-      'Horizon EP this SQUAD was charged in total — the pairs it holds, plus what the armband added ' +
-      'by doubling one of them. Before B-025 this was charged against the eleven, so a squad that ' +
-      'owned both sides of a conflict and started one of them reported zero.',
+    description: 'Horizon EP charged, which is for the started pairs only.',
   })
   penaltyEp!: number;
 
-  @ApiProperty({
-    description:
-      'Of that total, what the armband added (B-027). Zero when the captain is in no held pair. ' +
-      'Separate because a charge a panel cannot attribute is one a reader cannot argue with.',
-  })
-  armbandEp!: number;
+  @ApiProperty({ type: [DefencePairDto] })
+  started!: DefencePairDto[];
 
-  @ApiProperty({
-    type: [CollisionTakenDto],
-    description:
-      'Every pair the squad holds, each with whether both sides started. Empty means the squad ' +
-      'holds no conflicting pair — not that none was charged.',
-  })
-  taken!: CollisionTakenDto[];
+  @ApiProperty({ type: [HeldDefencePairDto] })
+  benched!: HeldDefencePairDto[];
 
   @ApiProperty({
     description:
-      'What this guard is, and — unlike the floor — what it is NOT. It was measured over 103 ' +
-      'archived gameweeks and did not improve realised points. A UI must not present it as if it had.',
+      'What this guard is, and what it is NOT. The correlation behind it was measured over three ' +
+      'archived seasons; the CHARGE is a policy choice, because nothing has measured that a ' +
+      'narrower squad scores more. A UI must not present it as if something had.',
   })
   statement!: string;
 }
@@ -325,8 +301,8 @@ export class ReasoningDto {
   @ApiProperty({ type: AppearanceFloorDto })
   appearanceFloor!: AppearanceFloorDto;
 
-  @ApiProperty({ type: FixtureCollisionsDto })
-  fixtureCollisions!: FixtureCollisionsDto;
+  @ApiProperty({ type: DefenceConcentrationDto })
+  defenceConcentration!: DefenceConcentrationDto;
 }
 
 export class AdviceDto {

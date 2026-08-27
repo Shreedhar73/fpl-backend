@@ -352,3 +352,82 @@ Bench weight 0.7, collision lambda 1. Season 2025-26, fifteen bought in round 1 
 | 38 | 69 | 81 | 5-4-1 | 0 | 0 | 0 | 0.00 |
 
 </details>
+
+## defence concentration (B-029)
+
+Bench weight 0.7, concentration lambda 1. Season 2025-26, fifteen bought in round 1 and held — no transfers, so every difference between arms is the objective.
+
+| | |
+|---|---:|
+| rounds | 38 |
+| realised points (the LP's own XI) | 1682 |
+| ceiling (best XI these fifteen could field) | 1902 |
+| XI efficiency | 88.4% |
+| rounds holding a same-club defensive pair | 38 |
+| rounds starting both of one | 8 |
+| projected points forgone in the XI and armband | 71.34 |
+| rounds forgoing any | 31 |
+
+**The fifteen.** Ismaïla Sarr (MID, T31), Matz Sels (GKP, T17), Pedro Porro Sauceda (DEF, T6), Bryan Mbeumo (MID, T1), Maximilian Kilman (DEF, T21), Cole Palmer (MID, T8), Maxence Lacroix (DEF, T31), Nicolas Jackson (FWD, T8), Bernd Leno (GKP, T54), Darwin Núñez Ribeiro (FWD, T14), Nikola Milenković (DEF, T17), Ollie Watkins (FWD, T7), Daniel Muñoz Mejía (DEF, T31), Luis Díaz Marulanda (MID, T14), Bruno Borges Fernandes (MID, T1).
+
+**Rounds where the solver benched a better-projected player**, worst first. This is the shape of the GW2 complaint that opened B-025, counted over a season rather than argued from one solve.
+
+| round | forgone | benched | for |
+|---:|---:|---|---|
+| 8 | 1.33 | Daniel Muñoz Mejía (4.63) | Pedro Porro Sauceda (3.30) |
+| 8 | 0.18 | Matz Sels (3.48) | Bernd Leno (3.30) |
+| 18 | 0.20 | Daniel Muñoz Mejía (3.38) | Maximilian Kilman (3.18) |
+| 19 | 0.69 | Daniel Muñoz Mejía (3.32) | Pedro Porro Sauceda (2.63) |
+| 4 | 0.91 | Daniel Muñoz Mejía (4.29) | Nikola Milenković (3.38) |
+| 4 | 0.06 | Matz Sels (3.08) | Bernd Leno (3.01) |
+| 17 | 0.29 | Daniel Muñoz Mejía (3.17) | Maximilian Kilman (2.88) |
+| 21 | 0.34 | Daniel Muñoz Mejía (3.12) | Pedro Porro Sauceda (2.78) |
+| 26 | 0.42 | Daniel Muñoz Mejía (3.07) | Maximilian Kilman (2.65) |
+| 2 | 0.82 | Daniel Muñoz Mejía (4.26) | Nikola Milenković (3.44) |
+| 30 | 0.79 | Daniel Muñoz Mejía (2.90) | Pedro Porro Sauceda (2.11) |
+| 24 | 0.17 | Daniel Muñoz Mejía (2.85) | Maximilian Kilman (2.68) |
+
+<details><summary>Every round</summary>
+
+| round | points | ceiling | formation | pairs held | started | forgone |
+|---:|---:|---:|---|---:|---:|---:|
+| 1 | 39 | 44 | 3-5-2 | 2 | 0 | 0.01 |
+| 2 | 40 | 40 | 4-4-2 | 2 | 0 | 2.86 |
+| 3 | 72 | 73 | 4-4-2 | 2 | 0 | 2.22 |
+| 4 | 42 | 48 | 4-4-2 | 2 | 0 | 3.02 |
+| 5 | 36 | 38 | 4-4-2 | 2 | 0 | 1.48 |
+| 6 | 31 | 45 | 4-4-2 | 2 | 0 | 2.33 |
+| 7 | 45 | 51 | 4-4-2 | 2 | 0 | 2.61 |
+| 8 | 47 | 49 | 4-4-2 | 2 | 0 | 3.32 |
+| 9 | 48 | 59 | 5-4-1 | 2 | 1 | 0.00 |
+| 10 | 43 | 46 | 5-4-1 | 2 | 1 | 0.00 |
+| 11 | 43 | 45 | 5-4-1 | 2 | 1 | 0.26 |
+| 12 | 51 | 65 | 5-4-1 | 2 | 1 | 0.00 |
+| 13 | 32 | 33 | 5-4-1 | 2 | 1 | 0.00 |
+| 14 | 54 | 70 | 5-4-1 | 2 | 1 | 0.00 |
+| 15 | 60 | 60 | 5-4-1 | 2 | 1 | -0.00 |
+| 16 | 53 | 53 | 5-4-1 | 2 | 1 | 0.21 |
+| 17 | 23 | 29 | 4-5-1 | 2 | 0 | 2.98 |
+| 18 | 36 | 48 | 4-5-1 | 2 | 0 | 3.18 |
+| 19 | 29 | 37 | 4-5-1 | 2 | 0 | 3.06 |
+| 20 | 24 | 28 | 4-5-1 | 2 | 0 | 2.44 |
+| 21 | 31 | 31 | 4-5-1 | 2 | 0 | 2.94 |
+| 22 | 46 | 62 | 4-5-1 | 2 | 0 | 2.44 |
+| 23 | 41 | 53 | 4-5-1 | 2 | 0 | 2.63 |
+| 24 | 32 | 40 | 4-5-1 | 2 | 0 | 2.64 |
+| 25 | 74 | 85 | 4-5-1 | 2 | 0 | 2.13 |
+| 26 | 38 | 47 | 4-5-1 | 2 | 0 | 2.89 |
+| 27 | 34 | 39 | 4-4-2 | 2 | 0 | 2.53 |
+| 28 | 40 | 40 | 4-5-1 | 2 | 0 | 2.15 |
+| 29 | 47 | 54 | 4-5-1 | 2 | 0 | 2.31 |
+| 30 | 51 | 51 | 4-5-1 | 2 | 0 | 2.70 |
+| 31 | 52 | 56 | 3-4-3 | 2 | 0 | 0.00 |
+| 32 | 29 | 30 | 4-5-1 | 2 | 0 | 2.55 |
+| 33 | 74 | 85 | 4-5-1 | 2 | 0 | 2.62 |
+| 34 | 52 | 55 | 4-4-2 | 2 | 0 | 2.30 |
+| 35 | 24 | 32 | 4-5-1 | 2 | 0 | 2.19 |
+| 36 | 29 | 35 | 4-5-1 | 2 | 0 | 2.02 |
+| 37 | 60 | 66 | 4-5-1 | 2 | 0 | 2.06 |
+| 38 | 80 | 80 | 4-5-1 | 2 | 0 | 2.26 |
+
+</details>
