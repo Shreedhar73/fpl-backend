@@ -4,7 +4,17 @@ Plan `fpl-orchestrator/docs/plans/009-recommendation-guards.md`, backlog B-010 a
 Measured 2026-08-27 against the live database (`v2-fitted-2026-08-26` projections, GW2, horizon 5)
 and against the three archived seasons.
 
-Reproduce with `pnpm guards:report` and `pnpm sweep:collision`. Neither writes to the database.
+Reproduce with `pnpm guards:report`. It does not write to the database.
+
+> **`pnpm sweep:collision` no longer exists (2026-08-27).** B-029 retired the collision penalty and
+> deleted the sweep with it — see D-030 in the orchestrator's decision log, and
+> `reports/collision-correlation.md`, which measured the rule this report swept and found it was
+> pricing a hedge: the pairing is real (correlation −0.195) but holding both sides CUTS a squad's
+> variance, and the concentration that actually matters — two of one club's defence — was charged
+> nothing.
+>
+> **The numbers below stand.** They are what was measured at the time, and they are the reason the
+> rule was doubted in the first place. Only the command is gone.
 
 ---
 
