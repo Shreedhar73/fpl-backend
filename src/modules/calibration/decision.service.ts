@@ -525,13 +525,30 @@ export class DecisionService {
           `Spearman v4 **${n3(vOrd.meanSpearman)}** vs incumbent **${n3(mOrd.meanSpearman)}**.`,
       );
       w();
-      w(`| category | n | v4 RMSE | incumbent RMSE | form RMSE |`);
-      w(`|---|---:|---:|---:|---:|`);
+      w(
+        `**Two populations, named so the columns are not cross-read** (B-012 invariant 3): the ` +
+          `v4-vs-incumbent columns and their paired noise are on the rows BOTH could score; the ` +
+          `\`form\` column is on the smaller three-way intersection and is context, not a leg of ` +
+          `the bar. "paired Δse" is the per-round-paired difference in squared error ` +
+          `(v4 − incumbent): negative favours v4, and a difference that does not clear two ` +
+          `standard errors is not a result — the same rule every season comparison in this report ` +
+          `obeys (B-030).`,
+      );
+      w();
+      w(
+        `| category | n | v4 RMSE | incumbent RMSE | paired Δse ± s.e. | clears | form RMSE (3-way, n) |`,
+      );
+      w(`|---|---:|---:|---:|---:|---|---:|`);
       const withForm = categoryRmse(all, ['model', 'form', 'v4']);
-      for (const c of withForm) {
+      for (const c of cats) {
+        const f = withForm.find((x) => x.category === c.category);
+        const pd = c.paired
+          ? `${c.paired.meanSeDifference >= 0 ? '+' : ''}${c.paired.meanSeDifference.toFixed(3)} ± ${c.paired.standardError.toFixed(3)}`
+          : '—';
         w(
           `| ${c.category} | ${c.n} | ${c.rmse.v4.toFixed(3)} | ${c.rmse.model.toFixed(3)} | ` +
-            `${c.rmse.form.toFixed(3)} |`,
+            `${pd} | ${c.paired ? (c.paired.clearsNoise ? '**yes**' : 'no') : '—'} | ` +
+            `${f ? `${f.rmse.form.toFixed(3)} (${f.n})` : '—'} |`,
         );
       }
       w();
@@ -776,7 +793,7 @@ export class DecisionService {
       );
       if (!model) continue;
       const against: { label: string; row: SeasonResult | undefined }[] = [
-        ...(['form', 'priorSeason'] as Predictor[]).map((p) => ({
+        ...(['form', 'priorSeason', 'v4'] as Predictor[]).map((p) => ({
           label: p as string,
           row: forPolicy.find((s2) => s2.predictor === p && !s2.squadLabel),
         })),

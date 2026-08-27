@@ -1,5 +1,6 @@
 import { DEFAULT_KS } from './ordering';
 import { PredictionRow } from './harness';
+import { pairedDifference, RoundDecision } from './xi-decision';
 
 /**
  * B-036 — the v4 bar, evaluated exactly as it was committed to the register BEFORE the first
@@ -29,6 +30,17 @@ export interface CategoryRmse {
   category: ReturnCategory;
   n: number;
   rmse: Record<string, number>;
+  /**
+   * The candidate−incumbent difference in per-row squared error, paired by round (B-030's rule
+   * applied to this verdict: a bare RMSE difference is not a result). Present only when the
+   * predictors include both 'v4' and 'model' and at least two rounds carry rows in the category.
+   */
+  paired?: {
+    rounds: number;
+    meanSeDifference: number;
+    standardError: number;
+    clearsNoise: boolean;
+  };
 }
 
 /** RMSE per return category for each named predictor, over rows where every one produced a number. */
@@ -39,6 +51,8 @@ export function categoryRmse(
   const shared = rows.filter((r) =>
     predictors.every((p) => r.predicted[p] !== null),
   );
+  const wantsPairing =
+    predictors.includes('v4') && predictors.includes('model');
   return RETURN_CATEGORIES.map((category) => {
     const inCat = shared.filter((r) => returnCategory(r) === category);
     const rmse: Record<string, number> = {};
@@ -49,7 +63,40 @@ export function categoryRmse(
       );
       rmse[p] = inCat.length ? Math.sqrt(se / inCat.length) : NaN;
     }
-    return { category, n: inCat.length, rmse };
+    const out: CategoryRmse = { category, n: inCat.length, rmse };
+    if (wantsPairing) {
+      // Per ROUND, then paired: each round's mean squared error under v4 minus under the incumbent.
+      // Pairing by round is what cancels the round-to-round variance that dominates raw totals —
+      // the same construction every season comparison in this report uses.
+      const perRound = new Map<number, { v4: number[]; model: number[] }>();
+      for (const r of inCat) {
+        let at = perRound.get(r.round);
+        if (!at) perRound.set(r.round, (at = { v4: [], model: [] }));
+        at.v4.push(((r.predicted.v4 as number) - r.actual) ** 2);
+        at.model.push(((r.predicted.model as number) - r.actual) ** 2);
+      }
+      const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+      const asDecisions = (pick: 'v4' | 'model'): RoundDecision[] =>
+        [...perRound.entries()].map(([round, se]) => ({
+          season: 'test',
+          round,
+          points: mean(se[pick]),
+          ceiling: 0,
+          captainPoints: 0,
+          bestFieldedPoints: 0,
+          substitutions: 0,
+        }));
+      const d = pairedDifference(asDecisions('v4'), asDecisions('model'));
+      if (d) {
+        out.paired = {
+          rounds: d.rounds,
+          meanSeDifference: d.meanDifference,
+          standardError: d.standardError,
+          clearsNoise: d.clearsNoise,
+        };
+      }
+    }
+    return out;
   });
 }
 
@@ -106,7 +153,12 @@ export function v4Bar(input: V4BarInput): V4BarVerdict {
   );
   const fmt = (name: string) => {
     const c = cat(name)!;
-    return `${name} ${c.rmse.v4.toFixed(3)} vs ${c.rmse.model.toFixed(3)} (n=${c.n})`;
+    const noise = c.paired
+      ? c.paired.clearsNoise
+        ? ', clears its paired noise'
+        : ', inside its paired noise'
+      : '';
+    return `${name} ${c.rmse.v4.toFixed(3)} vs ${c.rmse.model.toFixed(3)} (n=${c.n}${noise})`;
   };
   lines.push(
     `**High-return accuracy — improve Tickers and Haulers:** ${fmt('Tickers')}, ${fmt('Haulers')} — ` +
@@ -116,6 +168,21 @@ export function v4Bar(input: V4BarInput): V4BarVerdict {
     `**Low-return accuracy — no material (>5%) degradation:** ${fmt('Zeros')}, ${fmt('Blanks')} — ` +
       `${lowReturnHeld ? '**held**' : '**not held**'}.`,
   );
+  const highReturnUnresolved =
+    !highReturnMet &&
+    !['Tickers', 'Haulers'].some((name) => {
+      const c = cat(name);
+      return c?.paired?.clearsNoise && c.rmse.v4 > c.rmse.model;
+    });
+  if (highReturnUnresolved) {
+    lines.push(
+      `**The deciding leg is unresolved at this sample, and the report says so rather than ` +
+        `treating the miss as measured.** Neither high-return regression clears its own paired ` +
+        `noise, so "v4 sizes a haul worse" is not established — only "not established to be ` +
+        `better", which is what the pre-committed bar requires. The bar verdict stands; what would ` +
+        `change it is a real improvement, not a quieter miss.`,
+    );
+  }
   lines.push(
     met
       ? `**The bar is met on this run.** Adoption is still a decision recorded in ` +
