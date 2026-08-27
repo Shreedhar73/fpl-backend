@@ -155,16 +155,16 @@ describe('buildLp — the collision penalty is in the objective, not a post-hoc 
     lambda,
   });
 
-  it('emits one z row per pair, on the SQUAD variables, at benchWeight x lambda', () => {
+  it('emits one z row per pair, on the SQUAD variables, at the policy lambda', () => {
     const lp = buildLp(squad(), rules, collisions(1.5), 0.7);
     // On `x`, not on `y` (B-025). B-023 had put this row on the XI variables, and the solver
     // answered it by benching one side while still paying for both. Holding is the bet B-011's own
     // sentence describes, and holding is what `x` says.
     expect(lp).toMatch(/conf_0: p_a1 \+ p_d1 - z_0 <= 1/);
     expect(lp).not.toMatch(/conf_0: y_/);
-    // 0.7 x 1.5. The charge scales with the coefficient it is charged against; see
-    // `chargedCollisionLambda`.
-    expect(lp).toMatch(/- 1\.0500 z_0/);
+    // 1.5 flat. The charge does NOT scale with the bench weight (B-026) — passing 0.7 above is what
+    // makes that assertion mean something rather than merely being satisfied by the default.
+    expect(lp).toMatch(/- 1\.5000 z_0/);
     // No row on the armband. A captain charge is one more thing a bench can dodge.
     expect(lp).not.toMatch(/capconf/);
     expect(lp).not.toMatch(/w_0/);
@@ -173,12 +173,14 @@ describe('buildLp — the collision penalty is in the objective, not a post-hoc 
     expect(lp.slice(lp.indexOf('Binary'))).not.toMatch(/z_0/);
   });
 
-  it('charges nothing when the bench weight is zero, and says so in the objective', () => {
-    // The guard against the argument being forgotten: `buildLp` defaults `benchWeight` to the served
-    // value precisely because a forgotten 0 here would switch the collision penalty off entirely
-    // while every row still looked present.
-    expect(buildLp(squad(), rules, collisions(1.5), 0)).toMatch(/[+-] 0\.0000 z_0/);
-    expect(buildLp(squad(), rules, collisions(1.5))).toMatch(/- 1\.0500 z_0/);
+  it('charges the same lambda at every bench weight — the two knobs are uncoupled (B-026)', () => {
+    // They were coupled for exactly one change. A sweep of either knob has to be readable on its own,
+    // and the harness that can see what the bench weight does to the XI is one season old.
+    for (const weight of [0, 0.3, 0.7, 1]) {
+      expect(buildLp(squad(), rules, collisions(1.5), weight)).toMatch(
+        /- 1\.5000 z_0/,
+      );
+    }
   });
 
   it('emits no z row at LAMBDA = 0 (the sabotage: the collision tests below go red, these stay green)', () => {
@@ -333,7 +335,7 @@ describe('the eleven is chosen on points, and the pair is charged anyway (B-025)
     expect(benched.every((h) => h.bothStarted)).toBe(false);
     // ...and it is still charged. Before B-025 this pair contributed nothing, and the payload said
     // `taken: []` about a squad holding both sides of it.
-    expect(arranged.heldPenalty).toBeCloseTo(0.7 * pairs.length, 6);
+    expect(arranged.heldPenalty).toBeCloseTo(1 * pairs.length, 6);
   });
 
   it('charges the same whichever legal eleven is fielded — the charge is a fact about the fifteen', () => {
@@ -419,15 +421,12 @@ describe('penalisedSquadEp — the quantity the ILP actually maximises', () => {
   );
 
   it('charges benchWeight x lambda per held pair, and nothing when only one side is held', () => {
-    // 15 raw, less 0.7 x 2 for the one pair. The scaling is the LP's, and this function exists to
-    // price a user's squad the same way the solve priced the recommendation — a comparison at a
-    // different rate would report its own arithmetic as a gap between two squads.
-    expect(penalisedSquadEp([a, d], { pairs, lambda: 2 })).toBeCloseTo(13.6, 6);
+    // 15 raw, less 2 for the one pair. This function exists to price a user's squad the same way the
+    // solve priced the recommendation — a comparison at a different rate would report its own
+    // arithmetic as a gap between two squads.
+    expect(penalisedSquadEp([a, d], { pairs, lambda: 2 })).toBeCloseTo(13, 6);
     expect(penalisedSquadEp([a], { pairs, lambda: 2 })).toBeCloseTo(10, 6);
     expect(penalisedSquadEp([a, d], NO_COLLISIONS)).toBeCloseTo(15, 6);
-    // At a bench weight of 1 a squad place is worth its full EP again, and the charge is the raw
-    // constant — which is what B-011 measured.
-    expect(penalisedSquadEp([a, d], { pairs, lambda: 2 }, 1)).toBeCloseTo(13, 6);
   });
 });
 
@@ -585,7 +584,7 @@ describe('the reasoning payload can actually be rendered (B-018)', () => {
       fixture: p.fixture,
       attacker: p.attacker.webName,
       defender: p.defender.webName,
-      lambda: 0.7,
+      lambda: 1,
       bothStarted: true,
     }));
     for (const e of entries) {

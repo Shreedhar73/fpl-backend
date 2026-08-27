@@ -63,33 +63,27 @@ export const MIN_APPEARANCES = 11;
 export const COLLISION_LAMBDA = 1.0;
 
 /**
- * What the objective actually charges per held pair: `benchWeight × COLLISION_LAMBDA`.
+ * **Charged raw, and NOT scaled by the bench weight (B-026).**
  *
- * **The scaling exists because B-023 changed what a squad place is worth, and the arithmetic is only
- * half as clean as it first looks.** B-011 measured lambda = 1.0 against a coefficient of `ep` on
- * `x`. After B-023 a player's coefficients depend on whether he starts: a BENCHED owned player
- * carries `benchWeight · ep`, so a raw lambda on `x` would be 1/benchWeight = 1.43x the measured
- * strength for him — but a STARTER carries `benchWeight · ep + (1 − benchWeight) · ep = ep`, exactly
- * the pre-B-023 weight, so a raw lambda was already right for him and this scaling under-charges him
- * by 30%. Colliding pairs are usually startable players, which is the case that matters.
+ * B-025 shipped it scaled — `benchWeight × λ` = 0.7 — reasoning that B-023 changed what a squad place
+ * is worth, so the constant had to be re-scaled to keep the weight B-011 measured. Half of that is
+ * right and it is the half that does not matter. After B-023 a player's coefficients depend on
+ * whether he starts: a BENCHED owned player carries `benchWeight · ep`, so a raw λ is 1/benchWeight
+ * = 1.43x the measured strength for him — but a STARTER carries
+ * `benchWeight · ep + (1 − benchWeight) · ep = ep`, exactly the pre-B-023 weight, so a raw λ was
+ * already right for him and the scaling UNDER-charged him by 30%. A colliding pair is usually two
+ * startable players.
  *
- * So this is exact for bench-valued ownership, 0.7x the measured weight for starters, and
- * indistinguishable from either at the resolution the sweep can see — every lambda from 0.5 to 4
- * landed within 0.13 realised points. It is scaled here rather than folded into the constant so the
- * constant keeps meaning "points per pair, measured against a full-value squad place", and so the
- * charge tracks the bench weight if that ever moves again.
+ * Neither is measurable: the sweep put every λ from 0.5 to 4 within 0.13 realised points. The reason
+ * to stop scaling is not the arithmetic but the coupling — two knobs that move together need a
+ * harness that can see both, and the one that can see the XI at all (`pnpm replay:xi`) is one season
+ * old. A constant that means what its comment says is worth more than a scaled one that means it for
+ * a player nobody starts.
  *
- * **`transfer-lp.ts` deliberately does NOT use this.** Its objective is `Σ EP·x − hitCost·h − λ·Σ z`:
- * the coefficient on `x` is the full `ep`, with no `y`/`c` split, so the same rule — lambda scales
- * with the coefficient it is charged against — leaves it at raw 1.0. Changing it to match this
- * function would be applying the constant instead of the rule.
+ * `transfer-lp.ts` therefore charges the same number for the first time since B-023, which is a
+ * coincidence rather than a rule: its coefficient on `x` is the full `ep`. If the XI and captain
+ * families ever land there (B-024), that stays true and nothing needs to change with them.
  */
-export function chargedCollisionLambda(
-  benchWeight: number,
-  lambda: number = COLLISION_LAMBDA,
-): number {
-  return benchWeight * lambda;
-}
 
 /**
  * Attacker = FWD + MID, defensive = DEF + GKP (maintainer decision 2026-08-26). FWD-only would have

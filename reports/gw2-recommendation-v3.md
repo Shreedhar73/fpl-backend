@@ -198,3 +198,23 @@ so the 109-point spread is not an XI effect and one squad over one season is not
 table does establish is behavioural and is not noise: the served objective used to own a conflicting
 pair in every round of the season and start both sides in eight of them, and it no longer benches a
 better-projected player for a worse one at all.
+
+## Update, 2026-08-27 — B-026 charges raw lambda, and the recommendation does not move
+
+B-025 charged the penalty at `benchWeight × λ` = 0.7. B-026 undid the scaling: it is exact only for a
+pair nobody starts, because a **starter's** coefficients sum to `ep` after B-023 — the pre-B-023
+weight — so a raw λ was already at the strength B-011 measured and 0.7λ under-charged the case a
+colliding pair usually is.
+
+**Nothing about the recommendation changed.** Same fifteen, same 3-5-2, same £99.6m, same eleven, same
+captain. The only number that moved is what the panel says the squad paid: **1.40 → 2.00** horizon EP
+for the two Palmer-against-Brighton pairs it holds, and the penalised horizon EP 252.28 → 251.68.
+
+**Nothing about the season moved either.** `pnpm replay:xi` at raw λ returns 1713 points, a pair owned
+in 30 rounds, both sides started in 27, and 0.00 projected points forgone — **identical round by
+round, all 38 of them**, to the 0.7 arm. That is the sweep's own finding arriving from a second
+direction: every λ from 0.5 to 4 lands within 0.13 realised points, and between 0.7 and 1.0 no
+decision in this squad-season flips at all.
+
+So this change buys no points and was not expected to. What it buys is a constant that means what its
+comment says, and one fewer pair of knobs that have to be swept together.

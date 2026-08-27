@@ -26,8 +26,6 @@ import {
 import {
   MIN_APPEARANCES,
   COLLISION_LAMBDA,
-  BENCH_WEIGHT,
-  chargedCollisionLambda,
 } from '../modules/optimizer/policy';
 import { Rules } from '../modules/optimizer/rules';
 
@@ -79,7 +77,7 @@ async function main(): Promise<void> {
       console.log(
         `    £${(squad.reduce((s, c) => s + c.cost, 0) / 10).toFixed(1)}m  ${arranged.formation}  ` +
           `raw horizon EP ${rawEp.toFixed(2)}  penalised ${heldPairs.toFixed(2)}  ` +
-          `pairs held ${((rawEp - heldPairs) / (chargedCollisionLambda(BENCH_WEIGHT, collisions.lambda) || 1)).toFixed(0)}  ` +
+          `pairs held ${((rawEp - heldPairs) / (collisions.lambda || 1)).toFixed(0)}  ` +
           `sub-floor players ${under.length}`,
       );
       for (const p of arranged.squad

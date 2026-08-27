@@ -3,7 +3,6 @@ import { Rules, POSITIONS } from './rules';
 import {
   ATTACKING_POSITIONS,
   BENCH_WEIGHT,
-  chargedCollisionLambda,
   DEFENSIVE_POSITIONS,
 } from './policy';
 import { FixtureLite } from './optimizer.repository';
@@ -126,22 +125,18 @@ export function pairsWithin(
  * penalised optimum against an unpenalised squad is what makes a legitimately negative gap look like
  * a bug (Phase 3 of the plan).
  *
- * Charged at `benchWeight × λ`, the same as the LP row (B-025). A comparison that priced a pair
- * differently from the solve it is comparing against would report part of its own arithmetic as a
- * gap between two squads.
+ * Charged at the same rate as the LP row. A comparison that priced a pair differently from the solve
+ * it is comparing against would report part of its own arithmetic as a gap between two squads — which
+ * is why this took a `benchWeight` argument between B-025 and B-026, and why it does not need one now
+ * that the charge is the constant.
  */
 export function penalisedSquadEp(
   squad: Candidate[],
   collisions: Collisions,
-  benchWeight = BENCH_WEIGHT,
 ): number {
   const raw = squad.reduce((s, c) => s + c.ep, 0);
   const keys = new Set(squad.map((c) => c.key));
-  return (
-    raw -
-    chargedCollisionLambda(benchWeight, collisions.lambda) *
-      pairsWithin(keys, collisions.pairs).length
-  );
+  return raw - collisions.lambda * pairsWithin(keys, collisions.pairs).length;
 }
 
 /** Join additive terms as an LP expression, wrapping across lines but keeping the `+` at each break
@@ -177,7 +172,7 @@ function signedExpr(terms: { coef: number; name: string }[]): string {
  * **The program, as `fpl-optimizer` specifies it:**
  *
  * ```
- *   maximise  Σ EP_p (y_p + c_p)  +  benchWeight · Σ EP_p (x_p − y_p)  −  λ_charged · Σ z
+ *   maximise  Σ EP_p (y_p + c_p)  +  benchWeight · Σ EP_p (x_p − y_p)  −  λ · Σ z
  *   s.t.      Σ x = 15,  squad quotas on x,  budget,  ≤ 3 per club
  *             y_p ≤ x_p,  Σ y = 11,  formation min/max on y
  *             c_p ≤ y_p,  Σ c = 1
@@ -197,9 +192,10 @@ function signedExpr(terms: { coef: number; name: string }[]): string {
  * conflict row per held pair and none on the XI or the armband — a charge the eleven cannot dodge,
  * and an eleven chosen on points once the fifteen is bought.
  *
- * `λ_charged` is `chargedCollisionLambda(benchWeight)`, not the raw constant: B-023 changed what a
- * squad place is worth, and the reasoning for scaling with it — including the half of the arithmetic
- * that does not work out cleanly — is on that function.
+ * `λ` is the policy constant, unscaled. It was briefly charged at `benchWeight × λ` (B-025) on the
+ * argument that B-023 had changed what a squad place is worth; B-026 undid that, because the scaling
+ * is exact only for a pair nobody starts and a colliding pair is usually two startable players. The
+ * arithmetic is on `COLLISION_LAMBDA`.
  */
 export function buildLp(
   candidates: Candidate[],
@@ -209,9 +205,10 @@ export function buildLp(
    * Defaults to the SERVED weight, not to 0.
    *
    * It defaulted to 0 while B-023 was landing, which meant every caller that forgot the argument
-   * solved the pre-B-023 objective and got a plausible squad back. Since B-025 it would be worse than
-   * plausible: the collision charge is `benchWeight × λ`, so a forgotten argument would silently
-   * switch the guard off entirely and every collision test would still pass.
+   * solved the pre-B-023 objective and got a plausible squad back — a bench valued at par, a captain
+   * worth nothing at selection time, and no tell. The collision charge no longer depends on it
+   * (B-026), so a forgotten argument is merely wrong rather than silently disarming, which is still
+   * reason enough to default to what is served.
    */
   benchWeight = BENCH_WEIGHT,
 ): string {
@@ -236,8 +233,6 @@ export function buildLp(
   const xi = (c: Candidate) => `y_${c.key}`;
   const cap = (c: Candidate) => `k_${c.key}`;
 
-  const charged = chargedCollisionLambda(benchWeight, collisions.lambda);
-
   const lines: string[] = [];
   lines.push('Maximize');
   lines.push(
@@ -249,7 +244,7 @@ export function buildLp(
           name: xi(c),
         })),
         ...candidates.map((c) => ({ coef: c.ep, name: cap(c) })),
-        ...pairs.map((_, i) => ({ coef: -charged, name: `z_${i}` })),
+        ...pairs.map((_, i) => ({ coef: -collisions.lambda, name: `z_${i}` })),
       ]),
   );
 
