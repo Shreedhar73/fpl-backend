@@ -47,7 +47,7 @@ export const MODEL_VERSION = `v3-fitted-${FITTED_PARAMS.provenance.date}`;
  * to MODEL_VERSION; these rows exist so `pnpm score:gameweek` scores the fitted-availability regime
  * beside the incumbent on the live season, which is the prospective half of plan 024's referee.
  */
-export const AVAILABILITY_MODEL_VERSION = `v3-avail-${AVAILABILITY_CANDIDATE_PARAMS.provenance.date}`;
+export const AVAILABILITY_MODEL_VERSION = `v3-${AVAILABILITY_CANDIDATE_PARAMS.provenance.date}`;
 
 const HORIZON = 5;
 
