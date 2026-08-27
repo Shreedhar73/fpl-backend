@@ -41,7 +41,7 @@ const row = (over: Partial<PredictionRow>): PredictionRow =>
   predictionRow({
     actual: 2,
     minutes: 90,
-    predicted: { model: 2, form: 2, priorSeason: 2 },
+    predicted: { model: 2, form: 2, priorSeason: 2, v4: null },
     appearances: 20,
     value: 50,
     ...over,
@@ -112,8 +112,8 @@ describe('the replay harness scores the solver’s XI', () => {
    */
   const squad = fifteen(1, (i, position) => {
     if (position !== 'DEF') return {};
-    if (i === 2) return { predicted: { model: 9, form: 9, priorSeason: 9 }, actual: 10 };
-    if (i === 3) return { predicted: { model: 1, form: 1, priorSeason: 1 }, actual: 0 };
+    if (i === 2) return { predicted: { model: 9, form: 9, priorSeason: 9, v4: null }, actual: 10 };
+    if (i === 3) return { predicted: { model: 1, form: 1, priorSeason: 1, v4: null }, actual: 0 };
     return {};
   });
   const byCode = byCodeOf(squad);

@@ -12,7 +12,8 @@ export class PlayersController {
 
   @Get()
   @ApiOperation({
-    summary: 'Every player in the game, with our expected points where we have them.',
+    summary:
+      'Every player in the game, with our expected points where we have them.',
     description:
       'Served whole rather than paged: the row count is bounded by the game itself, and a picker ' +
       'filters across all of it at once. Expected points are null, not zero, for a player the ' +

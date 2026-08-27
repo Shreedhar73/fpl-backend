@@ -45,7 +45,7 @@ const row = (over: Partial<PredictionRow>): PredictionRow =>
   predictionRow({
     actual: 2,
     minutes: 90,
-    predicted: { model: 2, form: 2, priorSeason: 2 },
+    predicted: { model: 2, form: 2, priorSeason: 2, v4: null },
     appearances: 20,
     ...over,
   });
@@ -246,7 +246,7 @@ describe('the greedy policy', () => {
       position: 'MID',
       teamCode: 9,
       value: 50,
-      predicted: { model: 9, form: 9, priorSeason: 9 },
+      predicted: { model: 9, form: 9, priorSeason: 9, v4: null },
       actual: 9,
     });
     const result = simulateSeason(
@@ -273,7 +273,7 @@ describe('the greedy policy', () => {
         position: 'MID',
         teamCode: 9,
         value: 50,
-        predicted: { model: 20, form: 20, priorSeason: 20 },
+        predicted: { model: 20, form: 20, priorSeason: 20, v4: null },
       }),
     );
     const result = simulateSeason(
@@ -298,7 +298,7 @@ describe('the greedy policy', () => {
       position: 'MID',
       teamCode: 9,
       value: 90,
-      predicted: { model: 30, form: 30, priorSeason: 30 },
+      predicted: { model: 30, form: 30, priorSeason: 30, v4: null },
     });
     const result = simulateSeason(
       asRounds(
@@ -323,7 +323,7 @@ describe('the greedy policy', () => {
       position: 'MID',
       teamCode: 1,
       value: 50,
-      predicted: { model: 30, form: 30, priorSeason: 30 },
+      predicted: { model: 30, form: 30, priorSeason: 30, v4: null },
     });
     const result = simulateSeason(
       asRounds(squadOf(1), [...squadOf(2), fourth]),
@@ -348,7 +348,7 @@ describe('the greedy policy', () => {
       position: 'GKP',
       teamCode: 9,
       value: 50,
-      predicted: { model: 30, form: 30, priorSeason: 30 },
+      predicted: { model: 30, form: 30, priorSeason: 30, v4: null },
     });
     const result = simulateSeason(
       asRounds(squadOf(1), [...squadOf(2), wrongPosition]),

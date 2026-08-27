@@ -67,7 +67,7 @@ export const predictionRow = (over: Partial<PredictionRow>): PredictionRow => ({
   value: 50,
   actual: 0,
   minutes: 0,
-  predicted: { model: 0, form: 0, priorSeason: 0 },
+  predicted: { model: 0, form: 0, priorSeason: 0, v4: null },
   pPlay: 1,
   appearances: 10,
   horizonEp: null,
