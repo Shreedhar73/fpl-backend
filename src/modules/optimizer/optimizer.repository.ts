@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { MODEL_VERSION } from '../projections/projections.service';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 import { PositionCode } from '../fpl-sync/mappers';
@@ -58,13 +59,24 @@ export class OptimizerRepository {
   }
 
   /** The projection model version with the most recent rows. */
+  /**
+   * The version the app serves — the PINNED incumbent, never "whatever row is newest".
+   *
+   * It used to be newest-`createdAt`, which meant ANY writer of `projections` silently became the
+   * served model: a backtest, a candidate being scored prospectively, a replayed season. Plan 010's
+   * "the harness writes nothing" invariant existed to fence that hole; pinning the version closes it
+   * structurally, and is what makes writing candidate rows (B-037's prospective holdout) safe at
+   * all. Adoption is a D-numbered decision that changes `MODEL_VERSION`, not a row landing.
+   */
   async latestProjectionModelVersion(): Promise<string> {
-    const row = await this.prisma.projection.findFirst({
-      orderBy: { createdAt: 'desc' },
-      select: { modelVersion: true },
+    const n = await this.prisma.projection.count({
+      where: { modelVersion: MODEL_VERSION },
     });
-    if (!row) throw new Error('no projections — run `pnpm project` first');
-    return row.modelVersion;
+    if (n === 0)
+      throw new Error(
+        `no projections for the served version ${MODEL_VERSION} — run \`pnpm project\` first`,
+      );
+    return MODEL_VERSION;
   }
 
   async horizonGameweeks(n: number): Promise<number[]> {
