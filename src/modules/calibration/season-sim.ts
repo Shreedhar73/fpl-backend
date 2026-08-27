@@ -136,7 +136,8 @@ export const GREEDY_ONE_FT: SimPolicy = {
     if (state.freeTransfers < 1) return [];
 
     const ownedCodes = new Set(state.owned.map((o) => o.playerCode));
-    const scoreOf = (code: number) => market.get(code)?.predicted[predictor] ?? 0;
+    const scoreOf = (code: number) =>
+      market.get(code)?.predicted[predictor] ?? 0;
 
     // Club counts, so a transfer cannot break the three-per-club cap.
     const clubOf = (code: number) => market.get(code)?.teamCode ?? null;
@@ -206,10 +207,10 @@ export async function openingSquad(
       webName: r.webName,
       position: r.position as PositionCode,
       teamId: String(r.teamCode),
+      teamShortName: `T${r.teamCode}`,
       cost: r.value,
       ep:
-        r.predicted[predictor] ??
-        (fallback ? (r.predicted[fallback] ?? 0) : 0),
+        r.predicted[predictor] ?? (fallback ? (r.predicted[fallback] ?? 0) : 0),
       pPlay: r.pPlay,
       appearances: r.appearances,
     }));
@@ -287,7 +288,8 @@ export function simulateSeason(
         const price = prices.get(move.in);
         const outPrice = prices.get(move.out);
         if (idx < 0 || price === undefined || outPrice === undefined) continue;
-        state.bank += sellValue(state.owned[idx].purchasePrice, outPrice) - price;
+        state.bank +=
+          sellValue(state.owned[idx].purchasePrice, outPrice) - price;
         state.owned[idx] = { playerCode: move.in, purchasePrice: price };
       }
       state.freeTransfers = Math.max(0, state.freeTransfers - moves.length);
@@ -316,7 +318,12 @@ export function simulateSeason(
       freeTransfersAfter: state.freeTransfers,
       bank: state.bank,
       squadValue: state.owned.reduce(
-        (s, o) => s + sellValue(o.purchasePrice, prices.get(o.playerCode) ?? o.purchasePrice),
+        (s, o) =>
+          s +
+          sellValue(
+            o.purchasePrice,
+            prices.get(o.playerCode) ?? o.purchasePrice,
+          ),
         0,
       ),
       substitutions: scored.substitutions.length,

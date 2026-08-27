@@ -21,6 +21,8 @@ export interface Candidate {
   webName: string;
   position: PositionCode;
   teamId: string;
+  /** e.g. "CHE". Carried so a payload never has to print `teamId`, which is a cuid. */
+  teamShortName: string;
   cost: number; // tenths
   ep: number; // horizon expected points
   pPlay: number;
@@ -40,6 +42,14 @@ export interface Candidate {
 export interface ConflictPair {
   attacker: Candidate;
   defender: Candidate;
+  /**
+   * The match, as a human reads it — "CHE vs BHA", home side first.
+   *
+   * Plan 009 specified this field and what shipped emitted two team cuids instead, which is why
+   * nothing could render the payload: a cuid on screen is worse than an omission, because it looks
+   * like data. Built here, where both sides of the fixture are in hand, rather than looked up later.
+   */
+  fixture: string;
 }
 
 /**
@@ -67,18 +77,21 @@ export function buildConflictPairs(
   const of = (teamId: string) => byTeam.get(teamId) ?? [];
 
   const pairs: ConflictPair[] = [];
-  const oneWay = (attackTeam: string, defendTeam: string) => {
+  const oneWay = (attackTeam: string, defendTeam: string, fixture: string) => {
     for (const attacker of of(attackTeam)) {
       if (!attacking.has(attacker.position)) continue;
       for (const defender of of(defendTeam)) {
         if (!defensive.has(defender.position)) continue;
-        pairs.push({ attacker, defender });
+        pairs.push({ attacker, defender, fixture });
       }
     }
   };
   for (const f of fixtures) {
-    oneWay(f.homeTeamId, f.awayTeamId);
-    oneWay(f.awayTeamId, f.homeTeamId);
+    // One label per fixture, home side first, whichever direction the pair runs in. A pair is
+    // "our attacker against our defender in this match"; the match does not change when the roles do.
+    const label = `${f.homeTeamShortName} vs ${f.awayTeamShortName}`;
+    oneWay(f.homeTeamId, f.awayTeamId, label);
+    oneWay(f.awayTeamId, f.homeTeamId, label);
   }
   return pairs;
 }

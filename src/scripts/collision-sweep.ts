@@ -22,7 +22,10 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import highsLoader from 'highs';
 import { AppModule } from '../app.module';
-import { OptimizerService, prunePool } from '../modules/optimizer/optimizer.service';
+import {
+  OptimizerService,
+  prunePool,
+} from '../modules/optimizer/optimizer.service';
 import {
   buildLp,
   buildConflictPairs,
@@ -31,6 +34,7 @@ import {
   Collisions,
 } from '../modules/optimizer/ilp';
 import { MIN_APPEARANCES } from '../modules/optimizer/policy';
+import type { FixtureLite } from '../modules/optimizer/optimizer.repository';
 import { ForecastRepository } from '../modules/projections/forecast.repository';
 import { walkRounds, HistoryRow } from '../modules/projections/features';
 import { FITTED_PARAMS } from '../modules/projections/fitted';
@@ -52,7 +56,10 @@ interface RoundScore {
 
 function quantile(sorted: number[], q: number): number {
   if (sorted.length === 0) return NaN;
-  const i = Math.max(0, Math.min(sorted.length - 1, Math.floor(q * sorted.length)));
+  const i = Math.max(
+    0,
+    Math.min(sorted.length - 1, Math.floor(q * sorted.length)),
+  );
   return sorted[i];
 }
 
@@ -117,16 +124,19 @@ async function main(): Promise<void> {
     /** playerCode -> appearances (rows with minutes > 0) STRICTLY BEFORE the round being solved */
     const appearances = new Map<number, number>();
     const results: RoundScore[] = [];
-    const skipped: { reason: string; n: number } = { reason: 'infeasible', n: 0 };
+    const skipped: { reason: string; n: number } = {
+      reason: 'infeasible',
+      n: 0,
+    };
 
-    for (const context of walkRounds(rows as HistoryRow[], FITTED_PARAMS)) {
+    for (const context of walkRounds(rows, FITTED_PARAMS)) {
       // A player may have two fixtures in one round (a double gameweek). The candidate is the
       // player, so both fixtures are summed — projected and realised alike.
       const byPlayer = new Map<
         number,
         { cand: Candidate; realised: number; ok: boolean }
       >();
-      const fixtures = new Map<string, { homeTeamId: string; awayTeamId: string }>();
+      const fixtures = new Map<string, FixtureLite>();
 
       for (const { row, features, goalRates } of context.items) {
         if (row.teamCode === null || row.opponentTeamCode === null) continue;
@@ -134,6 +144,8 @@ async function main(): Promise<void> {
           fixtures.set(`${row.teamCode}-${row.opponentTeamCode}`, {
             homeTeamId: String(row.teamCode),
             awayTeamId: String(row.opponentTeamCode),
+            homeTeamShortName: `T${row.teamCode}`,
+            awayTeamShortName: `T${row.opponentTeamCode}`,
           });
         }
         const minutes = minutesDistribution(
@@ -165,6 +177,8 @@ async function main(): Promise<void> {
             webName: row.webName,
             position: row.position,
             teamId: String(row.teamCode),
+            // The archive has team codes and no short names. A sweep renders no payload.
+            teamShortName: `T${row.teamCode}`,
             cost: row.value,
             ep: projection.ep,
             pPlay: minutes.pPlay,
@@ -181,7 +195,10 @@ async function main(): Promise<void> {
       // is the same time cut the features use — the round being solved is never part of its own inputs
       for (const { row } of context.items) {
         if (row.minutes > 0)
-          appearances.set(row.playerCode, (appearances.get(row.playerCode) ?? 0) + 1);
+          appearances.set(
+            row.playerCode,
+            (appearances.get(row.playerCode) ?? 0) + 1,
+          );
       }
 
       const candidates = [...byPlayer.values()]
@@ -204,7 +221,8 @@ async function main(): Promise<void> {
           break;
         }
         const squad = pool.filter(
-          (c) => ((sol.Columns[c.key] as { Primal?: number })?.Primal ?? 0) > 0.5,
+          (c) =>
+            ((sol.Columns[c.key] as { Primal?: number })?.Primal ?? 0) > 0.5,
         );
         const xi = pickBestXi(squad, rules, collisions);
         let realised = 0;
@@ -218,7 +236,12 @@ async function main(): Promise<void> {
         continue;
       }
       const first = context.items[0].row;
-      results.push({ season: first.season, round: first.round, points, pairsHeld });
+      results.push({
+        season: first.season,
+        round: first.round,
+        points,
+        pairsHeld,
+      });
       log.log(
         `${first.season} GW${first.round}: ` +
           LAMBDAS.map((l) => `λ${l}=${points[String(l)]}`).join(' '),
@@ -226,15 +249,21 @@ async function main(): Promise<void> {
     }
 
     const report: string[] = [];
-    report.push(`rounds scored: ${results.length}, skipped as infeasible (too little history to field a legal 15 under the floor): ${skipped.n}`);
+    report.push(
+      `rounds scored: ${results.length}, skipped as infeasible (too little history to field a legal 15 under the floor): ${skipped.n}`,
+    );
     const seasons = [...new Set(results.map((r) => r.season))].sort();
     for (const scope of [null, ...seasons]) {
-      const subset = scope === null ? results : results.filter((r) => r.season === scope);
+      const subset =
+        scope === null ? results : results.filter((r) => r.season === scope);
       report.push(`\n### ${scope ?? 'all seasons'} (${subset.length} rounds)`);
       const baseline = subset.map((r) => r.points['0']);
       for (const lambda of LAMBDAS) {
         const values = subset.map((r) => r.points[String(lambda)]);
-        const held = subset.reduce((s, r) => s + r.pairsHeld[String(lambda)], 0);
+        const held = subset.reduce(
+          (s, r) => s + r.pairsHeld[String(lambda)],
+          0,
+        );
         report.push(
           `  lambda ${String(lambda).padEnd(4)} ${summarise(values)}  pairs kept in XI ${held}`,
         );

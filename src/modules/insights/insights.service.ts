@@ -83,10 +83,14 @@ export class InsightsService {
     // A fresh optimal solve, unpersisted: this runs on every advice request purely to measure a
     // gap, and filling optimizer_runs with those would bury the solves a human asked for.
     // The GUARDED optimum: what we would actually recommend, not a bigger and misleading gap against
-    // an optimum we would refuse to serve. The penalty totals that explain the difference are written
-    // to `optimizer_runs.reasoning` by the solve; surfacing them in the UI is B-009's territory, and
-    // this plan changes no DTO.
-    const optimal = await this.optimizer.run({ persist: false });
+    // an optimum we would refuse to serve. The penalty totals that explain the difference used to go
+    // only to `optimizer_runs.reasoning`, where no user could reach them; B-018 carries them out on
+    // `AdviceDto.reasoning`, which is the DTO change plan 009 deliberately did not make.
+    //
+    // `explain: true` costs a second ILP solve over an unguarded pool. It buys the number a user
+    // actually reads — what the appearance floor cost this recommendation — and that number was
+    // being computed, persisted and then shown to nobody.
+    const optimal = await this.optimizer.run({ persist: false, explain: true });
     const optimalCandidates = this.byPlayerId(universe, optimal.squad);
     const optimalArranged = {
       squad: optimal.squad,
@@ -163,6 +167,7 @@ export class InsightsService {
           toDifference(c, meta),
         ),
       },
+      reasoning: optimal.reasoning,
       notAdvisedOn: InsightsService.NOT_ADVISED_ON,
     };
   }
@@ -189,7 +194,10 @@ export class InsightsService {
         playerId: pick.playerId,
         webName: pick.webName,
         position: pick.position,
+        // A removed player has no row in the candidate universe, so there is no cuid to use. The
+        // short name doubles as the id here, and is stated so rather than left looking like one.
         teamId: pick.teamShortName,
+        teamShortName: pick.teamShortName,
         cost: pick.nowCost,
         ep: 0,
         pPlay: 0,
