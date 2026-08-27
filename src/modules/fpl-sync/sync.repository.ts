@@ -216,9 +216,7 @@ export class SyncRepository {
       orderBy: { id: 'asc' },
       select: { id: true, deadlineTime: true },
     });
-    return row
-      ? { gameweekId: row.id, deadlineTime: row.deadlineTime }
-      : null;
+    return row ? { gameweekId: row.id, deadlineTime: row.deadlineTime } : null;
   }
 
   /**
@@ -269,6 +267,43 @@ export class SyncRepository {
       written++;
     }
     return written;
+  }
+
+  /**
+   * Gameweeks that are finished and whose `event/{gw}/live/` payload has not been captured yet.
+   *
+   * `finished` rather than `dataChecked` on purpose, and it is the opposite of the rule the SCORER
+   * follows. The scorer waits for corrections because it is grading a number. This is a raw capture
+   * of a payload that DISAPPEARS at season rollover, so the cost of being early is a re-capture and
+   * the cost of being late is the data. Capturing early and letting a later run overwrite is the
+   * cheap direction.
+   */
+  async gameweeksNeedingLiveCapture(limit: number): Promise<number[]> {
+    const rows = await this.prisma.gameweek.findMany({
+      where: { finished: true, liveSnapshot: { is: null } },
+      orderBy: { id: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
+
+  /** Store one `event/{gw}/live/` payload whole. Upsert, so a re-capture after corrections wins. */
+  async storeLiveSnapshot(
+    gameweekId: number,
+    payload: unknown,
+    elements: number,
+  ): Promise<void> {
+    const data = {
+      payload: payload as Prisma.InputJsonValue,
+      elements,
+      capturedAt: new Date(),
+    };
+    await this.prisma.gameweekLiveSnapshot.upsert({
+      where: { gameweekId },
+      create: { gameweekId, ...data },
+      update: data,
+    });
   }
 
   async appendPriceHistory(
