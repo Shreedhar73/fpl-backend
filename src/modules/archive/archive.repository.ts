@@ -80,18 +80,34 @@ export class ArchiveRepository {
       selectedBy: r.selectedBy,
     }));
 
-    await this.prisma.archivePlayerGameweek.deleteMany({ where: { season } });
-
-    // Chunked: one 29k-row insert is a single statement large enough to matter, and a failure
-    // halfway through tells you which chunk rather than nothing.
-    const CHUNK = 2000;
-    let written = 0;
-    for (let i = 0; i < data.length; i += CHUNK) {
-      const batch = data.slice(i, i + CHUNK);
-      const res = await this.prisma.archivePlayerGameweek.createMany({
-        data: batch,
-      });
-      written += res.count;
+    // One TRANSACTION per season (B-038, watched happen rather than reasoned about): a stale Prisma
+    // client after the I/C/T migration made createMany throw AFTER deleteMany had run, and 2023-24
+    // was simply gone until a regenerate-and-rerun. An interrupted import must leave the previous
+    // season intact, not a hole every consumer of the archive would quietly train around.
+    const written = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.archivePlayerGameweek.deleteMany({ where: { season } });
+        // Chunked: one 29k-row insert is a single statement large enough to matter, and a failure
+        // halfway through tells you which chunk rather than nothing.
+        const CHUNK = 2000;
+        let count = 0;
+        for (let i = 0; i < data.length; i += CHUNK) {
+          const res = await tx.archivePlayerGameweek.createMany({
+            data: data.slice(i, i + CHUNK),
+          });
+          count += res.count;
+        }
+        return count;
+      },
+      // 29k rows in 15 chunks comfortably exceeds the 5s default.
+      { timeout: 120_000 },
+    );
+    // Structural, not logged: the import knows how many rows it parsed, and a season whose table
+    // count disagrees is an import that must not report success.
+    if (written !== data.length) {
+      throw new Error(
+        `${season}: parsed ${data.length} rows but wrote ${written} — the transaction rolled back`,
+      );
     }
     return written;
   }
