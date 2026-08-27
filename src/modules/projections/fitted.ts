@@ -44,6 +44,34 @@ export interface MinutesParams {
   /** E[minutes | started] and E[minutes | sub], for the expected-minutes report only */
   minutesGivenStart: number;
   minutesGivenSub: number;
+  /**
+   * Keeper-specific minutes curves (B-021), absent in params fitted before they existed.
+   *
+   * Keepers are the one position whose bench behaviour is categorically different: a second-choice
+   * keeper does not come on. B-013 measured `P(any appearance)` as their worst term — 0.353
+   * predicted against a 0.225 base rate, the largest positional gap in the model — because the
+   * global sub curve pays a benched keeper a midfielder's chance of a cameo. Fitted on GKP rows
+   * alone by the same logistic machinery; the per-position n is printed beside the fit, so a number
+   * from ~3,400 keeper rows is not read with the confidence of one from 29,000.
+   */
+  gkp?: {
+    startIntercept: number;
+    startSlope: number;
+    subIntercept: number;
+    subSlope: number;
+    /** rows behind the fit, printed so thin samples read as thin */
+    n: { start: number; sub: number };
+  };
+}
+
+export interface SavesParams {
+  /**
+   * How expected saves scale with fixture pressure (B-021): `(λ_against / 1.4)^elasticity`, still
+   * clamped to the old [0.3, 2.5] band. 1 reproduces the hand-drawn linear ratio this replaces;
+   * 0 says the opponent does not matter. Grid-searched on the validation split beside the other
+   * shape parameters — the pressure ratio was the one term in the save model nobody had ever fitted.
+   */
+  elasticity: number;
 }
 
 export interface AttackParams {
@@ -73,6 +101,7 @@ export interface BonusParams {
 export interface FittedParams {
   strength: StrengthParams;
   minutes: MinutesParams;
+  saves: SavesParams;
   attack: AttackParams;
   defcon: DefconParams;
   bonus: BonusParams;
@@ -113,6 +142,7 @@ export const UNFITTED_PARAMS: FittedParams = {
     minutesGivenStart: 85,
     minutesGivenSub: 25,
   },
+  saves: { elasticity: 1 },
   attack: {
     xgFixtureElasticity: 1,
     xaFixtureElasticity: 1,
@@ -183,57 +213,66 @@ export const UNFITTED_PARAMS: FittedParams = {
  *   before; that does not make every non-zero number that follows a strong one.
  */
 export const FITTED_PARAMS: FittedParams = {
-  strength: {
-    homeAdvantage: 1.1186408380003194,
-    confidenceMatches: 64,
-    leagueGoalsPerTeamMatch: 1.5486291739894333,
-    goalsWeight: 0.5,
-    decayHalfLife: 6,
+  "strength": {
+    "homeAdvantage": 1.118640838000319,
+    "confidenceMatches": 64,
+    "leagueGoalsPerTeamMatch": 1.5486291739894331,
+    "goalsWeight": 0.5,
+    "decayHalfLife": 6
   },
-  minutes: {
-    startIntercept: -0.18790070079541765,
-    startSlope: 0.4849268629262438,
-    subAppearanceRate: 0.15435726210350584,
-    subIntercept: 0.5746772470150242,
-    subSlope: 1.3841301233905476,
-    sixtyGivenStart: 0.9339351334078926,
-    sixtyGivenSub: 0.013411204845338524,
-    minutesGivenStart: 82.83320019172392,
-    minutesGivenSub: 18.151633138654553,
+  "minutes": {
+    "startIntercept": -0.187900700795416,
+    "startSlope": 0.4849268629262445,
+    "subAppearanceRate": 0.15435726210350584,
+    "subIntercept": 0.574677247015025,
+    "subSlope": 1.384130123390548,
+    "sixtyGivenStart": 0.9339351334078926,
+    "sixtyGivenSub": 0.013411204845338524,
+    "minutesGivenStart": 82.83320019172392,
+    "minutesGivenSub": 18.151633138654553,
+    "gkp": {
+      "startIntercept": -0.26501428563368706,
+      "startSlope": 0.5598803671683812,
+      "subIntercept": -1.0818460458418615,
+      "subSlope": 1.4470795639568321,
+      "n": {
+        "start": 4627,
+        "sub": 3514
+      }
+    }
   },
-  attack: {
-    xgFixtureElasticity: 0.25,
-    xaFixtureElasticity: 2.5,
-    goalsPerXg: 0.9890259541292118,
-    assistsPerXa: 1.3951956123013418,
+  "saves": {
+    "elasticity": 0.5
   },
-  defcon: { dispersion: 1.5, ratePer90ToMatch: 1.1 },
-  bonus: {
-    bonusPerBps: 0.04173248388494878,
-    bpsIntercept: -0.2839231900427406,
-    maxBonus: 3,
+  "attack": {
+    "xgFixtureElasticity": 0.75,
+    "xaFixtureElasticity": 2,
+    "goalsPerXg": 0.9890259541292117,
+    "assistsPerXa": 1.3951956123013414
   },
-  provenance: {
-    fittedOn: ['2023-24', '2024-25'],
-    rows: 42468,
-    date: '2026-08-27',
-    objective:
-      'frequencies measured directly; shape parameters by RMSE on held-out 2024-25 rounds 20+ ' +
-      '(14,540 rows). RMSE deliberately, not MAE: MAE is minimised by the conditional median and ' +
-      'this corpus is mostly near-zero rows, so an MAE search shrank every parameter toward ' +
-      'predicting nobody scores.',
-    heldOut:
-      '2025-26 rounds 13-38 entirely; rounds 1-12 (8,818 rows) are read by the defensive-contribution ' +
-      'parameters and by nothing else. Live 2026/27 untouched.',
-    notes: [
-      'The defensive-contribution parameters are the ONE exception to the holdout: that category exists only in 2025-26, so dispersion is fitted on rounds 1-12 and ratePer90ToMatch chosen on 13-19. Those rows are passed separately and no other parameter reads them — an earlier version folded them into the training set, where the frequency measurements iterated them too, so a quarter of the test season silently informed the whole fit while this note claimed otherwise.',
-      'The availability multiplier is NOT fitted: the archive carries no per-gameweek status or chance_of_playing. It waits on player_deadline_snapshot (B-007 Phase 2) accumulating live gameweeks.',
-      'strength: rebuilt in B-014. A team goals for a fixture are the sum of its players goalsScored plus the opponent ownGoals — neither source carries a team score, so this rollup IS the definition and it is the same rollup on both sides. goalsWeight 0.5 blends that with the old expected-goals sum ON THE RATIO rather than on the raw rates, because the two have different league means. decayHalfLife 6 rounds applies to the goals side only, so goalsWeight 0 reproduces the incumbent model exactly and the search is a comparison rather than two changes at once.',
-      'strength.confidenceMatches is 64 and NO LONGER at the grid edge. Under the old definition the search ran to 96 and kept improving — held-out RMSE preferred shrinking team strength away entirely, because the signal it was shrinking was not worth keeping. An interior optimum is the direct evidence that the rebuilt estimate carries information.',
-      'The fixture elasticities are non-zero for the first time: xa 2.5, xg 0.25. The assist result is clear (1.9470 at zero against 1.9453 at 2.5); the goal result is weak — 0, 0.25 and 0.5 are within 0.0002 RMSE of each other and only the top of the grid is clearly worse.',
-      'xaFixtureElasticity: the grid was FLAT — every value from 1.0 to 2.0 scored 1.9497 and the whole grid spanned 0.0007 RMSE. A grid search returns a winner whether or not its objective can tell the candidates apart, so the search now takes the NULL candidate (no effect) when the spread is under 0.001, and says so. Without that rule this parameter would have shipped as 1.5 — a claim that the fixture moves assists by half again, on evidence of seven ten-thousandths of a point.',
-      'defcon.ratePer90ToMatch moved 0.9 -> 1.0 when the non-linear terms began integrating over the MINUTES distribution as well as the count (B-020). It had been absorbing part of that error: with the threshold evaluated once at average minutes, a lower rate was the least-bad compromise across nailed and rotated players. Any parameter fitted against a wrong shape is partly a correction for it.',
-      'subIntercept/subSlope replace the scalar subAppearanceRate (B-019). Fitted on non-start rows only — the population the term is asked about at prediction time. subAppearanceRate is kept as the population rate the report quotes and as the flat-curve fallback.',
+  "defcon": {
+    "dispersion": 1.5,
+    "ratePer90ToMatch": 1
+  },
+  "bonus": {
+    "bonusPerBps": 0.04173248388494878,
+    "bpsIntercept": -0.2839231900427406,
+    "maxBonus": 3
+  },
+  "provenance": {
+    "fittedOn": [
+      "2023-24",
+      "2024-25"
     ],
-  },
+    "rows": 56133,
+    "date": "2026-08-27-gkp",
+    "objective": "frequencies measured directly; shape parameters by MAE on held-out 2024-25 rounds 20+",
+    "heldOut": "2025-26 (whole season), live 2026/27 (untouched)",
+    "notes": [
+      "defensive contribution is fitted on 2025-26 rounds 1-19 \u2014 the category exists in no earlier season, so that term alone is not held out",
+      "the availability multiplier is NOT fitted: the archive carries no per-gameweek status or chance_of_playing (B-007 Phase 2 must accumulate first)",
+      "B-021: keeper minutes curves fitted on GKP rows alone (n start 4627, sub 3514) and saves elasticity 0.5 - an interior optimum on keeper validation rows; every global parameter reproduced the incumbent byte-for-byte"
+    ]
+  }
 };
+

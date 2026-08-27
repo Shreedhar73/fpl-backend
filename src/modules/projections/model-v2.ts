@@ -201,10 +201,10 @@ export function projectFixtureV2(
   // --- Saves: 1 per THREE saves. Same defect, same fix. Saves scale with what the opponent creates,
   // so the fixture's lambda-against carries the shot volume.
   const expectedSaves =
-    position === 'GKP' ? saveRate(rates, ninetieths, goals) : 0;
+    position === 'GKP' ? saveRate(rates, ninetieths, goals, params.saves) : 0;
   const savePoints =
     position === 'GKP'
-      ? overStates((n) => expectedFloorDiv(saveRate(rates, n, goals), 3)) *
+      ? overStates((n) => expectedFloorDiv(saveRate(rates, n, goals, params.saves), 3)) *
         scoring.savePoint()
       : 0;
 
@@ -295,7 +295,7 @@ export function projectFixtureV2(
     if (position === 'GKP') {
       pmf = convolve(
         pmf,
-        floorDivPmf(saveRate(rates, n, goals), 3, scoring.savePoint()),
+        floorDivPmf(saveRate(rates, n, goals, params.saves), 3, scoring.savePoint()),
       );
     }
     if (threshold > 0) {
@@ -385,10 +385,17 @@ function saveRate(
   rates: PlayerRates,
   ninetieths: number,
   goals: GoalRates,
+  saves: { elasticity: number },
 ): number {
+  // `(λ_against / 1.4)^elasticity`, clamped to the same band as the hand-drawn ratio it replaces
+  // (B-021). elasticity 1 IS that ratio; the exponent is the one save-model term that had never
+  // been fitted, and it reads the rebuilt λ_against directly rather than a scaling of it.
   const pressure =
     goals.lambdaAgainst > 0 && goals.lambdaFor > 0
-      ? Math.max(0.3, Math.min(2.5, goals.lambdaAgainst / 1.4))
+      ? Math.max(
+          0.3,
+          Math.min(2.5, (goals.lambdaAgainst / 1.4) ** saves.elasticity),
+        )
       : 1;
   return ninetieths * rates.saves90 * pressure;
 }
@@ -419,14 +426,34 @@ export function minutesDistribution(
   lagged: LaggedMinutes,
   availability: number,
   params: FittedParams,
+  /**
+   * The keeper curves (B-021) apply when this says GKP and the params carry them. Optional and
+   * defaulted so a caller that does not know the position gets the global curves — the behaviour
+   * every caller had before the split — rather than a break.
+   */
+  position?: string,
 ): MinutesDistribution {
   const m = params.minutes;
+  // A second-choice keeper does not come on; the global sub curve pays him a midfielder's chance of
+  // a cameo, which B-013 measured as the model's largest positional gap. Keeper rows get their own
+  // fitted curves when the params carry them.
+  const curves =
+    position === 'GKP' && m.gkp !== undefined
+      ? m.gkp
+      : {
+          startIntercept: m.startIntercept,
+          startSlope: m.startSlope,
+          subIntercept: m.subIntercept,
+          subSlope: m.subSlope,
+        };
   const rawStart = logistic(
-    m.startIntercept + m.startSlope * logit(lagged.startRate),
+    curves.startIntercept + curves.startSlope * logit(lagged.startRate),
   );
   // P(appear | did not start), from the player's OWN lagged rate rather than one league-wide
   // constant. B-013 measured that constant as the model's worst-calibrated shape by a factor of ten.
-  const rawSub = logistic(m.subIntercept + m.subSlope * logit(lagged.subRate));
+  const rawSub = logistic(
+    curves.subIntercept + curves.subSlope * logit(lagged.subRate),
+  );
 
   const pStart = clamp01(availability * rawStart);
   const pSub = clamp01(availability * (1 - rawStart) * rawSub);

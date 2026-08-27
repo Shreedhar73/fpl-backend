@@ -236,6 +236,7 @@ export function runBacktest(
         { startRate: features.laggedStartRate, subRate: features.laggedSubRate },
         options.availability?.(row) ?? 1,
         params,
+        row.position,
       ),
       features.rates,
       goalRates,
@@ -285,6 +286,7 @@ export function runBacktest(
         },
         options.availability?.(row) ?? 1,
         params,
+        row.position,
       );
       const projection = project(row, features, goalRates);
 
