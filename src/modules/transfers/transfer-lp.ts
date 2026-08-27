@@ -1,5 +1,11 @@
 import { PositionCode } from '../fpl-sync/mappers';
-import { Candidate } from '../optimizer/ilp';
+import {
+  Candidate,
+  Concentration,
+  NO_CONCENTRATION,
+  SquadObjective,
+} from '../optimizer/ilp';
+import { BENCH_WEIGHT } from '../optimizer/policy';
 import { POSITIONS, Rules } from '../optimizer/rules';
 
 /**
@@ -17,8 +23,10 @@ import { POSITIONS, Rules } from '../optimizer/rules';
  * over the horizon"**, so the −4 belongs in the objective where the solver can trade it off:
  *
  * ```
- *   maximise  Σ ep_i · x_i  −  hitCost · h
- *   s.t.      Σ x_i = 15,  position quotas,  ≤ 3 per club
+ *   maximise  Σ ep_i (y_i + c_i)  +  benchWeight · Σ ep_i (x_i − y_i)
+ *             −  λ Σ d_ij  −  hitCost · h
+ *   s.t.      Σ x_i = 15,  Σ y_i = 11,  Σ c_i = 1,  y_i ≤ x_i,  c_i ≤ y_i
+ *             position quotas on x, formation bounds on y,  ≤ 3 per club
  *             Σ cost_i · x_i  ≤  bank + Σ_{owned, sold} sellValue_i
  *             h  ≥  (owned not kept)  −  freeTransfers
  *             h  ≥  0
@@ -42,12 +50,22 @@ import { POSITIONS, Rules } from '../optimizer/rules';
  * — a keep "costs" its own sell value, because keeping it is declining that money. That form is one
  * linear row and needs no separate buy/sell variables.
  *
+ * ## One objective with the recommendation, since B-024
+ *
+ * This program used to maximise `Σ ep · x` over all fifteen while the squad recommendation maximised
+ * the eleven, the bench at a discount and the armband. The two could prefer different players for the
+ * same money, and a user saw both halves on one screen. The `y` and `c` families here are the same
+ * families `buildLp` emits, in the same shape, so the two differ only where they must: this budget
+ * row prices a kept player at his sell value, and this objective carries the hit.
+ *
+ * The defensive-concentration charge could not be carried before that, for a structural reason rather
+ * than an oversight — it keys off `y`, and this program had no `y`. Adding the charge before the
+ * eleven would have been meaningless, which is why B-024 fixed the order.
+ *
  * ## What it does not do
  *
  * No chips: a chip is unspendable once used, so it is a season-level decision and the model
- * recommends a window rather than committing one (`chips.ts`). No collision penalty by default — the
- * caller passes one if it wants the same guard the squad solve uses, and the API does, so a plan and
- * a recommendation are judged by one objective.
+ * recommends a window rather than committing one (`chips.ts`).
  */
 
 /** Points charged per transfer beyond the free ones. A rule, not a policy knob. */
@@ -88,6 +106,31 @@ export interface TransferLpInput {
   hitCost: number;
   /** cap on transfers considered at once; keeps the LP small and the advice human-sized */
   maxTransfers: number;
+  /**
+   * What a bench place is worth (B-024). Defaults to what the recommendation is solved with.
+   *
+   * Until B-024 this program had no eleven at all: it maximised `Σ EP · x` over the fifteen while the
+   * recommendation maximised `Σ EP(y + c) + benchWeight · Σ EP(x − y)`. The two could prefer
+   * different players for the same money, and a user saw both halves on one screen.
+   */
+  benchWeight?: number;
+  /**
+   * The defensive-concentration charge (B-029), on the eleven this program now chooses.
+   *
+   * It could not be carried before B-024 for a structural reason rather than an oversight: the rule
+   * keys off `y`, and this program had no `y`. Adding the charge before adding the eleven would have
+   * been meaningless, which is why B-024 fixed the order.
+   */
+  concentration?: Concentration;
+  /**
+   * Which objective to maximise. **A measurement knob, never a serving one** — see `SquadObjective`.
+   *
+   * `all-fifteen-equal` reproduces the objective this program had before B-024: `Σ EP · x`, no
+   * eleven priced, no armband, no concentration. It exists so B-024's change can be paired against
+   * what it replaced on one season rather than compared across two report runs, which is the only
+   * comparison tight enough to resolve it.
+   */
+  objective?: SquadObjective;
 }
 
 /**
@@ -100,8 +143,22 @@ export interface TransferLpInput {
  */
 export function buildTransferLp(input: TransferLpInput): string {
   const { owned, market, rules, bank, freeTransfers, hitCost } = input;
+  const benchWeight = input.benchWeight ?? BENCH_WEIGHT;
+  const concentration = input.concentration ?? NO_CONCENTRATION;
   const all = [...owned, ...market];
   const ownedKeys = new Set(owned.map((c) => c.key));
+  const xi = (c: Candidate) => `y_${c.key}`;
+  const cap = (c: Candidate) => `k_${c.key}`;
+  // Only the pairs both of whose players are in THIS program. A `d` row naming a player who is not
+  // creates a free variable with a zero objective and a constraint that can never bind — the same
+  // trap `buildLp` names, and this program's universe is a different set from that one's.
+  const inLp = new Set(all.map((c) => c.key));
+  const pairs =
+    concentration.lambda === 0
+      ? []
+      : concentration.pairs.filter(
+          (p) => inLp.has(p.a.key) && inLp.has(p.b.key),
+        );
 
   const sellOf = (c: OwnedCandidate): number => c.sellValue ?? c.cost;
   const budgetCoef = (c: Candidate): number =>
@@ -119,10 +176,25 @@ export function buildTransferLp(input: TransferLpInput): string {
   // Every term after the first carries an explicit sign. An LP objective written as a bare list of
   // coefficients with no operators between them is not a parse error in every solver — it is a
   // DIFFERENT objective in some, which is the worst of both.
-  const terms: { coef: number; name: string }[] = [
-    ...all.map((c) => ({ coef: c.ep, name: c.key })),
-    { coef: -hitCost, name: 'h' },
-  ];
+  // The SAME objective the recommendation is solved under (B-024), plus the hit this program alone
+  // carries. `Σ EP(y + c) + benchWeight · Σ EP(x − y) − λ Σ d − hitCost · h`, written with the `x`
+  // and `y` coefficients already collected so the file stays one linear row per variable.
+  const terms: { coef: number; name: string }[] =
+    (input.objective ?? 'xi-bench-captain') === 'all-fifteen-equal'
+      ? [
+          ...all.map((c) => ({ coef: c.ep, name: c.key })),
+          { coef: -hitCost, name: 'h' },
+        ]
+      : [
+          ...all.map((c) => ({ coef: benchWeight * c.ep, name: c.key })),
+          ...all.map((c) => ({ coef: (1 - benchWeight) * c.ep, name: xi(c) })),
+          ...all.map((c) => ({ coef: c.ep, name: cap(c) })),
+          ...pairs.map((_, i) => ({
+            coef: -concentration.lambda,
+            name: `d_${i}`,
+          })),
+          { coef: -hitCost, name: 'h' },
+        ];
   lines.push(
     ' obj: ' +
       terms
@@ -165,6 +237,27 @@ export function buildTransferLp(input: TransferLpInput): string {
     ` maxmoves: ${join(owned.map((c) => c.key))} >= ${Math.max(0, owned.length - input.maxTransfers)}`,
   );
 
+  // --- The eleven and the armband (B-024). Identical in shape to `buildLp`'s, deliberately: the two
+  // programs should differ only where they must — this one's budget prices a kept player at his sell
+  // value and carries the hit.
+  lines.push(` xi: ${join(all.map((c) => xi(c)))} = ${rules.xiSize()}`);
+  lines.push(` captain: ${join(all.map((c) => cap(c)))} = 1`);
+  for (const pos of POSITIONS) {
+    const inThis = inPos(pos).map((c) => xi(c));
+    if (inThis.length === 0) continue;
+    lines.push(` play_min_${pos}: ${join(inThis)} >= ${rules.minPlay(pos)}`);
+    lines.push(` play_max_${pos}: ${join(inThis)} <= ${rules.maxPlay(pos)}`);
+  }
+  for (const c2 of all) {
+    lines.push(` own_${c2.key}: ${xi(c2)} - ${c2.key} <= 0`);
+    lines.push(` armband_${c2.key}: ${cap(c2)} - ${xi(c2)} <= 0`);
+  }
+  // On `y`, because benching genuinely answers this charge — a benched player scores nothing and
+  // carries no variance. See `buildLp`; the reasoning is the same rule, not a second one.
+  pairs.forEach((p, i) => {
+    lines.push(` conc_${i}: ${xi(p.a)} + ${xi(p.b)} - d_${i} <= 1`);
+  });
+
   // **No penalty rows at all since B-029, and that is a real divergence rather than a tidy-up.** This
   // LP carried B-011's collision rows on `x`; B-028 measured that rule to be pricing a hedge and it
   // was retired. Its replacement — the defensive-concentration charge — keys off `y`, and this
@@ -173,9 +266,19 @@ export function buildTransferLp(input: TransferLpInput): string {
   // armband and the concentration. That gap is B-024's, and it got wider here, not narrower.
   lines.push('Bounds');
   lines.push(' h >= 0');
+  // `d` stays continuous and out of `Binary`: the `-lambda` objective pushes it to its lower bound,
+  // so it lands on 0 unless its row forces it up.
+  for (let i = 0; i < pairs.length; i++) lines.push(` d_${i} >= 0`);
 
   lines.push('Binary');
-  lines.push('  ' + all.map((c) => c.key).join('\n  '));
+  lines.push(
+    '  ' +
+      [
+        ...all.map((c) => c.key),
+        ...all.map((c) => xi(c)),
+        ...all.map((c) => cap(c)),
+      ].join('\n  '),
+  );
   lines.push('End');
   return lines.join('\n');
 }

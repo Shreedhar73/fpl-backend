@@ -2,13 +2,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
 import { FplApiClient } from '../../infra/fpl/fpl-api.client';
-import { Candidate } from '../optimizer/ilp';
+import { Candidate, defencePairs } from '../optimizer/ilp';
 /**
  * The appearance floor, applied to what the planner may BUY. Imported rather than re-declared so the
  * two surfaces cannot drift — a planner that recommends buying a player the recommendation refuses to
  * own would have the app contradicting itself on one screen.
  */
-import { MIN_APPEARANCES as MIN_APPEARANCES_FOR_BUY } from '../optimizer/policy';
+import {
+  BENCH_WEIGHT,
+  DEFENCE_CONCENTRATION_LAMBDA,
+  MIN_APPEARANCES as MIN_APPEARANCES_FOR_BUY,
+} from '../optimizer/policy';
 import {
   OptimizerService,
   type Universe,
@@ -173,14 +177,19 @@ export class TransfersService {
       bank: squad.bank,
       freeTransfers: state.freeTransfers,
       hitCost: HIT_COST,
-      // **No guard is passed, and the comment that used to sit here claimed one was.** It said this
-      // solved under "the SAME collision guard the recommendation is solved under", which stopped
-      // being true when B-023 moved that guard and was never corrected. B-029 retired the rule
-      // outright and replaced it with a charge on the starting eleven — and this program has no
-      // eleven. So the planner optimises raw horizon EP less the hit while the recommendation also
-      // prices the bench, the armband and the defensive concentration. That divergence is B-024's,
-      // it is real, and it is wider than it was.
       maxTransfers: MAX_TRANSFERS,
+      // The same objective the recommendation is solved under (B-024). It was NOT, for two releases:
+      // B-023 gave the squad solve an eleven, a discounted bench and an armband, and this program
+      // kept maximising all fifteen equally — so the plan and the recommendation could prefer
+      // different players for the same money, on one screen. `benchWeight` defaults to the served
+      // value; the concentration charge is passed explicitly because its pairs have to be built over
+      // THIS program's universe, which is the owned fifteen plus the market rather than the market
+      // alone.
+      benchWeight: BENCH_WEIGHT,
+      concentration: {
+        pairs: defencePairs([...owned, ...market]),
+        lambda: DEFENCE_CONCENTRATION_LAMBDA,
+      },
     });
     const solution = highs.solve(lp);
     if (solution.Status !== 'Optimal') {

@@ -26,10 +26,12 @@ const measured: SimVerdictInput = {
   holdVsForm: pair(14.84, 2.74),
   greedyVsForm: pair(3.24, 2.6),
   vsTemplate: pair(-1.27, 2.6),
-  plannerPoints: 1846,
-  plannerHitCost: 40,
-  plannerTransfers: 47,
-  plannerVsGreedy: pair(-0.95, 0.9),
+  plannerPoints: 1814,
+  plannerHitCost: 44,
+  plannerTransfers: 48,
+  plannerVsGreedy: pair(-1.81, 0.9),
+  plannerPreB024Points: 1846,
+  b024VsPre: pair(-0.86, 1.54),
   capturedWins: [11, 15, 30],
   ks: [11, 15, 30],
   objectiveAbEntry: 'B-031',
@@ -112,8 +114,8 @@ describe('simulatedSeasonVerdict', () => {
     it('says what it paid in hits beside what it scored', () => {
       const out = text(measured);
       expect(out).toContain('has now walked a season');
-      expect(out).toContain('35 behind');
-      expect(out).toContain('paid 40 points in hits');
+      expect(out).toContain('67 behind');
+      expect(out).toContain('paid 44 points in hits');
     });
 
     it('changes when the planner is ahead instead of behind', () => {
@@ -133,6 +135,23 @@ describe('simulatedSeasonVerdict', () => {
       const out = text({ ...measured, plannerPoints: null });
       expect(out).not.toContain('has now walked a season');
     });
+
+    it('reports B-024 as neither better nor worse when it does not clear the floor', () => {
+      const out = text(measured);
+      expect(out).toContain('costs 32 points of season');
+      expect(out).toContain('neither better nor worse');
+    });
+
+    it('reports B-024 as a real change when it does clear the floor', () => {
+      const out = text({ ...measured, b024VsPre: pair(-0.86, 0.2) });
+      expect(out).toContain('a real change in points');
+      expect(out).not.toEqual(text(measured));
+    });
+
+    it('drops the B-024 paragraph when its arm did not run', () => {
+      const out = text({ ...measured, plannerPreB024Points: null });
+      expect(out).not.toContain('one objective');
+    });
   });
 
   it('drops the paragraphs whose arms did not run rather than printing a null', () => {
@@ -145,6 +164,8 @@ describe('simulatedSeasonVerdict', () => {
       vsTemplate: null,
       plannerPoints: null,
       plannerVsGreedy: null,
+      plannerPreB024Points: null,
+      b024VsPre: null,
     });
     expect(out).not.toContain('Held all season');
     expect(out).not.toContain('crowd');

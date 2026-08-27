@@ -5,7 +5,10 @@ import { Scoring } from '../projections/scoring';
 import { FittedParams } from '../projections/fitted';
 import { scoringForSeason } from '../archive/archive-scoring';
 import { CalibrationRepository } from './calibration.repository';
-import { BENCH_WEIGHT } from '../optimizer/policy';
+import {
+  BENCH_WEIGHT,
+  DEFENCE_CONCENTRATION_LAMBDA,
+} from '../optimizer/policy';
 import {
   commonRows,
   PREDICTORS,
@@ -37,6 +40,7 @@ import {
   NO_TRANSFER,
   plannerPolicy,
   PLANNER_LABEL,
+  PLANNER_PRE_B024_LABEL,
   openingSquad,
   SeasonResult,
   simulateSeason,
@@ -205,10 +209,6 @@ export class DecisionService {
     // between them isolates the POLICY. That is the comparison B-032 exists to make.
     {
       const highs = await highsLoader();
-      const planner = plannerPolicy((lp) => highs.solve(lp), {
-        hitCost: SIM_OPTIONS.hitCost,
-        maxTransfers: MAX_TRANSFERS,
-      });
       const opening = await openingSquad(
         [...squadPool.values()],
         'model',
@@ -216,9 +216,43 @@ export class DecisionService {
         null,
         benchWeight,
       );
-      seasons.push(
-        simulateSeason(byRound, opening, 'model', rules, planner, SIM_OPTIONS),
-      );
+      // Two arms, and the second is the objective the first replaced (B-024). They start from the
+      // identical fifteen and see the identical predictions, so the pairing between them isolates
+      // the planner's objective — the only comparison tight enough to resolve a change this size.
+      // Comparing two report runs instead would confound it with everything else that moved.
+      for (const arm of [
+        {
+          label: PLANNER_LABEL,
+          objective: 'xi-bench-captain' as const,
+          concentrationLambda: DEFENCE_CONCENTRATION_LAMBDA,
+        },
+        {
+          label: PLANNER_PRE_B024_LABEL,
+          objective: 'all-fifteen-equal' as const,
+          concentrationLambda: null,
+        },
+      ]) {
+        seasons.push(
+          simulateSeason(
+            byRound,
+            opening,
+            'model',
+            rules,
+            plannerPolicy((lp) => highs.solve(lp), {
+              hitCost: SIM_OPTIONS.hitCost,
+              maxTransfers: MAX_TRANSFERS,
+              // As served, both of them. An arm is only worth anything if it is the planner a user
+              // is actually given: a harness that solves a tidier objective than the product
+              // measures a planner nobody has.
+              benchWeight,
+              concentrationLambda: arm.concentrationLambda,
+              objective: arm.objective,
+              label: arm.label,
+            }),
+            SIM_OPTIONS,
+          ),
+        );
+      }
     }
 
     const path =
@@ -712,34 +746,58 @@ export class DecisionService {
       }
     }
 
-    // The planner against the policy it has to beat. Both arms are the model's own opening fifteen,
-    // so this pairing isolates the POLICY — which is the tightest comparison in this report and the
-    // only one that says anything about the transfer planner the product ships.
+    // The planner arms, each against the policy it has to beat, and then against each other. Every
+    // arm here starts from the model's own opening fifteen, so these pairings isolate the POLICY and
+    // then the OBJECTIVE — the two tightest comparisons in this report, and the only ones that say
+    // anything about the transfer planner the product ships.
     {
-      const planner = seasons.find(
-        (s2) => s2.policy === PLANNER_LABEL && !s2.squadLabel,
-      );
+      const arm = (label: string) =>
+        seasons.find((s2) => s2.policy === label && !s2.squadLabel);
       const greedy = seasons.find(
         (s2) =>
           s2.policy === GREEDY_ONE_FT.label &&
           s2.predictor === 'model' &&
           !s2.squadLabel,
       );
-      if (planner && greedy) {
-        const d = pairedDifference(
-          asDecisions(planner.rounds),
-          asDecisions(greedy.rounds),
+      const row = (
+        policy: string,
+        label: string,
+        a2: SeasonResult | undefined,
+        b2: SeasonResult | undefined,
+        key: string,
+      ) => {
+        if (!a2 || !b2) return;
+        const d = pairedDifference(asDecisions(a2.rounds), asDecisions(b2.rounds));
+        if (!d) return;
+        simPaired.set(key, d);
+        w(
+          `| ${policy} | ${label} | ${d.rounds} | ` +
+            `${d.meanDifference >= 0 ? '+' : ''}${d.meanDifference.toFixed(2)} | ` +
+            `${d.standardError.toFixed(2)} | ${d.clearsNoise ? '**yes**' : 'no'} | ` +
+            `${detectableAt(d).toFixed(0)} pts |`,
         );
-        if (d) {
-          simPaired.set(`${PLANNER_LABEL}|greedy-1ft`, d);
-          w(
-            `| ${PLANNER_LABEL} | planner − greedy-1ft, same opening fifteen | ${d.rounds} | ` +
-              `${d.meanDifference >= 0 ? '+' : ''}${d.meanDifference.toFixed(2)} | ` +
-              `${d.standardError.toFixed(2)} | ${d.clearsNoise ? '**yes**' : 'no'} | ` +
-              `${detectableAt(d).toFixed(0)} pts |`,
-          );
-        }
-      }
+      };
+      row(
+        PLANNER_LABEL,
+        'planner − greedy-1ft, same opening fifteen',
+        arm(PLANNER_LABEL),
+        greedy,
+        `${PLANNER_LABEL}|greedy-1ft`,
+      );
+      row(
+        PLANNER_PRE_B024_LABEL,
+        'pre-B-024 planner − greedy-1ft, same opening fifteen',
+        arm(PLANNER_PRE_B024_LABEL),
+        greedy,
+        `${PLANNER_PRE_B024_LABEL}|greedy-1ft`,
+      );
+      row(
+        PLANNER_LABEL,
+        '**B-024 − the objective it replaced**, same opening fifteen',
+        arm(PLANNER_LABEL),
+        arm(PLANNER_PRE_B024_LABEL),
+        `${PLANNER_LABEL}|${PLANNER_PRE_B024_LABEL}`,
+      );
     }
     w();
     w(`### What the simulated season says`);
@@ -766,6 +824,12 @@ export class DecisionService {
         plannerHitCost: plannerArm?.totalHitCost ?? null,
         plannerTransfers: plannerArm?.totalTransfers ?? null,
         plannerVsGreedy: simPaired.get(`${PLANNER_LABEL}|greedy-1ft`) ?? null,
+        plannerPreB024Points:
+          seasons.find(
+            (x) => x.policy === PLANNER_PRE_B024_LABEL && !x.squadLabel,
+          )?.totalPoints ?? null,
+        b024VsPre:
+          simPaired.get(`${PLANNER_LABEL}|${PLANNER_PRE_B024_LABEL}`) ?? null,
         holdVsForm: simPaired.get('no-transfer|form') ?? null,
         greedyVsForm: simPaired.get('greedy-1ft|form') ?? null,
         vsTemplate: greedyTemplate?.squadLabel
