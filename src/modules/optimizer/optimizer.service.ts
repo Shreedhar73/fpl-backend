@@ -90,8 +90,10 @@ export interface RecommendationReasoning {
     /** what a held pair costs the objective — the policy constant, unscaled (B-026) */
     lambda: number;
     pairsConsidered: number;
-    /** horizon EP charged to the squad for the pairs it HOLDS */
+    /** horizon EP charged in total: the pairs HELD, plus what the armband added */
     penaltyEp: number;
+    /** of that total, what the armband added by doubling one side of a held pair (B-027) */
+    armbandEp: number;
     taken: {
       fixture: string;
       attacker: string;
@@ -99,6 +101,8 @@ export interface RecommendationReasoning {
       lambda: number;
       /** whether the eleven started both sides; holding is what is charged, starting is not */
       bothStarted: boolean;
+      /** whether our captain is one side of this pair, which charges it a second time */
+      captained: boolean;
     }[];
     statement: string;
   };
@@ -124,7 +128,7 @@ const FLOOR_STATEMENT =
 const COLLISION_STATEMENT =
   'Owning one of our attackers against one of our defenders in the same match bets on both ' +
   'outcomes at once, so the squad is charged for every such pair it HOLDS — benching one side does ' +
-  'not avoid it. This penalty was measured over 103 archived gameweeks and did NOT improve ' +
+  'not avoid it, and the armband is charged again for doubling the stake on one of them. This penalty was measured over 103 archived gameweeks and did NOT improve ' +
   'realised points (+0.59 +/- 0.92 per gameweek, per-season signs that flip, downside worse). It ' +
   'is on as a policy choice — a squad that bets against itself is not one we want to recommend — ' +
   'and not because it scores more.';
@@ -164,6 +168,8 @@ export interface Universe {
 export interface HeldPair {
   pair: ConflictPair;
   bothStarted: boolean;
+  /** whether OUR captain is one side of this pair — the exposure that counts twice (B-027) */
+  captained: boolean;
 }
 
 /**
@@ -184,10 +190,12 @@ export function arrangeSquad(
 ): {
   squad: SquadPlayer[];
   formation: string;
-  /** the conflicting pairs the FIFTEEN holds, and whether the XI started both sides of each */
+  /** the conflicting pairs the FIFTEEN holds, and what became of each on the pitch */
   heldCollisions: HeldPair[];
-  /** horizon EP the squad was charged for holding them, at the rate the LP charges */
+  /** horizon EP charged for HOLDING them */
   heldPenalty: number;
+  /** horizon EP charged on top because the armband doubles one side of one (B-027) */
+  armbandPenalty: number;
 } {
   // The captain comes back from the enumeration rather than being picked afterwards, so that the XI
   // and the armband are one decision here exactly as they are one decision in the LP.
@@ -195,19 +203,26 @@ export function arrangeSquad(
     inSquad,
     rules,
     benchWeight,
+    collisions,
   );
 
   // What the pairs cost is a fact about the fifteen (B-025), so it is computed here from what is
-  // held — not returned by the XI enumeration, which no longer charges anything.
+  // held — not returned by the XI enumeration, which charges only the armband.
   const held = new Set(inSquad.map((c) => c.key));
   const heldCollisions: HeldPair[] = pairsWithin(held, collisions.pairs).map(
     (pair) => ({
       pair,
       bothStarted:
         starters.has(pair.attacker.key) && starters.has(pair.defender.key),
+      captained:
+        pair.attacker.key === captainKey || pair.defender.key === captainKey,
     }),
   );
   const heldPenalty = collisions.lambda * heldCollisions.length;
+  // The armband's own charge, counted over pairs the squad HOLDS rather than pairs it started:
+  // benching the other side is not an answer to having bought him (B-027).
+  const armbandPenalty =
+    collisions.lambda * heldCollisions.filter((h) => h.captained).length;
 
   const bench = inSquad.filter((c) => !starters.has(c.key));
   const benchGk = bench.filter((c) => c.position === 'GKP');
@@ -238,7 +253,7 @@ export function arrangeSquad(
     };
   });
 
-  return { squad, formation, heldCollisions, heldPenalty };
+  return { squad, formation, heldCollisions, heldPenalty, armbandPenalty };
 }
 
 /**
@@ -383,7 +398,8 @@ export class OptimizerService {
 
     // best legal XI, captain, vice and bench order — the same arrangement `insights` applies to a
     // squad the optimizer did not choose.
-    const { squad, formation, heldCollisions, heldPenalty } = arrangeSquad(
+    const { squad, formation, heldCollisions, heldPenalty, armbandPenalty } =
+      arrangeSquad(
       inSquad,
       rules,
       collisions,
@@ -425,13 +441,15 @@ export class OptimizerService {
         // arithmetic that does not add up on screen. They are the same number again.
         lambda: COLLISION_LAMBDA,
         pairsConsidered: collisions.pairs.length,
-        penaltyEp: round2(heldPenalty),
-        taken: heldCollisions.map(({ pair, bothStarted }) => ({
+        penaltyEp: round2(heldPenalty + armbandPenalty),
+        armbandEp: round2(armbandPenalty),
+        taken: heldCollisions.map(({ pair, bothStarted, captained }) => ({
           fixture: pair.fixture,
           attacker: pair.attacker.webName,
           defender: pair.defender.webName,
           lambda: COLLISION_LAMBDA,
           bothStarted,
+          captained,
         })),
         statement: COLLISION_STATEMENT,
       },

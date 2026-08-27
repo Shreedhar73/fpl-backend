@@ -94,12 +94,14 @@ async function main(): Promise<void> {
         // Held, and separately whether the eleven started both sides. Since B-025 holding is the
         // charged event; "kept in the XI" was the old wording and is now a different fact.
         console.log(
-          `    collisions held (charged ${arranged.heldPenalty.toFixed(2)} horizon EP):`,
+          `    collisions held (charged ${arranged.heldPenalty.toFixed(2)} for holding, ` +
+            `${arranged.armbandPenalty.toFixed(2)} for the armband):`,
         );
-        for (const { pair, bothStarted } of arranged.heldCollisions)
+        for (const { pair, bothStarted, captained } of arranged.heldCollisions)
           console.log(
             `      ${pair.attacker.webName} vs ${pair.defender.webName}` +
-              `${bothStarted ? ' — both started' : ' — one of them benched'}`,
+              `${bothStarted ? ' — both started' : ' — one of them benched'}` +
+              `${captained ? ', OUR CAPTAIN is one side' : ''}`,
           );
       }
       console.log('');

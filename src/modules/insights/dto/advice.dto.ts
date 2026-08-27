@@ -266,6 +266,14 @@ export class CollisionTakenDto {
       'is a state the payload had no way to express before — it reported no conflict at all.',
   })
   bothStarted!: boolean;
+
+  @ApiProperty({
+    description:
+      'Whether OUR captain is one side of this pair. The armband doubles the stake on a correlated ' +
+      'outcome, not only the reward, so a captained pair is charged a second time (B-027) — and, ' +
+      'like the first charge, against a player we own rather than one we start.',
+  })
+  captained!: boolean;
 }
 
 export class FixtureCollisionsDto {
@@ -284,11 +292,18 @@ export class FixtureCollisionsDto {
 
   @ApiProperty({
     description:
-      'Horizon EP this SQUAD was charged for the pairs it holds. Before B-025 this was charged ' +
-      'against the eleven, so a squad that owned both sides of a conflict and started one of them ' +
-      'reported zero — a user told there was no conflict in a squad holding one.',
+      'Horizon EP this SQUAD was charged in total — the pairs it holds, plus what the armband added ' +
+      'by doubling one of them. Before B-025 this was charged against the eleven, so a squad that ' +
+      'owned both sides of a conflict and started one of them reported zero.',
   })
   penaltyEp!: number;
+
+  @ApiProperty({
+    description:
+      'Of that total, what the armband added (B-027). Zero when the captain is in no held pair. ' +
+      'Separate because a charge a panel cannot attribute is one a reader cannot argue with.',
+  })
+  armbandEp!: number;
 
   @ApiProperty({
     type: [CollisionTakenDto],
