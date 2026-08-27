@@ -106,7 +106,7 @@ So each row below is **paired by round** — both predictors faced the same fixt
 
 Each predictor picks its **own** opening fifteen and walks the season under the real rules — one free transfer a round banked to 5, the 50% sell-on fee, auto-substitutions on 0 minutes only, the vice taking the armband when the captain blanks and nobody doubling when both do. **This is the first metric where *which* fifteen you own is part of what is measured**, which is exactly where the ordering advantage should show up if it is real.
 
-**Both policies are deliberately weak, and the totals below are floors rather than estimates.** `no-transfer` holds the opening squad for the whole season. `greedy-1ft` takes at most one free transfer a round, on this round's projection, and **never takes a hit** — so the −4 path is exercised by a unit test and never by a walked season. Choosing transfers well is B-008, which plugs into this same simulator rather than bringing its own.
+**Both policies are deliberately weak, and the totals below are floors rather than estimates.** `no-transfer` holds the opening squad for the whole season. `greedy-1ft` takes at most one free transfer a round, on this round's projection, and **never takes a hit** — so the −4 path is exercised by a unit test and never by a walked season. The real planner shipped with B-008 and has still never walked a season: wiring it in as a third policy is B-032, and until that lands every total below measures a policy the product does not use.
 
 **Chips are unused.** A wildcard or free hit is a transfer policy (B-008); bench boost and triple captain are single-week variance bets needing B-017's distributions. An unused chip is a handicap applied equally to every predictor. A guessed one is a confound.
 
@@ -115,34 +115,45 @@ Each predictor picks its **own** opening fifteen and walks the season under the 
 | Policy | Squad picked by | rounds | **points** | transfers | hits | final team value |
 |---|---|---:|---:|---:|---:|---:|
 | no-transfer | model | 37 | **1635** | 0 | 0 | £98.9m |
-| no-transfer | form | 37 | **1172** | 0 | 0 | £97.4m |
-| no-transfer | priorSeason | 37 | **1131** | 0 | 0 | £97.4m |
+| no-transfer | form | 37 | **1086** | 0 | 0 | £97.8m |
+| no-transfer | priorSeason | 37 | **1034** | 0 | 0 | £97.8m |
 | no-transfer | template (crowd proxy) | 37 | **1717** | 0 | 0 | £98.2m |
 | greedy-1ft | model | 37 | **1881** | 37 | 0 | £97.5m |
-| greedy-1ft | form | 37 | **1807** | 37 | 0 | £97.7m |
-| greedy-1ft | priorSeason | 37 | **1137** | 4 | 0 | £97.4m |
+| greedy-1ft | form | 37 | **1761** | 37 | 0 | £97.5m |
+| greedy-1ft | priorSeason | 37 | **1037** | 4 | 0 | £97.8m |
 | greedy-1ft | template (crowd proxy) | 37 | **1928** | 37 | 0 | £97.8m |
 
 ### Is the difference bigger than the noise?
 
-| Policy | comparison | rounds | mean difference | ± s.e. | clears noise |
-|---|---|---:|---:|---:|---|
-| no-transfer | model − form | 37 | +12.51 | 2.88 | **yes** |
-| no-transfer | model − priorSeason | 37 | +13.62 | 2.82 | **yes** |
-| greedy-1ft | model − form | 37 | +2.00 | 2.92 | no |
-| greedy-1ft | model − priorSeason | 37 | +20.11 | 2.93 | **yes** |
+Every row is **paired by round** — both arms faced the same fixtures, blanks and hauls, so the round-to-round variance that dominates a season total cancels. "Clears noise" is |mean| > 2 standard errors, a crude bar and meant to be.
+
+**The last column is what the comparison could have detected at all** — 2 × s.e. × rounds, in points of season. A season difference smaller than that number is not a result, whichever way it points. It is printed beside every row rather than left to be worked out, because every argument in this project's register turns on season totals and none of them carried this number (B-030).
+
+**The template comparison is in this table now.** It used to be printed as a bare season difference with no standard error, directly under a paragraph calling it the headline finding — the one comparison in the report exempt from the report's own noise test.
+
+| Policy | comparison | rounds | mean difference | ± s.e. | clears noise | detectable at |
+|---|---|---:|---:|---:|---|---:|
+| no-transfer | model − form | 37 | +14.84 | 2.74 | **yes** | 203 pts |
+| no-transfer | model − priorSeason | 37 | +16.24 | 2.67 | **yes** | 198 pts |
+| no-transfer | model − template (crowd proxy) | 37 | -2.22 | 2.77 | no | 205 pts |
+| greedy-1ft | model − form | 37 | +3.24 | 2.60 | no | 192 pts |
+| greedy-1ft | model − priorSeason | 37 | +22.81 | 2.86 | **yes** | 212 pts |
+| greedy-1ft | model − template (crowd proxy) | 37 | -1.27 | 2.11 | no | 156 pts |
 
 ### What the simulated season says
 
-**Held all season, the model's opening fifteen is worth 1635 points against 1172** — a gap of 463 over the season, which clears the noise floor comfortably. This is the ordering advantage from the section above, showing up exactly where Phase 2 predicted it would: **in which fifteen you own, not in how you arrange a fifteen you already have.** Note what the `form` row actually is — form cannot pick an opening squad, so that squad was chosen by last season's points per 90.
+**Held all season, the model's opening fifteen is worth 1635 points against 1086** — a gap of 549 over the season, which clears this comparison's noise floor of 203 points. Note what the `form` row actually is: form cannot pick an opening squad, so that squad was chosen by last season's points per 90.
 
-**Give both a transfer a week and most of that gap closes.** `form` goes from 1172 to 1807; the model goes from 1635 to 1881, a remaining gap of **74** which does **not** clear the noise floor. A weekly transfer is a powerful error-correction mechanism, and it corrects a weak opening squad faster than it improves a strong one. **A model that is better only before the first deadline is worth much less than the season totals first suggest.**
+**Give both a transfer a week.** `form` goes from 1086 to 1761; the model goes from 1635 to 1881, a remaining gap of **120** — most of the 549 the two started with has closed, which does **not** clear the noise floor. A weekly transfer is a powerful error-correction mechanism, and it corrects a weak opening squad faster than it improves a strong one.
 
-**And the most uncomfortable number in this report: the crowd's opening fifteen, run under the same policy and the same projections, scores 1928 against the model's 1881 — 47 points better.** The only difference between those two runs is the opening squad, so this says our squad solve is worse than simply owning what everyone else owned. It is a proxy for the FPL average rather than the average itself, and it is not a flattering one. **Recorded as the headline finding it is**, not buried under the rows above.
+**The crowd's opening fifteen scores 1928 against the model's 1881 — 47 points better. That difference does NOT clear this comparison's own noise floor of 156 points.** This report used to call the same number its headline finding and print it with no standard error at all. The number is unchanged; what can be concluded from it is not.
 
-**The bar B-012 set was: beat `form` on ordering AND on simulated season points, or say plainly that we did not.** Ordering: yes, on points-captured at every k. Season points: **only when neither side may transfer.** Once both can, the difference does not clear the noise floor. `modelVersion` does not move on this, and the serving version is not deleted — B-007 (D-020) established both rules and neither is met here.
+So the next question is not "why is our squad worse" — it is **whether it is worse at all**, and this instrument cannot say. More archived seasons buy √n: three would take a 156-point floor to roughly 90, still not enough. Power for a difference this size comes from **pairing arms that hold the same players**, which is what **B-031** does.
 
-The next question is not "is the model better" but "why is a squad built from its own projections worse than the crowd's", and B-013 (which component is wrong) and B-014 (team strength carries no signal, and both fixture elasticities fitted to 0) are where it gets answered.
+**The bar B-012 set was: beat `form` on ordering AND on simulated season points, or say plainly that we did not.** Ordering: yes, on points captured at every k. Season points, once both sides may transfer: no — the difference does not clear the noise floor.
+
+**Both halves of the bar are not met on this run.** A model version is adopted or retired in `docs/decisions.md`, never by this file — what this report supplies is the number that decision needs, and on this run that number does not support adopting a version on season points. The serving version is not deleted either way: B-007 (D-020) established that rule and it holds whatever a run says.
+
 
 ### The baseline that does not exist
 
@@ -150,6 +161,6 @@ The next question is not "is the model better" but "why is a squad built from it
 
 ## Still to come in this report
 
-Nothing — B-012's phases are complete. What is **not** measured here, and is named rather than implied: a transfer policy worth the name (B-008), chips, uncertainty on any projection (B-017), and the per-component calibration that would say *which* term drives what is measured here (B-013).
+B-012's phases are complete. What is **not** measured here, and is named rather than implied: the transfer planner the product actually ships (B-032 wires it in as a policy), the squad objective against the one it replaced (B-031), chips, uncertainty on any projection (B-017), and the per-component calibration that would say *which* term drives what is measured here (B-013).
 
 Nothing was written to `projections` — asserted, not assumed.
