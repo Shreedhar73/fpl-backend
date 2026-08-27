@@ -57,7 +57,7 @@ export interface FitInput {
 
 export interface FitReport {
   params: FittedParams;
-  measured: Record<string, number>;
+  measured: ReturnType<typeof measureDirect>;
   searched: {
     name: string;
     chosen: number;
@@ -106,7 +106,9 @@ export function fitParams(input: FitInput): FitReport {
       sixtyGivenSub: measured.sixtyGivenSub,
       minutesGivenStart: measured.minutesGivenStart,
       minutesGivenSub: measured.minutesGivenSub,
+      gkp: measured.gkp,
     },
+    saves: { elasticity: 1 },
     attack: {
       ...UNFITTED_PARAMS.attack,
       goalsPerXg: measured.goalsPerXg,
@@ -154,13 +156,22 @@ export function fitParams(input: FitInput): FitReport {
      * apart, this one is taken instead of the nominal winner.
      */
     nullValue?: number,
+    /**
+     * Score the objective over ONE position's rows (B-021). A keeper-only parameter judged on the
+     * whole field is judged on 89% rows it cannot touch — the grid reads flat and the null wins
+     * whatever the keeper rows say. B-021's own trap runs the other way too, so the per-position n
+     * lands in the report beside the choice.
+     */
+    filterPosition?: string,
   ) => {
     const rows = which === 'defcon' ? combinedDefcon : combined;
     const set = which === 'defcon' ? defconSet : validateSet;
     const scored = candidates.map((value) => {
       const trial = apply(params, value);
       const run = runBacktest(rows, trial, scoringFor, {
-        evaluate: (row) => set.has(row),
+        evaluate: (row) =>
+          set.has(row) &&
+          (filterPosition === undefined || row.position === filterPosition),
       });
       // The MODEL's own rows, deliberately NOT restricted to the rows every baseline could also
       // score. B-012 restricts *comparisons* to a common population, because comparing two
@@ -263,6 +274,17 @@ export function fitParams(input: FitInput): FitReport {
     (p, v) => ({ ...p, defcon: { ...p.defcon, ratePer90ToMatch: v } }),
     'defcon',
   );
+  // Scored on keeper validation rows only — the parameter cannot touch anyone else, and diluted
+  // over the whole field its grid reads flat by construction. 1 is the hand-drawn shape it
+  // replaces, and is also the null when the keeper rows cannot tell the grid apart (B-021).
+  search(
+    'saves.elasticity',
+    [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
+    (p, v) => ({ ...p, saves: { elasticity: v } }),
+    'main',
+    1,
+    'GKP',
+  );
 
   return { params, measured, searched, leagueRates };
 }
@@ -270,7 +292,7 @@ export function fitParams(input: FitInput): FitReport {
 /**
  * The parameters that are frequencies, not choices. Each is a count over training rows.
  */
-function measureDirect(rows: HistoryRow[]): Record<string, number> {
+function measureDirect(rows: HistoryRow[]) {
   let started = 0;
   let startedSixty = 0;
   let startedMinutes = 0;
@@ -388,22 +410,39 @@ function fitMinutesCurves(rows: HistoryRow[]): {
   startSlope: number;
   subIntercept: number;
   subSlope: number;
+  /** the same four, fitted on keeper rows alone (B-021), with the n behind each curve */
+  gkp: {
+    startIntercept: number;
+    startSlope: number;
+    subIntercept: number;
+    subSlope: number;
+    n: { start: number; sub: number };
+  };
 } {
   const startPoints: { x: number; y: number }[] = [];
   const subPoints: { x: number; y: number }[] = [];
+  // Keeper rows, separately (B-021): the global sub curve pays a benched keeper a midfielder's
+  // chance of a cameo, which B-013 measured as the model's largest positional gap. Same walk, so
+  // the two fits cannot disagree about the time cut.
+  const gkpStartPoints: { x: number; y: number }[] = [];
+  const gkpSubPoints: { x: number; y: number }[] = [];
 
   for (const context of walkRounds(rows, UNFITTED_PARAMS)) {
     for (const { row, features } of context.items) {
       if (features.matchesSample === 0) continue;
-      startPoints.push({
+      const startPoint = {
         x: logit(features.laggedStartRate),
         y: row.starts > 0 ? 1 : 0,
-      });
+      };
+      startPoints.push(startPoint);
+      if (row.position === 'GKP') gkpStartPoints.push(startPoint);
       if (row.starts === 0) {
-        subPoints.push({
+        const subPoint = {
           x: logit(features.laggedSubRate),
           y: row.minutes > 0 ? 1 : 0,
-        });
+        };
+        subPoints.push(subPoint);
+        if (row.position === 'GKP') gkpSubPoints.push(subPoint);
       }
     }
   }
@@ -411,11 +450,18 @@ function fitMinutesCurves(rows: HistoryRow[]): {
   const start = fitLogistic(startPoints, { intercept: 0, slope: 1 });
   // The sub fallback is the flat curve at the population rate — exactly the constant this replaces,
   // so a failed fit degrades to the old behaviour rather than to nonsense.
-  const subFallbackRate = subPoints.length
-    ? subPoints.reduce((t, p) => t + p.y, 0) / subPoints.length
-    : 0.15;
+  const fallbackRate = (points: { y: number }[]) =>
+    points.length
+      ? points.reduce((t, p) => t + p.y, 0) / points.length
+      : 0.15;
   const sub = fitLogistic(subPoints, {
-    intercept: logit(subFallbackRate),
+    intercept: logit(fallbackRate(subPoints)),
+    slope: 0,
+  });
+
+  const gkpStart = fitLogistic(gkpStartPoints, { intercept: 0, slope: 1 });
+  const gkpSub = fitLogistic(gkpSubPoints, {
+    intercept: logit(fallbackRate(gkpSubPoints)),
     slope: 0,
   });
 
@@ -424,6 +470,13 @@ function fitMinutesCurves(rows: HistoryRow[]): {
     startSlope: start.slope,
     subIntercept: sub.intercept,
     subSlope: sub.slope,
+    gkp: {
+      startIntercept: gkpStart.intercept,
+      startSlope: gkpStart.slope,
+      subIntercept: gkpSub.intercept,
+      subSlope: gkpSub.slope,
+      n: { start: gkpStartPoints.length, sub: gkpSubPoints.length },
+    },
   };
 }
 

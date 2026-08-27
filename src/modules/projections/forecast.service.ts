@@ -149,6 +149,7 @@ export class ForecastService {
           },
           multiplier,
           FITTED_PARAMS,
+          row.position,
         );
         const projection = projectFixtureV2(
           row.position,

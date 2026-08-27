@@ -110,6 +110,7 @@ export class CandidateService {
           },
           mult,
           FITTED_PARAMS,
+          r.position,
         );
         const raw = scorer.predict(r.features);
         const ep = Math.max(0, raw) * mult;

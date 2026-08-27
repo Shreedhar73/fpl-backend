@@ -28,7 +28,15 @@ async function main(): Promise<void> {
 
     log.log('measured directly from training rows:');
     for (const [k, v] of Object.entries(report.measured)) {
-      log.log(`  ${k.padEnd(24)} ${v.toFixed(4)}`);
+      if (typeof v === 'number') {
+        log.log(`  ${k.padEnd(24)} ${v.toFixed(4)}`);
+      } else {
+        // the keeper block (B-021), printed with its n so a fit on ~3,400 rows reads as one
+        log.log(
+          `  ${k.padEnd(24)} start ${v.startIntercept.toFixed(3)}+${v.startSlope.toFixed(3)}x ` +
+            `(n=${v.n.start}), sub ${v.subIntercept.toFixed(3)}+${v.subSlope.toFixed(3)}x (n=${v.n.sub})`,
+        );
+      }
     }
 
     log.log(

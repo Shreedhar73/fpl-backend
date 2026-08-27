@@ -213,6 +213,7 @@ export function exportFeatures(
           },
           1,
           params,
+          row.position,
         ),
         features.rates,
         goalRates,
