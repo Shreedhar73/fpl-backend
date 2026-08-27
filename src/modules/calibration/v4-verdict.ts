@@ -189,19 +189,17 @@ export function v4Bar(input: V4BarInput): V4BarVerdict {
           `\`docs/decisions.md\` with the serving blockers answered first — a total-points GBM has ` +
           `no explain blocks (D-019), no distributions (B-017) and no pPlay, and a model that ` +
           `cannot ship its reasoning does not ship, however it measures.`
-      : `**The bar is not met on this run, and this cycle's search is closed.** \`modelVersion\` ` +
-          `does not move. Two architectures were measured — the direct fit (best ordering, ` +
-          `@11 38.0% vs 32.7%, but a real Tickers regression) and the residual-on-incumbent fit ` +
-          `(first real haul-sizing gain anywhere in this project, Haulers Δse clearing its noise, ` +
-          `but a Blanks degradation past the 5% line and a weaker ordering) — and their misses are ` +
-          `COMPLEMENTARY, which is information: no single member of this family passes all three ` +
-          `legs on this holdout. Four TEST readings is the edge of what a holdout survives, so the ` +
-          `next attempt needs (1) a validation-side composite of the two, designed without another ` +
-          `TEST peek, and (2) the genuinely untouched holdout that is accumulating on its own: the ` +
-          `live 2026-27 season, scored prospectively by \`pnpm score:gameweek\` as B-016 already ` +
-          `does for the incumbent. Enrichment stays blocked at the source (probed 2026-08-27): ` +
-          `vaastav's understat player files stop before the test season and understat.com serves ` +
-          `a JS shell. All recorded in B-037.`,
+      : `**The bar is not met, and the archive holdout is retired.** \`modelVersion\` does not ` +
+          `move. This cycle measured the direct fit, the residual-on-incumbent fit, and finally the ` +
+          `composite — per-position blend weights chosen on VALIDATE by a bar-shaped rule, its one ` +
+          `TEST reading pre-registered as final. The composite came one leg short: ordering met at ` +
+          `every k, low-return held, Haulers improved inside its noise — and the Tickers ` +
+          `regression, halved from the direct fit's, still clears its paired noise. No member of ` +
+          `this family passes all three legs on this holdout, and the holdout has now been read ` +
+          `too often to referee further selection. The next verdict comes from the untouched ` +
+          `prospective holdout accumulating on its own — the live 2026-27 season, scored week by ` +
+          `week by \`pnpm score:gameweek\` (B-016) for the incumbent and the candidate alike. ` +
+          `Enrichment stays blocked at the source (probed 2026-08-27). All recorded in B-037.`,
   );
   return { orderingMet, highReturnMet, lowReturnHeld, met, lines };
 }

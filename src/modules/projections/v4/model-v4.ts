@@ -32,34 +32,47 @@ export interface V4Tree {
   default_left: number[];
 }
 
+interface XgbDump {
+  learner: {
+    learner_model_param: { base_score: string };
+    gradient_booster: {
+      model: {
+        trees: {
+          split_indices: number[];
+          split_conditions: number[];
+          left_children: number[];
+          right_children: number[];
+          default_left: number[];
+        }[];
+      };
+    };
+  };
+}
+
 export interface V4Model {
   position: string;
   /**
    * 'points' — the trees predict total points directly (the first v4).
    * 'residual' — the trees predict the correction to the incumbent's EP, and the caller adds the
-   * base (B-037 increment 2). The scorer itself stays a pure tree walk either way; parity is on the
-   * raw tree output, and the assembly is the harness's, tested there.
+   * base (B-037 increment 2).
+   * 'composite' — BOTH tree sets, blended per position by a weight chosen on VALIDATE with a
+   * bar-shaped rule (B-037's close): `w × (v3ep + residual(x)) + (1−w) × direct(x)`. The v3ep base
+   * is a feature the row already carries, so the composite is self-contained and the harness adds
+   * nothing.
    */
-  target?: 'points' | 'residual';
+  target?: 'points' | 'residual' | 'composite';
   features: string[];
-  hyperparameters: { best_iteration: number };
+  hyperparameters:
+    | { best_iteration: number }
+    | { direct: { best_iteration: number }; residual: { best_iteration: number } };
   provenance: { date: string; seed: number };
-  model: {
-    learner: {
-      learner_model_param: { base_score: string };
-      gradient_booster: {
-        model: {
-          trees: {
-            split_indices: number[];
-            split_conditions: number[];
-            left_children: number[];
-            right_children: number[];
-            default_left: number[];
-          }[];
-        };
-      };
-    };
-  };
+  /** points/residual models */
+  model?: XgbDump;
+  /** composite models */
+  weightResidual?: number;
+  direct?: XgbDump;
+  residual_?: never;
+  residual?: XgbDump;
 }
 
 /**
@@ -88,30 +101,79 @@ function scoreTree(tree: V4Tree, x: Float32Array): number {
   }
 }
 
+/** One tree ensemble read out of an XGBoost dump: kept trees + parsed base score. */
+class Ensemble {
+  readonly trees: V4Tree[];
+  readonly base: number;
+
+  constructor(dump: XgbDump, bestIteration: number, position: string) {
+    this.trees = dump.learner.gradient_booster.model.trees.slice(
+      0,
+      // Early stopping: only the trees up to best_iteration are the model that was validated.
+      // Scoring the overfit tail as well is the quiet way to ship a different model than was chosen.
+      bestIteration + 1,
+    );
+    // XGBoost 3.x serialises base_score as "[7.9E-1]" — a bracketed one-element array in a string.
+    // Number() on that is NaN, which the guard below would catch; parsed here instead of regretted.
+    const raw = dump.learner.learner_model_param.base_score;
+    this.base = Number(raw.replace(/^\[|\]$/g, ''));
+    if (!Number.isFinite(this.base)) {
+      throw new Error(`v4 ${position}: base_score is not a number`);
+    }
+    if (this.trees.length === 0) {
+      throw new Error(`v4 ${position}: no trees kept`);
+    }
+  }
+
+  score(x: Float32Array): number {
+    let sum = Math.fround(this.base);
+    for (const tree of this.trees)
+      sum = Math.fround(sum + Math.fround(scoreTree(tree, x)));
+    return sum;
+  }
+}
+
 export class V4Scorer {
-  private readonly trees: V4Tree[];
-  private readonly base: number;
+  private readonly primary: Ensemble;
+  private readonly secondary: Ensemble | null;
+  private readonly weightResidual: number;
+  private readonly v3epIndex: number;
   readonly features: string[];
   /** true when the model's output is a correction to the incumbent, not points */
   readonly residual: boolean;
+  readonly composite: boolean;
 
   constructor(model: V4Model) {
-    const all = model.model.learner.gradient_booster.model.trees;
-    // Early stopping: only the trees up to best_iteration are the model that was validated.
-    // Scoring the overfit tail as well is the quiet way to ship a different model than was chosen.
-    const kept = model.hyperparameters.best_iteration + 1;
-    this.trees = all.slice(0, kept);
-    // XGBoost 3.x serialises base_score as "[7.9E-1]" — a bracketed one-element array in a string.
-    // Number() on that is NaN, which the guard below would catch; parsed here instead of regretted.
-    const raw = model.model.learner.learner_model_param.base_score;
-    this.base = Number(raw.replace(/^\[|\]$/g, ''));
     this.features = model.features;
     this.residual = model.target === 'residual';
-    if (!Number.isFinite(this.base)) {
-      throw new Error(`v4 ${model.position}: base_score is not a number`);
-    }
-    if (this.trees.length === 0) {
-      throw new Error(`v4 ${model.position}: no trees kept`);
+    this.composite = model.target === 'composite';
+    this.v3epIndex = model.features.indexOf('v3ep');
+    if (this.composite) {
+      const hp = model.hyperparameters as {
+        direct: { best_iteration: number };
+        residual: { best_iteration: number };
+      };
+      if (!model.direct || !model.residual || model.weightResidual === undefined)
+        throw new Error(`v4 ${model.position}: composite model missing a half`);
+      if (this.v3epIndex < 0)
+        throw new Error(`v4 ${model.position}: composite needs v3ep among the features`);
+      this.primary = new Ensemble(
+        model.direct,
+        hp.direct.best_iteration,
+        model.position,
+      );
+      this.secondary = new Ensemble(
+        model.residual,
+        hp.residual.best_iteration,
+        model.position,
+      );
+      this.weightResidual = model.weightResidual;
+    } else {
+      const hp = model.hyperparameters as { best_iteration: number };
+      if (!model.model) throw new Error(`v4 ${model.position}: model dump missing`);
+      this.primary = new Ensemble(model.model, hp.best_iteration, model.position);
+      this.secondary = null;
+      this.weightResidual = 0;
     }
   }
 
@@ -122,11 +184,14 @@ export class V4Scorer {
       const v = features.get(this.features[i]);
       x[i] = v === null || v === undefined ? NaN : v;
     }
-    // The sum is accumulated in float32 too — XGBoost's prediction kernel does, and parity to 1e-6
-    // over a hundred trees needs the same rounding at every step, not just at the leaves.
-    let sum = Math.fround(this.base);
-    for (const tree of this.trees)
-      sum = Math.fround(sum + Math.fround(scoreTree(tree, x)));
-    return sum;
+    if (!this.composite || !this.secondary) return this.primary.score(x);
+    // The blend, in float32 exactly as the fit emitted the parity fixture: w × (v3ep + residual)
+    // + (1−w) × direct. v3ep comes off the feature vector — the composite is self-contained.
+    const w = Math.fround(this.weightResidual);
+    const direct = this.primary.score(x);
+    const resid = Math.fround(x[this.v3epIndex] + this.secondary.score(x));
+    return Math.fround(
+      Math.fround(w * resid) + Math.fround(Math.fround(1 - w) * direct),
+    );
   }
 }

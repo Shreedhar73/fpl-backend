@@ -125,6 +125,8 @@ export interface ExportedRow {
   position: string;
   /** the target */
   totalPoints: number;
+  /** realised minutes — identity, never a feature: the fit needs it to build return categories */
+  minutes: number;
   /**
    * The incumbent's own expected points for this row, from the same deadline-time features (B-037
    * increment 2). Doubles as a feature and as the base of the residual target: the fit trains on
@@ -256,6 +258,7 @@ export function exportFeatures(
         playerCode: row.playerCode,
         position: row.position,
         totalPoints: row.totalPoints,
+        minutes: row.minutes,
         v3ep,
         features: f,
       });
@@ -343,6 +346,7 @@ export function toCsv(rows: ExportedRow[]): string {
     'playerCode',
     'position',
     'totalPoints',
+    'minutesActual',
     'v3epBase',
     ...names,
   ].join(',');
@@ -354,6 +358,7 @@ export function toCsv(rows: ExportedRow[]): string {
       r.playerCode,
       r.position,
       r.totalPoints,
+      r.minutes,
       r.v3ep,
       ...names.map((n) => {
         const v = r.features.get(n);

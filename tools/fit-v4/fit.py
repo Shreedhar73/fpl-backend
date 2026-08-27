@@ -82,9 +82,54 @@ def split(df: pd.DataFrame):
     return train, val, test
 
 
-def feature_columns(df: pd.DataFrame) -> list[str]:
-    # v3epBase is the residual base (identity), v3ep the feature copy the trees may read.
-    return [c for c in df.columns if c not in ("season", "round", "fixture", "playerCode", "position", "totalPoints", "v3epBase")]
+def feature_columns(df: pd.DataFrame, manifest: dict) -> list[str]:
+    """The feature set is the MANIFEST's, not "every CSV column minus a blocklist".
+
+    The blocklist version leaked: when the export gained a `minutesActual` identity column, the fit
+    silently trained on the target match's own minutes - val RMSE collapsed to 1.41/1.66 (the tell),
+    and at harness time the feature is never supplied, so every prediction routed through NaN. The
+    manifest's featureNames is what the TypeScript side actually serves; anything else in the CSV is
+    identity by definition, and a mismatch is an error rather than a feature.
+    """
+    cols = manifest["featureNames"]
+    missing = [c for c in cols if c not in df.columns]
+    assert not missing, f"manifest features absent from CSV: {missing}"
+    return cols
+
+
+def category(row) -> str:
+    if row["minutesActual"] == 0:
+        return "Zeros"
+    if row["totalPoints"] <= 2:
+        return "Blanks"
+    if row["totalPoints"] <= 4:
+        return "Tickers"
+    return "Haulers"
+
+
+def rmse_by_category(df, preds) -> dict:
+    out = {}
+    cats = df.apply(category, axis=1)
+    for name in ("Zeros", "Blanks", "Tickers", "Haulers"):
+        mask = (cats == name).to_numpy()
+        if mask.sum() == 0:
+            out[name] = float("nan")
+            continue
+        err = preds[mask] - df["totalPoints"].to_numpy()[mask]
+        out[name] = float(np.sqrt(np.mean(err ** 2)))
+    return out
+
+
+def fit_one(Xtr, ytr, Xva, yva):
+    """Grid select on VALIDATE RMSE - the frozen rule."""
+    best, best_rmse, best_params = None, float("inf"), None
+    for params in GRID:
+        model = xgb.XGBRegressor(**FIXED, **params)
+        model.fit(Xtr, ytr, eval_set=[(Xva, yva)], verbose=False)
+        rmse = float(np.sqrt(np.mean((model.predict(Xva) - yva) ** 2)))
+        if rmse < best_rmse:
+            best, best_rmse, best_params = model, rmse, params
+    return best, best_rmse, best_params
 
 
 def main(target: str = "residual") -> None:
@@ -111,44 +156,101 @@ def main(target: str = "residual") -> None:
     parity_rows = []
     for position in POSITIONS:
         df = load(position)
-        cols = feature_columns(df)
+        cols = feature_columns(df, manifest)
         train, val, test = split(df)
-        label = (lambda part: part["totalPoints"] - part["v3epBase"]) if target == "residual" else (lambda part: part["totalPoints"])
-        Xtr, ytr = train[cols], label(train)
-        Xva, yva = val[cols], label(val)
-
-        best, best_rmse, best_params = None, float("inf"), None
-        for params in GRID:
-            model = xgb.XGBRegressor(**FIXED, **params)
-            model.fit(Xtr, ytr, eval_set=[(Xva, yva)], verbose=False)
-            rmse = float(np.sqrt(np.mean((model.predict(Xva) - yva) ** 2)))
-            if rmse < best_rmse:
-                best, best_rmse, best_params = model, rmse, params
-        assert best is not None
-
-        booster = best.get_booster()
-        dump = json.loads(booster.save_raw("json").decode())
-        out = {
-            "position": position,
-            "target": target,
-            "provenance": provenance,
-            "hyperparameters": {**best_params, "best_iteration": int(best.best_iteration)},
-            "validationRmse": best_rmse,
-            "features": cols,
-            "baseScore": None,  # read from the model JSON by the scorer
-            "model": dump,
-        }
+        if target == "composite":
+            # Both architectures, each grid-selected on VALIDATE by the frozen rule; then the blend
+            # weight w chosen on VALIDATE by the BAR-SHAPED rule: minimise the worst relative
+            # category degradation against the incumbent (whose validate predictions are the
+            # v3epBase column itself), tie-broken by overall validate RMSE. No TEST row is read
+            # anywhere in this function - the composite's one TEST reading is pre-registered as
+            # final for this archive holdout.
+            direct, d_rmse, d_params = fit_one(
+                train[cols], train["totalPoints"], val[cols], val["totalPoints"]
+            )
+            resid, r_rmse, r_params = fit_one(
+                train[cols],
+                train["totalPoints"] - train["v3epBase"],
+                val[cols],
+                val["totalPoints"] - val["v3epBase"],
+            )
+            base = val["v3epBase"].to_numpy(dtype=np.float64)
+            p_direct = direct.predict(val[cols]).astype(np.float64)
+            p_resid = base + resid.predict(val[cols]).astype(np.float64)
+            incumbent = rmse_by_category(val, base)
+            best_w, best_score, best_tie = None, float("inf"), float("inf")
+            for w in (0.0, 0.25, 0.5, 0.75, 1.0):
+                blend = w * p_resid + (1 - w) * p_direct
+                by_cat = rmse_by_category(val, blend)
+                degradation = max(
+                    (by_cat[c] - incumbent[c]) / incumbent[c]
+                    for c in by_cat
+                    if not np.isnan(by_cat[c]) and incumbent[c] > 0
+                )
+                overall = float(np.sqrt(np.mean((blend - val["totalPoints"]) ** 2)))
+                if degradation < best_score or (
+                    degradation == best_score and overall < best_tie
+                ):
+                    best_w, best_score, best_tie = w, degradation, overall
+            out = {
+                "position": position,
+                "target": "composite",
+                "provenance": provenance,
+                "weightResidual": best_w,
+                "validation": {
+                    "worstCategoryDegradation": best_score,
+                    "overallRmse": best_tie,
+                    "directRmse": d_rmse,
+                    "residualRmse": r_rmse,
+                },
+                "hyperparameters": {
+                    "direct": {**d_params, "best_iteration": int(direct.best_iteration)},
+                    "residual": {**r_params, "best_iteration": int(resid.best_iteration)},
+                },
+                "features": cols,
+                "direct": json.loads(direct.get_booster().save_raw("json").decode()),
+                "residual": json.loads(resid.get_booster().save_raw("json").decode()),
+            }
+            best = (direct, resid, best_w)  # for the parity fixture below
+            best_params = {"w": best_w}
+            best_rmse = best_tie
+        else:
+            label = (lambda part: part["totalPoints"] - part["v3epBase"]) if target == "residual" else (lambda part: part["totalPoints"])
+            Xtr, ytr = train[cols], label(train)
+            Xva, yva = val[cols], label(val)
+            model, best_rmse, best_params = fit_one(Xtr, ytr, Xva, yva)
+            assert model is not None
+            dump = json.loads(model.get_booster().save_raw("json").decode())
+            out = {
+                "position": position,
+                "target": target,
+                "provenance": provenance,
+                "hyperparameters": {**best_params, "best_iteration": int(model.best_iteration)},
+                "validationRmse": best_rmse,
+                "features": cols,
+                "baseScore": None,  # read from the model JSON by the scorer
+                "model": dump,
+            }
+            best = model
         path = OUT / f"model-{position}.json"
         path.write_text(json.dumps(out) + "\n")
         digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
         print(f"{position}: {len(train)} train / {len(val)} val rows, "
-              f"depth={best_params['max_depth']} lr={best_params['learning_rate']} "
-              f"mcw={best_params['min_child_weight']} iter={best.best_iteration} "
-              f"val_rmse={best_rmse:.4f} sha={digest}")
+              f"params={best_params} val={best_rmse:.4f} sha={digest}")
 
         # Parity fixture: 50 TEST rows per position, scored blind. No aggregate printed.
         sample = test.sample(n=min(50, len(test)), random_state=SEED)
-        preds = best.predict(sample[cols])
+        if target == "composite":
+            direct, resid, w = best
+            # float32 end to end, matching the TS walker's Math.fround arithmetic
+            pd_ = direct.predict(sample[cols]).astype(np.float32)
+            pr_ = (
+                sample["v3epBase"].to_numpy(dtype=np.float32)
+                + resid.predict(sample[cols]).astype(np.float32)
+            ).astype(np.float32)
+            preds = (np.float32(w) * pr_ + (np.float32(1) - np.float32(w)) * pd_).astype(np.float32)
+        else:
+            preds = best.predict(sample[cols])
         for (_, row), pred in zip(sample.iterrows(), preds):
             parity_rows.append({
                 "position": position,
@@ -172,5 +274,5 @@ def main(target: str = "residual") -> None:
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("--target", choices=["points", "residual"], default="residual")
+    ap.add_argument("--target", choices=["points", "residual", "composite"], default="composite")
     main(ap.parse_args().target)
