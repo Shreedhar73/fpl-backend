@@ -238,6 +238,11 @@ export class XiReplayService {
       '',
       'One section per arm. Regenerate with `pnpm replay:xi -- --label <arm>`.',
       '',
+      '**A section is only as current as the commit that produced it.** The objective under test is',
+      "whatever `ilp.ts` emitted at the time, so re-running a label re-solves with TODAY's objective",
+      'under that heading — which would silently overwrite a baseline arm with the thing it is the',
+      'baseline for. Name arms after the change, not after the run.',
+      '',
     ].join('\n');
 
     await writeFile(

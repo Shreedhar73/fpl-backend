@@ -7,6 +7,11 @@ measurements that could not observe it.
 
 One section per arm. Regenerate with `pnpm replay:xi -- --label <arm>`.
 
+**A section is only as current as the commit that produced it.** The objective under test is
+whatever `ilp.ts` emitted at the time, so re-running a label re-solves with TODAY's objective
+under that heading — which would silently overwrite a baseline arm with the thing it is the
+baseline for. Name arms after the change, not after the run.
+
 ## penalty on the XI (before B-025)
 
 Bench weight 0.7, collision lambda 1. Season 2025-26, fifteen bought in round 1 and held — no transfers, so every difference between arms is the objective.
