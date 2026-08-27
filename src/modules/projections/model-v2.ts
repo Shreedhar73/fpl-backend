@@ -1,7 +1,20 @@
 import { PositionCode } from '../fpl-sync/mappers';
 import { Scoring } from './scoring';
 import { DEFCON_THRESHOLD } from './points';
-import { expectedFloorDiv, thresholdProbability } from './distributions';
+import {
+  bernoulliPmf,
+  bonusPmf,
+  convolve,
+  countPmf,
+  expectedFloorDiv,
+  floorDivPmf,
+  mixPmf,
+  pmfAt,
+  summarise,
+  thresholdProbability,
+  type PmfSummary,
+  type PointsPmf,
+} from './distributions';
 import { cleanSheetProbability, GoalRates } from './strength';
 import { FittedParams } from './fitted';
 
@@ -82,6 +95,22 @@ export interface FixtureExpectations {
 export interface FixtureProjectionV2 {
   ep: number;
   components: Record<string, number>;
+  /**
+   * The whole points distribution, summarised (B-017).
+   *
+   * `distribution.mean` and `ep` are two independent routes to the same number — one composed from
+   * component means, one from a convolution of component distributions — and a test asserts they
+   * agree. If they ever stop agreeing, one of the two is wrong and neither would look it.
+   */
+  distribution: PmfSummary;
+  /**
+   * The distribution itself, kept so a DOUBLE gameweek can be composed exactly.
+   *
+   * Two fixtures in one event are two independent matches whose points add, which is a convolution
+   * and not a sum of summaries: adding two standard deviations would overstate the spread by about
+   * 40%, and there is no way at all to add two `P(blank)`s.
+   */
+  pmf: PointsPmf;
   /** what the model believed, term by term — scored by B-013, ignored by the points sum */
   probabilities: FixtureProbabilities;
   expected: FixtureExpectations;
@@ -99,6 +128,29 @@ export function projectFixtureV2(
   params: FittedParams,
 ): FixtureProjectionV2 {
   const ninetieths = minutes.expectedMinutes / 90;
+
+  // **The minutes states, and why every non-linear term is evaluated INSIDE them.**
+  //
+  // `distributions.ts` exists to enforce one rule: the expectation of a function is not the function
+  // of the expectation. v1 broke it on the COUNT — `E[saves]/3` instead of `E[floor(S/3)]` — and v2
+  // fixed that. The identical defect survived one argument earlier, on the MINUTES: every non-linear
+  // term was evaluated once at `expectedMinutes`, which is itself an expectation.
+  //
+  // A defender on 7.5 defensive actions per 90 who is 30% to start has `expectedMinutes` around 25,
+  // so lambda is about 1.9 and `P(X >= 10)` is nearly zero. What actually happens is that 30% of the
+  // time he plays 83 minutes at lambda 6.9 with a real chance of clearing the threshold, and 70% of
+  // the time he plays nothing. A threshold is convex in lambda, so averaging the minutes first
+  // destroys the tail. B-013 measured it: the term predicted 0.054 of its own base rate at 0.013.
+  //
+  // Two states, not a finer grid, because two is what the minutes model has fitted. Inventing a
+  // smoother minutes distribution here would be structure the parameters do not carry.
+  const states: { p: number; ninetieths: number }[] = [
+    { p: minutes.pStart, ninetieths: params.minutes.minutesGivenStart / 90 },
+    { p: minutes.pSub, ninetieths: params.minutes.minutesGivenSub / 90 },
+  ];
+  /** `Σ_s P(state s) × f(rate in state s)` — the mixture, rather than `f` at the mean. */
+  const overStates = (f: (ninetiethsInState: number) => number): number =>
+    states.reduce((total, s) => total + s.p * f(s.ninetieths), 0);
 
   // --- Appearance. v1 asked `E[minutes] >= 60 ? 2 : 1`, which pays a rotation risk like a certainty.
   const pShort = Math.max(0, minutes.pPlay - minutes.pSixtyPlus);
@@ -132,12 +184,19 @@ export function projectFixtureV2(
   const csPoints = pCleanSheet * scoring.cleanSheet(position);
 
   // --- Goals conceded: -1 per TWO conceded, so E[floor(X/2)], not E[X]/2.
+  // Two separate corrections here, and they pull in opposite directions.
+  //
+  // 1. There is **no 60-minute gate on goals conceded.** `fpl-domain-rules`: only the clean sheet has
+  //    one. The rule is -1 per two goals conceded WHILE THE PLAYER IS ON THE PITCH, at any minute
+  //    count. Gating it on `pSixtyPlus` under-charged every player who comes on and concedes.
+  // 2. A player on the pitch for twenty minutes is not exposed to a full match's lambda, so the
+  //    lambda is scaled by the minutes of each state before the floor is taken.
   const concededUnit = scoring.goalsConceded(position);
-  const expectedConcededPenalties = expectedFloorDiv(goals.lambdaAgainst, 2);
+  const expectedConcededPenalties = overStates((n) =>
+    expectedFloorDiv(goals.lambdaAgainst * n, 2),
+  );
   const concededPoints =
-    concededUnit !== 0
-      ? minutes.pSixtyPlus * expectedConcededPenalties * concededUnit
-      : 0;
+    concededUnit !== 0 ? expectedConcededPenalties * concededUnit : 0;
 
   // --- Saves: 1 per THREE saves. Same defect, same fix. Saves scale with what the opponent creates,
   // so the fixture's lambda-against carries the shot volume.
@@ -145,7 +204,8 @@ export function projectFixtureV2(
     position === 'GKP' ? saveRate(rates, ninetieths, goals) : 0;
   const savePoints =
     position === 'GKP'
-      ? expectedFloorDiv(expectedSaves, 3) * scoring.savePoint()
+      ? overStates((n) => expectedFloorDiv(saveRate(rates, n, goals), 3)) *
+        scoring.savePoint()
       : 0;
 
   // --- Defensive contribution: a tail probability, not a linear ramp. The ramp over-paid exactly the
@@ -156,10 +216,12 @@ export function projectFixtureV2(
     rates.defcon90 * ninetieths * params.defcon.ratePer90ToMatch;
   const pDefcon =
     threshold > 0
-      ? thresholdProbability(
-          expectedDefconActions,
-          threshold,
-          params.defcon.dispersion,
+      ? overStates((n) =>
+          thresholdProbability(
+            rates.defcon90 * n * params.defcon.ratePer90ToMatch,
+            threshold,
+            params.defcon.dispersion,
+          ),
         )
       : 0;
   const defconPoints = defconUnit !== 0 ? pDefcon * defconUnit : 0;
@@ -167,15 +229,18 @@ export function projectFixtureV2(
   // --- Bonus, from BPS rather than from attacking output. Only three players in a match get any, so
   // the relationship saturates and the cap is part of the model, not a safety rail.
   const expectedBps = ninetieths * rates.bps90;
-  const expectedBonus =
-    minutes.pPlay *
+  /** Expected bonus GIVEN a minutes state — the cap and the floor are non-linear, so this is mixed
+   * over the states like every other non-linear term (B-020), not evaluated at the mean. */
+  const bonusInState = (n: number): number =>
     Math.min(
       params.bonus.maxBonus,
       Math.max(
         0,
-        params.bonus.bpsIntercept + params.bonus.bonusPerBps * expectedBps,
+        params.bonus.bpsIntercept +
+          params.bonus.bonusPerBps * (n * rates.bps90),
       ),
     );
+  const expectedBonus = overStates(bonusInState);
   const bonusPoints = expectedBonus * scoring.bonus();
 
   const components = {
@@ -189,9 +254,101 @@ export function projectFixtureV2(
     bonus: bonusPoints,
   };
 
+  // --- The whole distribution, not only its mean (B-017).
+  //
+  // Built INSIDE each minutes state and mixed by state probability, which captures exactly the one
+  // correlation that dominates: every component depends on the same minutes outcome, and a player
+  // who does not play scores nothing anywhere. Within a state the components are convolved as
+  // independent — a much weaker assumption than independence overall, and its residual is named:
+  // goals and bonus move together (a goalscorer collects BPS), and a clean sheet and a conceded goal
+  // are mutually exclusive. Both make the true spread WIDER than this, so `sd` is a floor.
+  const pmfForState = (n: number, pSixtyGivenState: number): PointsPmf => {
+    const appearance = bernoulliPmf(
+      pSixtyGivenState,
+      scoring.longPlay() - scoring.shortPlay(),
+    );
+    let pmf = convolve(pmfAt(scoring.shortPlay()), appearance);
+    pmf = convolve(
+      pmf,
+      countPmf(
+        n * rates.xg90 * attackFactor * params.attack.goalsPerXg,
+        scoring.goal(position),
+        8,
+      ),
+    );
+    pmf = convolve(
+      pmf,
+      countPmf(
+        n * rates.xa90 * assistFactor * params.attack.assistsPerXa,
+        scoring.assist(),
+        8,
+      ),
+    );
+    pmf = convolve(
+      pmf,
+      bernoulliPmf(
+        pSixtyGivenState * cleanSheetProbability(goals.lambdaAgainst),
+        scoring.cleanSheet(position),
+      ),
+    );
+    pmf = convolve(pmf, floorDivPmf(goals.lambdaAgainst * n, 2, concededUnit));
+    if (position === 'GKP') {
+      pmf = convolve(
+        pmf,
+        floorDivPmf(saveRate(rates, n, goals), 3, scoring.savePoint()),
+      );
+    }
+    if (threshold > 0) {
+      pmf = convolve(
+        pmf,
+        bernoulliPmf(
+          thresholdProbability(
+            rates.defcon90 * n * params.defcon.ratePer90ToMatch,
+            threshold,
+            params.defcon.dispersion,
+          ),
+          defconUnit,
+        ),
+      );
+    }
+    // `bonusInState / MEAN_BONUS_GIVEN_ANY` is P(any bonus), the same identity the reported
+    // `bonusAtLeastOne` uses — so the distribution's bonus mean equals the analytic one exactly.
+    pmf = convolve(
+      pmf,
+      bonusPmf(
+        Math.min(1, bonusInState(n) / MEAN_BONUS_GIVEN_ANY),
+        scoring.bonus(),
+      ),
+    );
+    return pmf;
+  };
+
+  const distribution = mixPmf([
+    {
+      weight: minutes.pStart,
+      pmf: pmfForState(
+        params.minutes.minutesGivenStart / 90,
+        params.minutes.sixtyGivenStart,
+      ),
+    },
+    {
+      weight: minutes.pSub,
+      pmf: pmfForState(
+        params.minutes.minutesGivenSub / 90,
+        params.minutes.sixtyGivenSub,
+      ),
+    },
+    // Not playing is a state too, and it is the one that makes a rotation risk different from a
+    // nailed player at the same expected points. Leaving it out would normalise the distribution
+    // over "played" and quietly report the spread of a player who is certain to feature.
+    { weight: Math.max(0, 1 - minutes.pPlay), pmf: pmfAt(0) },
+  ]);
+
   return {
     ep: Object.values(components).reduce((a, b) => a + b, 0),
     components,
+    distribution: summarise(distribution),
+    pmf: distribution,
     probabilities: {
       start: minutes.pStart,
       play: minutes.pPlay,
@@ -237,7 +394,21 @@ function saveRate(
 }
 
 /**
- * Turn a lagged start rate into the minutes distribution the projection needs.
+ * What the minutes model is allowed to know about a player before the round it is predicting.
+ *
+ * Both rates come out of `walkRounds`, which computes them before folding the round in — the
+ * structural guarantee against reading the future belongs to the feature engine, and this shape only
+ * has to carry them across.
+ */
+export interface LaggedMinutes {
+  /** starts / matches so far, season first and career behind */
+  startRate: number;
+  /** appearances-off-the-bench / non-starts so far, smoothed toward the population prior */
+  subRate: number;
+}
+
+/**
+ * Turn a player's lagged minutes record into the minutes distribution the projection needs.
  *
  * `availability` is the injury/doubt multiplier and stays HEURISTIC on purpose: the archive carries no
  * per-gameweek `status` or `chance_of_playing_next_round`, so this half of the model cannot be fitted
@@ -245,17 +416,20 @@ function saveRate(
  * Phase 2). Anything that reports this model as fitted must say which half.
  */
 export function minutesDistribution(
-  laggedStartRate: number,
+  lagged: LaggedMinutes,
   availability: number,
   params: FittedParams,
 ): MinutesDistribution {
   const m = params.minutes;
   const rawStart = logistic(
-    m.startIntercept + m.startSlope * logit(laggedStartRate),
+    m.startIntercept + m.startSlope * logit(lagged.startRate),
   );
+  // P(appear | did not start), from the player's OWN lagged rate rather than one league-wide
+  // constant. B-013 measured that constant as the model's worst-calibrated shape by a factor of ten.
+  const rawSub = logistic(m.subIntercept + m.subSlope * logit(lagged.subRate));
 
   const pStart = clamp01(availability * rawStart);
-  const pSub = clamp01(availability * (1 - rawStart) * m.subAppearanceRate);
+  const pSub = clamp01(availability * (1 - rawStart) * rawSub);
   const pPlay = clamp01(pStart + pSub);
   const pSixtyPlus = clamp01(
     pStart * m.sixtyGivenStart + pSub * m.sixtyGivenSub,

@@ -12,7 +12,7 @@ import {
   NO_COLLISIONS,
 } from './ilp';
 import { POSITIONS, Rules } from './rules';
-import { MIN_APPEARANCES, COLLISION_LAMBDA } from './policy';
+import { MIN_APPEARANCES, COLLISION_LAMBDA, BENCH_WEIGHT } from './policy';
 
 export const OPTIMIZER_VERSION = 'v1-ilp';
 const HORIZON = 5;
@@ -43,7 +43,84 @@ export interface OptimizeSummary {
   /** null when the solve was not persisted — see `run({ persist: false })`. */
   runId: string | null;
   durationMs: number;
+  /** Why this squad and not another. The same object that is persisted — see below. */
+  reasoning: RecommendationReasoning;
 }
+
+/**
+ * What the optimizer REFUSED, and what it paid for what it kept (B-018).
+ *
+ * Two guards change every recommendation and were invisible outside `optimizer_runs.reasoning`: a
+ * user reading the squad saw only that a player was absent and that someone else had the armband.
+ * D-019's rule is that a model number states where it came from; a model *refusal* is a stronger
+ * claim than a number and was stating nothing.
+ *
+ * **Returned as well as persisted, from one object.** The persisted JSON and the API payload used to
+ * be built separately, which is how the persisted one came to carry team cuids where plan 009
+ * specified a fixture label — a defect that only surfaces when somebody tries to render it.
+ */
+export interface RecommendationReasoning {
+  appearanceFloor: {
+    /** minimum appearances to enter the pool at all */
+    threshold: number;
+    /** how many of the league's players that removed */
+    excluded: number;
+    /**
+     * Horizon EP the floor cost, against the same solve with the floor lifted and lambda unchanged.
+     * `null` when it was not computed — it is a second ILP solve, so an advice request that only
+     * needs the list does not pay for it.
+     */
+    costEp: number | null;
+    /** the excluded players an unguarded solve would actually have picked */
+    wouldHaveMadeTheSquad: {
+      playerId: string;
+      webName: string;
+      position: PositionCode;
+      teamShortName: string;
+      appearances: number;
+      epHorizon: number;
+    }[];
+    /** what the guard IS, in the payload rather than only in the component that renders it */
+    statement: string;
+  };
+  fixtureCollisions: {
+    lambda: number;
+    pairsConsidered: number;
+    /** horizon EP charged to the chosen XI for the pairs it kept */
+    penaltyEp: number;
+    taken: {
+      fixture: string;
+      attacker: string;
+      defender: string;
+      lambda: number;
+    }[];
+    statement: string;
+  };
+}
+
+/**
+ * The two sentences that must travel WITH the numbers.
+ *
+ * The measurement behind these two guards is split, and a UI that presents them alike would state
+ * the opposite of what is known. The floor is a refusal to bet on players the model cannot measure.
+ * The collision penalty was swept over 103 archived gameweeks and earned nothing: +0.59 +/- 0.92
+ * realised points per gameweek, per-season signs that flip, and the downside it was argued for as
+ * insurance got worse. It stays on as a policy choice.
+ *
+ * They live here rather than in the frontend because a component can be rewritten by someone who
+ * never reads `reports/guards-009.md`, and the honest version would quietly become the confident one.
+ */
+const FLOOR_STATEMENT =
+  `A player with fewer than ${MIN_APPEARANCES} Premier League appearances has a per-90 rate ` +
+  'estimated from almost nothing. The optimizer is a maximiser, so it hunts exactly the players ' +
+  'whose estimate is most inflated by noise. This is a refusal to bet on them, not a claim that ' +
+  'they are bad.';
+const COLLISION_STATEMENT =
+  'Owning one of our attackers against one of our defenders in the same match bets on both ' +
+  'outcomes at once. This penalty was measured over 103 archived gameweeks and did NOT improve ' +
+  'realised points (+0.59 +/- 0.92 per gameweek, per-season signs that flip, downside worse). It ' +
+  'is on as a policy choice — a squad that bets against itself is not one we want to recommend — ' +
+  'and not because it scores more.';
 
 /**
  * Everything a solve reasons over, built once: every player as a candidate carrying horizon EP and
@@ -81,6 +158,8 @@ export function arrangeSquad(
   inSquad: Candidate[],
   rules: Rules,
   collisions: Collisions = NO_COLLISIONS,
+  /** The squad LP's bench weight, so an arrangement and a solve optimise one expression (B-023). */
+  benchWeight = BENCH_WEIGHT,
 ): {
   squad: SquadPlayer[];
   formation: string;
@@ -89,8 +168,14 @@ export function arrangeSquad(
 } {
   // The captain comes back from the enumeration rather than being picked afterwards by raw EP: the
   // armband doubles the stake on a collision, so it is part of the same decision (see `pickBestXi`).
-  const { starters, formation, captainKey, viceKey, penaltyPoints, collisions: xiCollisions } =
-    pickBestXi(inSquad, rules, collisions);
+  const {
+    starters,
+    formation,
+    captainKey,
+    viceKey,
+    penaltyPoints,
+    collisions: xiCollisions,
+  } = pickBestXi(inSquad, rules, collisions, benchWeight);
 
   const bench = inSquad.filter((c) => !starters.has(c.key));
   const benchGk = bench.filter((c) => c.position === 'GKP');
@@ -189,6 +274,7 @@ export class OptimizerService {
       webName: p.webName,
       position: p.position,
       teamId: p.teamId,
+      teamShortName: p.teamShortName,
       cost: p.nowCost,
       ep: horizonEp(p.id),
       pPlay: ppByPlayer.get(p.id) ?? 0,
@@ -207,9 +293,21 @@ export class OptimizerService {
   }
 
   async run(
-    opts: { singleGw?: boolean; persist?: boolean } = {},
+    opts: {
+      singleGw?: boolean;
+      persist?: boolean;
+      /**
+       * Compute what the appearance floor COST, which is a second ILP solve over an unguarded pool.
+       *
+       * Defaults to whatever `persist` does, so a persisted run always records it and a throwaway
+       * solve does not pay for it. `insights` turns it on explicitly: the advice payload shows the
+       * cost, and a number the user can see is worth one more solve.
+       */
+      explain?: boolean;
+    } = {},
   ): Promise<OptimizeSummary> {
     const started = Date.now();
+    opts = { explain: opts.persist !== false, ...opts };
     const { candidates, rules, gameweekIds, modelVersion, collisions } =
       await this.buildUniverse(opts);
     const gwIds = gameweekIds;
@@ -220,8 +318,10 @@ export class OptimizerService {
     const highs = await highsLoader();
     const solve = (
       from: Candidate[],
-    ): { squad: Candidate[]; objective: number } => {
-      const solution = highs.solve(buildLp(from, rules, collisions));
+    ): { squad: Candidate[]; objective: number; xi: Set<string> } => {
+      const solution = highs.solve(
+        buildLp(from, rules, collisions, BENCH_WEIGHT),
+      );
       if (solution.Status !== 'Optimal') {
         throw new Error(
           `optimiser did not find an optimal squad (status: ${solution.Status})`,
@@ -230,10 +330,16 @@ export class OptimizerService {
       return {
         squad: from.filter((c) => (solution.Columns[c.key]?.Primal ?? 0) > 0.5),
         objective: solution.ObjectiveValue,
+        // The XI the SOLVER chose, so it can be compared against the enumeration below.
+        xi: new Set(
+          from
+            .filter((c) => (solution.Columns[`y_${c.key}`]?.Primal ?? 0) > 0.5)
+            .map((c) => c.key),
+        ),
       };
     };
 
-    const { squad: inSquad, objective: objectiveValue } = solve(pool);
+    const { squad: inSquad, objective: objectiveValue, xi: lpXi } = solve(pool);
     if (inSquad.length !== rules.squadSize()) {
       throw new Error(
         `solver returned ${inSquad.length} players, expected ${rules.squadSize()}`,
@@ -247,20 +353,20 @@ export class OptimizerService {
     // run throws away — and `insights` calls `run({ persist: false })` on every advice request, so
     // computing it there is a second ILP solve per request that nothing ever reads.
     const chosen = new Set(inSquad.map((c) => c.key));
-    const wouldHaveMadeTheSquad =
-      opts.persist === false
-        ? []
-        : solve(prunePool(candidates, { floor: false }))
-            .squad.filter(
-              (c) => !chosen.has(c.key) && c.appearances < MIN_APPEARANCES,
-            )
-            .map((c) => ({
-              playerId: c.playerId,
-              webName: c.webName,
-              position: c.position,
-              appearances: c.appearances,
-              ep: round2(c.ep),
-            }));
+    const unguarded =
+      opts.explain === false
+        ? null
+        : solve(prunePool(candidates, { floor: false }));
+    const wouldHaveMadeTheSquad = (unguarded?.squad ?? [])
+      .filter((c) => !chosen.has(c.key) && c.appearances < MIN_APPEARANCES)
+      .map((c) => ({
+        playerId: c.playerId,
+        webName: c.webName,
+        position: c.position,
+        teamShortName: c.teamShortName,
+        appearances: c.appearances,
+        epHorizon: round2(c.ep),
+      }));
 
     // best legal XI, captain, vice and bench order — the same arrangement `insights` applies to a
     // squad the optimizer did not choose.
@@ -270,8 +376,49 @@ export class OptimizerService {
       collisions,
     );
 
+    // The LP already chose an XI and an armband. `arrangeSquad` chooses them again, by exact
+    // enumeration over the same expression, and the two must agree — that is what makes the second
+    // one a verification rather than a competing optimisation. A disagreement means the LP's rows
+    // and the enumeration's scoring have drifted apart, which neither would report on its own.
+    const chosenXi = new Set(
+      squad.filter((p) => p.role !== 'bench').map((p) => `p_${p.playerId}`),
+    );
+    if (
+      lpXi.size === chosenXi.size &&
+      ![...lpXi].every((k) => chosenXi.has(k))
+    ) {
+      this.log.warn(
+        'the solver and the XI enumeration disagree about who starts — they optimise the same ' +
+          'expression, so this means a constraint row and the enumeration have drifted apart',
+      );
+    }
+
     const totalCost = inSquad.reduce((s, c) => s + c.cost, 0);
     const durationMs = Date.now() - started;
+
+    const reasoning: RecommendationReasoning = {
+      appearanceFloor: {
+        threshold: MIN_APPEARANCES,
+        excluded: candidates.length - eligible.length,
+        // The unguarded solve's objective minus this one's, in horizon EP. Both are the SAME solve
+        // with lambda unchanged, so the difference isolates B-010 and does not smuggle B-011 into it.
+        costEp: unguarded ? round2(unguarded.objective - objectiveValue) : null,
+        wouldHaveMadeTheSquad,
+        statement: FLOOR_STATEMENT,
+      },
+      fixtureCollisions: {
+        lambda: COLLISION_LAMBDA,
+        pairsConsidered: collisions.pairs.length,
+        penaltyEp: round2(xiPenalty),
+        taken: xiCollisions.map((p) => ({
+          fixture: p.fixture,
+          attacker: p.attacker.webName,
+          defender: p.defender.webName,
+          lambda: COLLISION_LAMBDA,
+        })),
+        statement: COLLISION_STATEMENT,
+      },
+    };
 
     // `insights` solves for the optimal 15 on every advice request purely to measure a gap against
     // it. Persisting those would fill optimizer_runs with rows nobody asked for and bury the solves
@@ -294,26 +441,10 @@ export class OptimizerService {
               collisionLambda: COLLISION_LAMBDA,
             },
             result: { squad, totalCost, formation },
-            reasoning: {
-              squad,
-              excluded: {
-                count: candidates.length - eligible.length,
-                threshold: MIN_APPEARANCES,
-                wouldHaveMadeTheSquad,
-              },
-              collisions: {
-                lambda: COLLISION_LAMBDA,
-                pairsConsidered: collisions.pairs.length,
-                xiPenalty: round2(xiPenalty),
-                taken: xiCollisions.map((p) => ({
-                  attacker: p.attacker.webName,
-                  defender: p.defender.webName,
-                  attackerTeamId: p.attacker.teamId,
-                  defenderTeamId: p.defender.teamId,
-                  lambda: COLLISION_LAMBDA,
-                })),
-              },
-            },
+            // The SAME object the caller gets. Built once: the persisted JSON and the API payload
+            // used to be assembled separately, which is how the persisted one came to carry team
+            // cuids where plan 009 specified a fixture label.
+            reasoning: { squad, ...reasoning },
           });
 
     this.log.log(
@@ -329,11 +460,10 @@ export class OptimizerService {
       squad,
       runId,
       durationMs,
+      reasoning,
     };
   }
-
 }
-
 
 /**
  * The eligible candidate pool the ILP solves over: the appearance floor first (B-010), then top-EP
@@ -363,7 +493,9 @@ export function prunePool(
   for (const pos of POSITIONS) {
     const ofPos = eligible.filter((c) => c.position === pos);
     const byEp = [...ofPos].sort((a, b) => b.ep - a.ep).slice(0, POOL_TOP);
-    const byCost = [...ofPos].sort((a, b) => a.cost - b.cost).slice(0, POOL_CHEAP);
+    const byCost = [...ofPos]
+      .sort((a, b) => a.cost - b.cost)
+      .slice(0, POOL_CHEAP);
     for (const c of [...byEp, ...byCost]) keep.set(c.key, c);
   }
   return [...keep.values()];

@@ -56,6 +56,7 @@ function squad(prefix: string, epOf: (i: number) => number): Candidate[] {
     webName: `${prefix}${i}`,
     position,
     teamId: `t${i % 8}`,
+    teamShortName: `T${i % 8}`,
     cost: 50,
     ep: epOf(i),
     pPlay: 1,
@@ -210,7 +211,12 @@ describe('InsightsService — the comparison', () => {
       squad('opt', () => 9),
     );
     await service.adviseManager(42);
-    expect(optimizer.run).toHaveBeenCalledWith({ persist: false });
+    // `persist: false` is the part that matters — a persisted run here would bury the solves a
+    // human asked for. `explain: true` is B-018's second solve, which is unpersisted too.
+    expect(optimizer.run).toHaveBeenCalledWith({
+      persist: false,
+      explain: true,
+    });
   });
 });
 
@@ -295,15 +301,22 @@ describe('InsightsService — captain and bench', () => {
 });
 
 describe('InsightsService — what it refuses to answer', () => {
-  it('states in the payload that transfers and chips are not advised on', async () => {
+  it('states its CURRENT limits in the payload, and stops refusing what it now answers', async () => {
     const { service } = build(
       squad('mine', () => 5),
       squad('opt', () => 9),
     );
     const advice = await service.adviseManager(42);
 
-    expect(advice.notAdvisedOn).toHaveLength(2);
-    expect(advice.notAdvisedOn.join(' ')).toMatch(/Transfers/);
-    expect(advice.notAdvisedOn.join(' ')).toMatch(/Chip/);
+    // The list is non-empty and names the limits that are CURRENTLY true. It used to refuse
+    // transfers and chips; B-008 answers both at `GET /insights/transfers/{managerId}`, and a list
+    // that still refused them would have the app telling a user it cannot do something it does on
+    // the next screen. What must not happen is the list emptying — a payload that claims no limits
+    // is the one shape this field exists to prevent.
+    expect(advice.notAdvisedOn.length).toBeGreaterThan(0);
+    expect(advice.notAdvisedOn.join(' ')).toMatch(/Uncertainty/);
+    expect(advice.notAdvisedOn.join(' ')).not.toMatch(
+      /Transfers — needs sell value/,
+    );
   });
 });

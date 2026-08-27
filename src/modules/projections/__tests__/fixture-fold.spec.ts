@@ -1,3 +1,4 @@
+import { pmfAt, summarise } from '../distributions';
 import { foldFixture, PlayerForecast } from '../forecast.service';
 
 /**
@@ -18,6 +19,7 @@ const entry = (): PlayerForecast => ({
   expectedMinutes: 0,
   playProbability: 0.9,
   components: {},
+  distribution: summarise(pmfAt(0)),
   fixtures: 0,
   availabilityFromSnapshot: false,
   status: 'a',

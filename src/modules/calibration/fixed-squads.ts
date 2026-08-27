@@ -1,6 +1,7 @@
 import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
 import { buildLp, Candidate } from '../optimizer/ilp';
+import { BENCH_WEIGHT } from '../optimizer/policy';
 import { Rules } from '../optimizer/rules';
 import { PredictionRow } from './harness';
 
@@ -38,6 +39,9 @@ function candidate(row: PredictionRow, objective: number): Candidate {
     webName: row.webName,
     position: row.position as PositionCode,
     teamId: String(row.teamCode ?? 0),
+    // The archive carries team CODES and no short names. A backtest never renders a payload, so a
+    // stable stand-in is honest here in a way it would not be on a serving path.
+    teamShortName: `T${row.teamCode ?? 0}`,
     cost: row.value,
     ep: objective,
     pPlay: row.pPlay,
@@ -55,7 +59,9 @@ async function solveSquad(
   rules: Rules,
 ): Promise<Set<string>> {
   const highs = await highsLoader();
-  const solution = highs.solve(buildLp(candidates, rules));
+  const solution = highs.solve(
+    buildLp(candidates, rules, undefined, BENCH_WEIGHT),
+  );
   const chosen = new Set<string>();
   for (const [key, col] of Object.entries(solution.Columns)) {
     if ((col as { Primal: number }).Primal > 0.5) chosen.add(key);

@@ -32,9 +32,12 @@
     "import:archive": "nest build && node dist/scripts/import-archive.js",
     "calibrate": "nest build && node dist/scripts/calibrate.js",
     "calibrate:components": "nest build && node dist/scripts/calibrate-components.js",
+    "score:gameweek": "nest build && node dist/scripts/score-gameweek.js",
+    "report:setpiece": "nest build && node dist/scripts/setpiece-report.js",
     "fit:model": "nest build && node dist/scripts/fit-model.js",
     "guards:report": "nest build && node dist/scripts/guards-report.js",
     "sweep:collision": "nest build && node dist/scripts/collision-sweep.js",
+    "optimize:bench-sweep": "nest build && node dist/scripts/bench-sweep.js",
     "decision-quality": "nest build && node dist/scripts/decision-quality.js"
   },
   "dependencies": {

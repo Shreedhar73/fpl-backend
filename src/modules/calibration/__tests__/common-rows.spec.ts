@@ -57,6 +57,7 @@ const row = (over: Partial<HistoryRow>): HistoryRow => ({
   starts: 1,
   totalPoints: 5,
   goalsScored: 0,
+  ownGoals: 0,
   assists: 0,
   cleanSheets: 0,
   goalsConceded: 0,
@@ -99,7 +100,13 @@ function corpus(): HistoryRow[] {
         minutes: 90,
       }),
     ),
-    row({ season: '2024-25', round: 1, playerCode: 2, webName: 'Returner', fixture: 2 }),
+    row({
+      season: '2024-25',
+      round: 1,
+      playerCode: 2,
+      webName: 'Returner',
+      fixture: 2,
+    }),
   ];
 }
 
@@ -125,7 +132,9 @@ describe('the comparison artefact', () => {
     expect(unreachable.length).toBeGreaterThan(0);
 
     const formObservations = observationsFor(result.rows, 'form');
-    expect(formObservations.length).toBe(result.rows.length - unreachable.length);
+    expect(formObservations.length).toBe(
+      result.rows.length - unreachable.length,
+    );
 
     // and specifically: none of the unreachable players appears in form's observations for its round
     for (const missing of unreachable) {
@@ -169,9 +178,21 @@ describe('the appearance count the walk accumulates', () => {
     // rows where the player featured. B-010's floor is defined on the second, and the names are
     // close enough that taking the wrong one would pass review.
     const rows = [
-      row({ season: '2024-25', round: 1, playerCode: 9, minutes: 0, starts: 0 }),
+      row({
+        season: '2024-25',
+        round: 1,
+        playerCode: 9,
+        minutes: 0,
+        starts: 0,
+      }),
       row({ season: '2024-25', round: 2, playerCode: 9, minutes: 90 }),
-      row({ season: '2024-25', round: 3, playerCode: 9, minutes: 0, starts: 0 }),
+      row({
+        season: '2024-25',
+        round: 3,
+        playerCode: 9,
+        minutes: 0,
+        starts: 0,
+      }),
       row({ season: '2024-25', round: 4, playerCode: 9, minutes: 90 }),
     ];
     const result = runBacktest(rows, UNFITTED_PARAMS, scoringFor, {
@@ -210,7 +231,7 @@ describe('the fit must not inherit the restriction', () => {
     'utf8',
   );
 
-  it('scores its grid search on the model\'s own rows, not the common ones', () => {
+  it("scores its grid search on the model's own rows, not the common ones", () => {
     // `fit.ts` runs its shape-parameter grid search THROUGH `runBacktest` — the plan for this work
     // claimed it did not, and it does. So the reshape reaches the fit, and a well-meaning tidy-up
     // that swapped `observationsFor(run.rows, 'model')` for `commonRows` would throw away the

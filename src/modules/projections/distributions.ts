@@ -101,17 +101,205 @@ function logGamma(x: number): number {
     -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
   ];
   if (x < 0.5) {
-    return (
-      Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x)
-    );
+    return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
   }
   x -= 1;
   let a = c[0];
   const t = x + g + 0.5;
   for (let i = 1; i < g + 2; i++) a += c[i] / (x + i);
-  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+  return (
+    0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a)
+  );
 }
 
 function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
+}
+
+/**
+ * A discrete distribution over INTEGER points, as a dense array indexed from `min`.
+ *
+ * FPL points are integers over a small range, so the exact object is cheap. Everything above this
+ * line computes a mean; this is the machinery for keeping the whole shape, which is what an honest
+ * "how likely is a blank" or "how likely is a haul" needs (B-017).
+ */
+export interface PointsPmf {
+  /** the points value `p[0]` corresponds to; negative, because goals conceded and cards are */
+  min: number;
+  /** probabilities, summing to 1 */
+  p: number[];
+}
+
+/** A point mass at one value — the identity for convolution. */
+export function pmfAt(value: number): PointsPmf {
+  return { min: value, p: [1] };
+}
+
+/** Two independent contributions added: the discrete convolution of their distributions. */
+export function convolve(a: PointsPmf, b: PointsPmf): PointsPmf {
+  const p = new Array<number>(a.p.length + b.p.length - 1).fill(0);
+  for (let i = 0; i < a.p.length; i++) {
+    if (a.p[i] === 0) continue;
+    for (let j = 0; j < b.p.length; j++) {
+      if (b.p[j] === 0) continue;
+      p[i + j] += a.p[i] * b.p[j];
+    }
+  }
+  return { min: a.min + b.min, p };
+}
+
+/**
+ * A count with a fixed points value per unit, as a PMF — goals, assists.
+ *
+ * Truncated at `maxCount` and the remaining tail folded into the top bin. Poisson tails past four
+ * goals are of the order 1e-5 for any realistic lambda, and folding rather than dropping keeps the
+ * distribution normalised, which is what the test asserts.
+ */
+export function countPmf(
+  lambda: number,
+  pointsPerUnit: number,
+  maxCount = 5,
+): PointsPmf {
+  if (pointsPerUnit === 0 || lambda <= 0) return pmfAt(0);
+  const probs: number[] = [];
+  let below = 0;
+  for (let k = 0; k < maxCount; k++) {
+    const q = poissonPmf(lambda, k);
+    probs.push(q);
+    below += q;
+  }
+  probs.push(Math.max(0, 1 - below));
+
+  // Points per unit may be negative (own goals) or a multi-point step (a goal). The grid is laid out
+  // in POINTS, so the stride between counts is |pointsPerUnit| and the origin flips when it is
+  // negative — writing this as a positive-only helper is how a negative term silently becomes zero.
+  const stride = Math.abs(pointsPerUnit);
+  const span = stride * maxCount;
+  const p = new Array<number>(span + 1).fill(0);
+  for (let k = 0; k <= maxCount; k++) {
+    const idx = pointsPerUnit > 0 ? k * stride : span - k * stride;
+    p[idx] += probs[k];
+  }
+  return { min: pointsPerUnit > 0 ? 0 : -span, p };
+}
+
+/**
+ * `⌊X / d⌋` scored at a fixed points value — the saves and goals-conceded rules, as a distribution.
+ *
+ * The same identity `expectedFloorDiv` uses, kept as a shape instead of collapsed to its mean.
+ */
+export function floorDivPmf(
+  lambda: number,
+  d: number,
+  pointsPerUnit: number,
+  maxUnits = 4,
+): PointsPmf {
+  if (pointsPerUnit === 0 || lambda <= 0 || d <= 0) return pmfAt(0);
+  const probs: number[] = [];
+  let below = 0;
+  for (let m = 0; m < maxUnits; m++) {
+    // P(⌊X/d⌋ = m) = P(X >= m·d) − P(X >= (m+1)·d)
+    const q = Math.max(
+      0,
+      poissonTail(lambda, m * d) - poissonTail(lambda, (m + 1) * d),
+    );
+    probs.push(q);
+    below += q;
+  }
+  probs.push(Math.max(0, 1 - below));
+
+  const stride = Math.abs(pointsPerUnit);
+  const span = stride * maxUnits;
+  const p = new Array<number>(span + 1).fill(0);
+  for (let m = 0; m <= maxUnits; m++) {
+    const idx = pointsPerUnit > 0 ? m * stride : span - m * stride;
+    p[idx] += probs[m];
+  }
+  return { min: pointsPerUnit > 0 ? 0 : -span, p };
+}
+
+/** A yes/no event worth `points` when it happens. */
+export function bernoulliPmf(probability: number, points: number): PointsPmf {
+  const q = Math.max(0, Math.min(1, probability));
+  if (points === 0) return pmfAt(0);
+  if (points > 0) {
+    const p = new Array<number>(points + 1).fill(0);
+    p[0] = 1 - q;
+    p[points] = q;
+    return { min: 0, p };
+  }
+  const span = -points;
+  const p = new Array<number>(span + 1).fill(0);
+  p[0] = q;
+  p[span] = 1 - q;
+  return { min: points, p };
+}
+
+/**
+ * Bonus, as the {0, 1, 2, 3} distribution it actually is.
+ *
+ * `pAny` is P(receiving any bonus at all); given that, the three recipients of a match take 3, 2 and
+ * 1, so an award is close to uniform over them. Modelling bonus as a mean would give a player a
+ * guaranteed 0.4 points, which is not a thing that can happen and which understates the spread.
+ */
+export function bonusPmf(pAny: number, pointsPerBonus: number): PointsPmf {
+  const q = Math.max(0, Math.min(1, pAny));
+  const span = 3 * Math.max(1, pointsPerBonus);
+  const p = new Array<number>(span + 1).fill(0);
+  p[0] = 1 - q;
+  for (const award of [1, 2, 3]) {
+    p[award * pointsPerBonus] += q / 3;
+  }
+  return { min: 0, p };
+}
+
+/** Mix distributions by weight — the minutes states, which is the one correlation that matters. */
+export function mixPmf(parts: { weight: number; pmf: PointsPmf }[]): PointsPmf {
+  const live = parts.filter((x) => x.weight > 0);
+  if (live.length === 0) return pmfAt(0);
+  const min = Math.min(...live.map((x) => x.pmf.min));
+  const max = Math.max(...live.map((x) => x.pmf.min + x.pmf.p.length - 1));
+  const p = new Array<number>(max - min + 1).fill(0);
+  for (const { weight, pmf } of live) {
+    for (let i = 0; i < pmf.p.length; i++) {
+      p[pmf.min + i - min] += weight * pmf.p[i];
+    }
+  }
+  return { min, p };
+}
+
+export interface PmfSummary {
+  mean: number;
+  variance: number;
+  sd: number;
+  /** P(2 points or fewer) — the appearance and nothing else, which is what a blank means */
+  pBlank: number;
+  /** P(10 points or more) */
+  pHaul: number;
+  /** should be 1; carried so a caller can assert it rather than trust it */
+  total: number;
+}
+
+/** How few points count as a blank, and how many as a haul. Both are the conventional readings. */
+export const BLANK_AT_OR_BELOW = 2;
+export const HAUL_AT_OR_ABOVE = 10;
+
+export function summarise(pmf: PointsPmf): PmfSummary {
+  let total = 0;
+  let mean = 0;
+  let second = 0;
+  let pBlank = 0;
+  let pHaul = 0;
+  for (let i = 0; i < pmf.p.length; i++) {
+    const q = pmf.p[i];
+    if (q === 0) continue;
+    const value = pmf.min + i;
+    total += q;
+    mean += q * value;
+    second += q * value * value;
+    if (value <= BLANK_AT_OR_BELOW) pBlank += q;
+    if (value >= HAUL_AT_OR_ABOVE) pHaul += q;
+  }
+  const variance = Math.max(0, second - mean * mean);
+  return { mean, variance, sd: Math.sqrt(variance), pBlank, pHaul, total };
 }

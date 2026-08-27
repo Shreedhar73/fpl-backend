@@ -8,6 +8,7 @@ const c = (playerId: string, ep: number): Candidate => ({
   webName: playerId,
   position: 'MID',
   teamId: 't1',
+  teamShortName: 'T1',
   cost: 50,
   ep,
   pPlay: 1,

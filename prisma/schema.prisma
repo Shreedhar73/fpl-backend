@@ -28,80 +28,80 @@ enum Position {
 /// SNAPSHOT. `fplId` is 1-20 and alphabetical, so it shifts on promotion/relegation —
 /// `code` is the stable cross-season identifier. Join on fplId, persist code.
 model Team {
-  id        String   @id @default(cuid())
-  fplId     Int      @unique
-  code      Int      @unique
-  name      String
-  shortName String
-  strength  Int
+  id                  String   @id @default(cuid())
+  fplId               Int      @unique
+  code                Int      @unique
+  name                String
+  shortName           String
+  strength            Int
   /// FPL's own team-strength ratings, home/away split. Often 0 early season (uncalibrated) — the
   /// team-strength model treats a 0 as "no signal" and leans on rolling xG + FDR instead.
-  strengthOverallHome  Int @default(0)
-  strengthOverallAway  Int @default(0)
-  strengthAttackHome   Int @default(0)
-  strengthAttackAway   Int @default(0)
-  strengthDefenceHome  Int @default(0)
-  strengthDefenceAway  Int @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  strengthOverallHome Int      @default(0)
+  strengthOverallAway Int      @default(0)
+  strengthAttackHome  Int      @default(0)
+  strengthAttackAway  Int      @default(0)
+  strengthDefenceHome Int      @default(0)
+  strengthDefenceAway Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  players       Player[]
-  homeFixtures  Fixture[] @relation("HomeTeam")
-  awayFixtures  Fixture[] @relation("AwayTeam")
+  players      Player[]
+  homeFixtures Fixture[] @relation("HomeTeam")
+  awayFixtures Fixture[] @relation("AwayTeam")
 
   @@map("teams")
 }
 
 /// SNAPSHOT of the current player state. Anything here whose past matters also has a history table.
 model Player {
-  id          String   @id @default(cuid())
-  fplId       Int      @unique
-  code        Int      @unique
-  firstName   String
-  secondName  String
-  webName     String
-  position    Position
-  teamId      String
+  id                       String    @id @default(cuid())
+  fplId                    Int       @unique
+  code                     Int       @unique
+  firstName                String
+  secondName               String
+  webName                  String
+  position                 Position
+  teamId                   String
   /// tenths of a million
-  nowCost     Int
+  nowCost                  Int
   /// a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad. Only 'a' is safe to start.
-  status      String
+  status                   String
   /// null means FULLY FIT, not unknown. Treating null as 0 benches every healthy player.
   chanceOfPlayingNextRound Int?
-  news        String?
-  newsAddedAt DateTime?
-  removed     Boolean  @default(false)
+  news                     String?
+  newsAddedAt              DateTime?
+  removed                  Boolean   @default(false)
 
   // --- Projection inputs, from the bootstrap element (season-to-date). Snapshot: upserted each sync.
   //     `ep*`/`form` are decimal STRINGS upstream, parsed at the boundary. Nullable = absent preseason.
-  form         Decimal? @db.Decimal(6, 2)
-  pointsPerGame Decimal? @db.Decimal(6, 2)
+  form                       Decimal? @db.Decimal(6, 2)
+  pointsPerGame              Decimal? @db.Decimal(6, 2)
   /// FPL's own expected points for the next / current gameweek — the baseline the model must beat.
-  epNext       Decimal? @db.Decimal(6, 2)
-  epThis       Decimal? @db.Decimal(6, 2)
-  expectedGoalsPer90          Decimal @default(0) @db.Decimal(6, 2)
-  expectedAssistsPer90        Decimal @default(0) @db.Decimal(6, 2)
-  expectedGoalsConcededPer90  Decimal @default(0) @db.Decimal(6, 2)
-  defensiveContributionPer90  Decimal @default(0) @db.Decimal(6, 2)
-  savesPer90                  Decimal @default(0) @db.Decimal(6, 2)
-  startsPer90                 Decimal @default(0) @db.Decimal(5, 3)
+  epNext                     Decimal? @db.Decimal(6, 2)
+  epThis                     Decimal? @db.Decimal(6, 2)
+  expectedGoalsPer90         Decimal  @default(0) @db.Decimal(6, 2)
+  expectedAssistsPer90       Decimal  @default(0) @db.Decimal(6, 2)
+  expectedGoalsConcededPer90 Decimal  @default(0) @db.Decimal(6, 2)
+  defensiveContributionPer90 Decimal  @default(0) @db.Decimal(6, 2)
+  savesPer90                 Decimal  @default(0) @db.Decimal(6, 2)
+  startsPer90                Decimal  @default(0) @db.Decimal(5, 3)
   /// set-piece duty — null means not a taker. A large, cheap rate signal.
-  penaltiesOrder       Int?
-  directFreekicksOrder Int?
-  cornersOrder         Int?
-  seasonMinutes Int @default(0)
-  seasonStarts  Int @default(0)
+  penaltiesOrder             Int?
+  directFreekicksOrder       Int?
+  cornersOrder               Int?
+  seasonMinutes              Int      @default(0)
+  seasonStarts               Int      @default(0)
 
-  updatedAt   DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
-  team             Team                      @relation(fields: [teamId], references: [id])
-  gameweekStats    PlayerGameweekStat[]
-  priceHistory     PlayerPriceHistory[]
-  ownershipHistory PlayerOwnershipHistory[]
-  seasonHistory    PlayerSeasonHistory[]
-  projections      Projection[]
-  squadPicks       SquadPick[]
-  archiveGameweeks ArchivePlayerGameweek[]
+  team              Team                     @relation(fields: [teamId], references: [id])
+  gameweekStats     PlayerGameweekStat[]
+  priceHistory      PlayerPriceHistory[]
+  ownershipHistory  PlayerOwnershipHistory[]
+  seasonHistory     PlayerSeasonHistory[]
+  projections       Projection[]
+  squadPicks        SquadPick[]
+  archiveGameweeks  ArchivePlayerGameweek[]
   deadlineSnapshots PlayerDeadlineSnapshot[]
 
   @@index([teamId])
@@ -114,28 +114,28 @@ model Player {
 /// SEASON TOTALS — the public API exposes no per-gameweek detail for finished seasons. The model uses
 /// the last two as an early-season prior, and last season's points as a baseline.
 model PlayerSeasonHistory {
-  id           String @id @default(cuid())
-  playerId     String
+  id                    String   @id @default(cuid())
+  playerId              String
   /// e.g. "2024/25"
-  season       String
-  totalPoints  Int
-  minutes      Int
-  starts       Int    @default(0)
-  goalsScored  Int    @default(0)
-  assists      Int    @default(0)
-  cleanSheets  Int    @default(0)
-  goalsConceded Int   @default(0)
-  saves        Int    @default(0)
-  bonus        Int    @default(0)
-  bps          Int    @default(0)
-  defensiveContribution Int @default(0)
-  expectedGoals         Decimal @default(0) @db.Decimal(7, 2)
-  expectedAssists       Decimal @default(0) @db.Decimal(7, 2)
-  expectedGoalsConceded Decimal @default(0) @db.Decimal(7, 2)
+  season                String
+  totalPoints           Int
+  minutes               Int
+  starts                Int      @default(0)
+  goalsScored           Int      @default(0)
+  assists               Int      @default(0)
+  cleanSheets           Int      @default(0)
+  goalsConceded         Int      @default(0)
+  saves                 Int      @default(0)
+  bonus                 Int      @default(0)
+  bps                   Int      @default(0)
+  defensiveContribution Int      @default(0)
+  expectedGoals         Decimal  @default(0) @db.Decimal(7, 2)
+  expectedAssists       Decimal  @default(0) @db.Decimal(7, 2)
+  expectedGoalsConceded Decimal  @default(0) @db.Decimal(7, 2)
   /// tenths of a million
-  startCost Int
-  endCost   Int
-  updatedAt DateTime @updatedAt
+  startCost             Int
+  endCost               Int
+  updatedAt             DateTime @updatedAt
 
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
@@ -158,11 +158,12 @@ model Gameweek {
   highestScore Int?
   updatedAt    DateTime @updatedAt
 
-  fixtures    Fixture[]
-  playerStats PlayerGameweekStat[]
-  projections Projection[]
-  squads      Squad[]
+  fixtures          Fixture[]
+  playerStats       PlayerGameweekStat[]
+  projections       Projection[]
+  squads            Squad[]
   deadlineSnapshots PlayerDeadlineSnapshot[]
+  liveSnapshot      GameweekLiveSnapshot?
 
   @@map("gameweeks")
 }
@@ -170,23 +171,23 @@ model Gameweek {
 /// SNAPSHOT. `event` and `kickoffTime` are nullable — an unscheduled or unassigned fixture is
 /// normal upstream, and both break a naive sort.
 model Fixture {
-  id           String    @id @default(cuid())
-  fplId        Int       @unique
-  gameweekId   Int?
-  kickoffTime  DateTime? @db.Timestamptz(3)
-  homeTeamId   String
-  awayTeamId   String
-  homeScore    Int?
-  awayScore    Int?
+  id             String    @id @default(cuid())
+  fplId          Int       @unique
+  gameweekId     Int?
+  kickoffTime    DateTime? @db.Timestamptz(3)
+  homeTeamId     String
+  awayTeamId     String
+  homeScore      Int?
+  awayScore      Int?
   homeDifficulty Int
   awayDifficulty Int
-  started      Boolean   @default(false)
-  finished     Boolean   @default(false)
-  updatedAt    DateTime  @updatedAt
+  started        Boolean   @default(false)
+  finished       Boolean   @default(false)
+  updatedAt      DateTime  @updatedAt
 
-  gameweek Gameweek? @relation(fields: [gameweekId], references: [id])
-  homeTeam Team      @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam Team      @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  gameweek Gameweek?            @relation(fields: [gameweekId], references: [id])
+  homeTeam Team                 @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam Team                 @relation("AwayTeam", fields: [awayTeamId], references: [id])
   stats    PlayerGameweekStat[]
 
   @@index([gameweekId])
@@ -198,28 +199,28 @@ model Fixture {
 /// HISTORY, and the fact table everything models on. Fixture is part of the key because
 /// double gameweeks are real: one player, one gameweek, two fixtures, two rows.
 model PlayerGameweekStat {
-  id         String @id @default(cuid())
-  playerId   String
-  gameweekId Int
-  fixtureId  String
-  wasHome    Boolean
+  id                String  @id @default(cuid())
+  playerId          String
+  gameweekId        Int
+  fixtureId         String
+  wasHome           Boolean
   opponentTeamFplId Int
 
-  minutes        Int @default(0)
-  starts         Int @default(0)
-  totalPoints    Int @default(0)
-  goalsScored    Int @default(0)
-  assists        Int @default(0)
-  cleanSheets    Int @default(0)
-  goalsConceded  Int @default(0)
-  ownGoals       Int @default(0)
-  penaltiesSaved Int @default(0)
-  penaltiesMissed Int @default(0)
-  yellowCards    Int @default(0)
-  redCards       Int @default(0)
-  saves          Int @default(0)
-  bonus          Int @default(0)
-  bps            Int @default(0)
+  minutes               Int @default(0)
+  starts                Int @default(0)
+  totalPoints           Int @default(0)
+  goalsScored           Int @default(0)
+  assists               Int @default(0)
+  cleanSheets           Int @default(0)
+  goalsConceded         Int @default(0)
+  ownGoals              Int @default(0)
+  penaltiesSaved        Int @default(0)
+  penaltiesMissed       Int @default(0)
+  yellowCards           Int @default(0)
+  redCards              Int @default(0)
+  saves                 Int @default(0)
+  bonus                 Int @default(0)
+  bps                   Int @default(0)
   /// the 2025/26 scoring category: DEF/MID/FWD earn +2 at the threshold
   defensiveContribution Int @default(0)
 
@@ -279,17 +280,27 @@ model PlayerOwnershipHistory {
 /// HISTORY, append-only. NEVER overwrite a projection: the backtest is the whole point of
 /// keeping them, and it needs what the model said at the time, not what it would say now.
 model Projection {
-  id           String  @id @default(cuid())
+  id           String @id @default(cuid())
   playerId     String
   gameweekId   Int
   modelVersion String
 
-  expectedPoints  Decimal @db.Decimal(6, 2)
-  expectedMinutes Decimal @db.Decimal(6, 2)
+  expectedPoints  Decimal  @db.Decimal(6, 2)
+  expectedMinutes Decimal  @db.Decimal(6, 2)
   /// P(the player features at all) — the term that dominates every other one
-  playProbability Decimal @db.Decimal(4, 3)
+  playProbability Decimal  @db.Decimal(4, 3)
   /// per-term breakdown + the inputs, so the UI can show WHY and the run can be reconstructed
   components      Json
+  /// Standard deviation of the points distribution (B-017).
+  ///
+  /// NULLABLE, and null means "written by a model version that had no distribution" — every row
+  /// before v3-fitted-2026-08-27. Reading a null as 0 would report a rotation risk as a certainty,
+  /// which is the exact inversion of what this column is for.
+  sd              Decimal? @db.Decimal(6, 3)
+  /// P(2 points or fewer — the appearance and nothing else). What a human means by a blank.
+  pBlank          Decimal? @db.Decimal(4, 3)
+  /// P(10 points or more).
+  pHaul           Decimal? @db.Decimal(4, 3)
   createdAt       DateTime @default(now())
 
   player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -320,13 +331,13 @@ model Squad {
 }
 
 model SquadPick {
-  id           String  @id @default(cuid())
-  squadId      String
-  playerId     String
+  id            String  @id @default(cuid())
+  squadId       String
+  playerId      String
   /// 1-11 starting XI, 12-15 bench in substitution order — bench order is a real decision
-  position     Int
-  multiplier   Int     @default(1)
-  isCaptain    Boolean @default(false)
+  position      Int
+  multiplier    Int     @default(1)
+  isCaptain     Boolean @default(false)
   isViceCaptain Boolean @default(false)
   /// What we would get back on a sale: purchase price + half the rise, rounded down.
   ///
@@ -339,7 +350,7 @@ model SquadPick {
   /// and its entire job is that sell value differs from market price — an approximation here is a
   /// wrong number consumed there with no tell, where a null is loud. B-008 reconstructs it by
   /// replaying `entry/{id}/transfers/` against `player_price_history`.
-  sellValue    Int?
+  sellValue     Int?
 
   squad  Squad  @relation(fields: [squadId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id])
@@ -416,24 +427,24 @@ model ScoringConfig {
 /// it carries post-match information (the archive's own README documents this and advises dropping
 /// it). Absent from the schema so a later session cannot reach for it without reading why.
 model ArchivePlayerGameweek {
-  id     String @id @default(cuid())
+  id      String @id @default(cuid())
   /// as the archive labels it: "2025-26"
-  season String
+  season  String
   /// gameweek within that season (the archive's `round`)
-  round  Int
+  round   Int
   /// that season's fixture id — part of the key, so a double gameweek is two rows
   fixture Int
 
   /// STABLE across seasons, unlike the per-season `element` id. The join key to `Player.code`.
-  playerCode Int
+  playerCode       Int
   /// null when the player has since left the league and has no row of ours. The fit needs them.
-  playerId   String?
-  webName    String
-  position   Position
+  playerId         String?
+  webName          String
+  position         Position
   teamCode         Int?
   opponentTeamCode Int?
-  wasHome     Boolean
-  kickoffTime DateTime?
+  wasHome          Boolean
+  kickoffTime      DateTime?
 
   minutes         Int @default(0)
   starts          Int @default(0)
@@ -465,8 +476,8 @@ model ArchivePlayerGameweek {
   ictIndex              Decimal @default(0) @db.Decimal(6, 1)
 
   /// tenths of a million, the player's price that gameweek
-  value      Int @default(0)
-  selectedBy Int @default(0)
+  value      Int      @default(0)
+  selectedBy Int      @default(0)
   createdAt  DateTime @default(now())
 
   player Player? @relation(fields: [playerId], references: [id], onDelete: SetNull)
@@ -514,11 +525,11 @@ model PlayerDeadlineSnapshot {
   gameweekId Int
 
   /// a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad
-  status String
+  status                   String
   /// null means FULLY FIT, not unknown. Treating null as 0 benches every healthy player.
   chanceOfPlayingNextRound Int?
-  news        String?
-  newsAddedAt DateTime?
+  news                     String?
+  newsAddedAt              DateTime?
 
   /// FPL's own expected points — the baseline the model has to beat, and unrecoverable once overwritten
   epNext Decimal? @db.Decimal(6, 2)
@@ -535,10 +546,10 @@ model PlayerDeadlineSnapshot {
 
   /// when this was taken, NOT the deadline — several captures per gameweek are expected and the
   /// latest one before the deadline is the one that describes the decision
-  capturedAt   DateTime @default(now())
+  capturedAt      DateTime @default(now())
   /// hours between the capture and the deadline; a capture taken 20 hours out is weaker evidence
   /// about a late fitness call than one taken at two, and the fit has to be able to tell them apart
-  hoursToDeadline Decimal @db.Decimal(6, 2)
+  hoursToDeadline Decimal  @db.Decimal(6, 2)
 
   player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   gameweek Gameweek @relation(fields: [gameweekId], references: [id])
@@ -546,4 +557,31 @@ model PlayerDeadlineSnapshot {
   @@unique([playerId, gameweekId])
   @@index([gameweekId])
   @@map("player_deadline_snapshot")
+}
+
+/// RAW CAPTURE. `event/{gw}/live/` in full, one row per gameweek.
+///
+/// The `explain` blocks inside it are FPL's own per-identifier answer key — what each player was paid
+/// for, term by term — and they are the only thing that ever let this project verify its points
+/// engine against the source rather than against its own reading of the rules (B-007 Phase 1).
+///
+/// **They are gone at season rollover.** The endpoint serves the CURRENT season only, and no archive
+/// carries them. So the choice was 38 committed JSON fixtures at ~440 KB each — about 17 MB of
+/// repository — or a table. The table won: it is captured by the ordinary sync rather than by
+/// somebody remembering, it does not bloat every clone, and a raw payload in a repo is a fixture
+/// nobody updates.
+///
+/// Stored whole and unparsed on purpose. The value of a raw capture is that it still answers a
+/// question nobody has asked yet, and a parsed subset only answers the ones we thought of.
+model GameweekLiveSnapshot {
+  gameweekId Int      @id
+  /// the full `event/{gw}/live/` payload, exactly as served
+  payload    Json
+  /// how many elements the payload carried, so an empty capture is visible without parsing the blob
+  elements   Int
+  capturedAt DateTime @default(now())
+
+  gameweek Gameweek @relation(fields: [gameweekId], references: [id])
+
+  @@map("gameweek_live_snapshot")
 }

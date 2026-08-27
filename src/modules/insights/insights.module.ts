@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { OptimizerModule } from '../optimizer/optimizer.module';
 import { SquadModule } from '../squad/squad.module';
+import { TransfersModule } from '../transfers/transfers.module';
 import { InsightsController } from './insights.controller';
 import { InsightsRepository } from './insights.repository';
 import { InsightsService } from './insights.service';
@@ -11,7 +12,7 @@ import { InsightsService } from './insights.service';
  * reasoning attached. Reaches the other two modules through their exported services only.
  */
 @Module({
-  imports: [PrismaModule, OptimizerModule, SquadModule],
+  imports: [PrismaModule, OptimizerModule, SquadModule, TransfersModule],
   controllers: [InsightsController],
   providers: [InsightsService, InsightsRepository],
   exports: [InsightsService],

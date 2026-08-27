@@ -42,6 +42,14 @@ export interface SyncRunSummary {
  */
 const SNAPSHOT_WINDOW_HOURS = 36;
 
+/**
+ * How many `event/{gw}/live/` payloads one sync run will fetch.
+ *
+ * Three, so a fresh database catches up on 38 gameweeks within a day of hourly syncs without ever
+ * making a burst of 38 requests at ~440 KB each.
+ */
+const LIVE_CAPTURES_PER_RUN = 3;
+
 @Injectable()
 export class SyncService {
   private readonly log = new Logger(SyncService.name);
@@ -121,9 +129,16 @@ export class SyncService {
         playerId,
         run.startedAt,
       );
+      const liveRows = await this.captureLiveSnapshots();
 
       const rowsWritten =
-        teamRows + gwRows + playerRows + priceRows + ownershipRows + snapshotRows;
+        teamRows +
+        gwRows +
+        playerRows +
+        priceRows +
+        ownershipRows +
+        snapshotRows +
+        liveRows;
       await this.repo.finishRun(run.id, {
         rowsWritten,
         status: 'success',
@@ -132,7 +147,8 @@ export class SyncService {
       this.log.log(
         `bootstrap: ${teamRows} teams, ${gwRows} gameweeks, ${playerRows} players, ` +
           `${priceRows} price rows, ${ownershipRows} ownership rows` +
-          (snapshotRows > 0 ? `, ${snapshotRows} deadline-snapshot rows` : ''),
+          (snapshotRows > 0 ? `, ${snapshotRows} deadline-snapshot rows` : '') +
+          (liveRows > 0 ? `, ${liveRows} live-payload capture(s)` : ''),
       );
       return { endpoint, mode: 'incremental', status: 'success', rowsWritten };
     } catch (err) {
@@ -375,13 +391,83 @@ export class SyncService {
    * The parameter stays in the signature — it is the contract callers will use once this is
    * implemented, and deleting it to satisfy the linter would change that contract.
    */
+  /**
+   * **Decided 2026-08-27 (B-016, and see `docs/decisions.md`): this stays unimplemented, and it is
+   * no longer owed.**
+   *
+   * It was opened as a B-003 follow-up for two reasons and both are answered elsewhere.
+   *
+   * - *Calibration needs the `explain` blocks.* It does — and `captureLiveSnapshots` below now takes
+   *   the whole payload on the ordinary sync, which is strictly better than a mode a human has to
+   *   remember to run.
+   * - *In-play display.* Nothing in this product shows a live score. The whole surface is a
+   *   pre-deadline advisor, and a half-built in-play path would be an unused code path polling an
+   *   endpoint every few minutes — the opposite of being a good guest (`fpl-api-reference`).
+   *
+   * It rejects rather than being deleted so that a caller passing `--live` gets a sentence rather
+   * than a silence.
+   */
   runLive(gameweek: number): Promise<never> {
     void gameweek;
     return Promise.reject(
       new Error(
-        'live sync is not implemented yet (B-003 follow-up). Use the default or --full mode; ' +
-          '--full covers all finished gameweeks.',
+        'live sync is deliberately not implemented — see docs/decisions.md D-027. The `explain` ' +
+          'blocks it was owed for are captured by the ordinary sync into gameweek_live_snapshot; ' +
+          'nothing in this product displays an in-play score. Use the default or --full mode.',
       ),
     );
+  }
+
+  /**
+   * Capture `event/{gw}/live/` in full for any finished gameweek that has not been captured yet.
+   *
+   * **This exists because the payload disappears.** The endpoint serves the current season only and
+   * no archive carries the `explain` blocks — FPL's own per-identifier answer key, and the only
+   * thing that ever let this project verify its points engine against the source rather than against
+   * its own reading of the rules. At season rollover they are gone for good.
+   *
+   * It rides the ordinary sync for the same reason the deadline snapshot does: a capture that
+   * depends on somebody remembering to run a command is a capture that will be missed exactly once,
+   * and once is enough. `doctor.sh` reports a finished gameweek with no capture behind it, so a
+   * trigger that stops firing is visible rather than silent.
+   *
+   * Capped per run. On a fresh database this would otherwise fetch 38 payloads of ~440 KB in a
+   * burst; a handful per hourly sync catches up within a day and stays a polite guest.
+   */
+  private async captureLiveSnapshots(): Promise<number> {
+    const due = await this.repo.gameweeksNeedingLiveCapture(
+      LIVE_CAPTURES_PER_RUN,
+    );
+    let captured = 0;
+    for (const gameweekId of due) {
+      try {
+        const payload = await this.api.getEventLive(gameweekId);
+        const elements = Array.isArray(
+          (payload as { elements?: unknown[] })?.elements,
+        )
+          ? (payload as { elements: unknown[] }).elements.length
+          : 0;
+        if (elements === 0) {
+          // An empty payload is not a capture. Storing it would satisfy the "has a snapshot" check
+          // for ever and leave nothing behind it — the exact shape of a guard that cannot go red.
+          this.log.warn(
+            `GW${gameweekId}: event/live returned no elements — not captured`,
+          );
+          continue;
+        }
+        await this.repo.storeLiveSnapshot(gameweekId, payload, elements);
+        captured++;
+        this.log.log(
+          `captured event/${gameweekId}/live — ${elements} elements, before season rollover takes it`,
+        );
+      } catch (err) {
+        // A failed capture must not fail the sync: the rest of the run is the data the product
+        // serves from, and this is a retention job that the next hourly run will retry.
+        this.log.warn(
+          `GW${gameweekId}: live capture failed (${(err as Error).message}) — will retry next sync`,
+        );
+      }
+    }
+    return captured;
   }
 }

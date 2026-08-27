@@ -25,6 +25,32 @@ export class EvidenceDto {
       'forward who might not start is worth less than a 4-point one who certainly will.',
   })
   playProbability!: number;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'Standard deviation of the points distribution (B-017). NULL for a projection written by a ' +
+      'model version that composed none — read it as unknown, never as zero. A zero here is a ' +
+      'claim of certainty.',
+  })
+  sd!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'P(2 points or fewer — the appearance and nothing else). What a human means by a blank, and ' +
+      'the number that separates two players with the same expected points.',
+  })
+  pBlank!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: 'P(10 points or more).',
+  })
+  pHaul!: number | null;
 }
 
 export class AdvicePlayerDto {
@@ -151,6 +177,121 @@ export class ComparisonDto {
   youHaveThatOptimalDoesNot!: SquadDifferenceDto[];
 }
 
+export class FloorExcludedPlayerDto {
+  @ApiProperty()
+  playerId!: string;
+
+  @ApiProperty()
+  webName!: string;
+
+  @ApiProperty({ enum: ['GKP', 'DEF', 'MID', 'FWD'] })
+  position!: 'GKP' | 'DEF' | 'MID' | 'FWD';
+
+  @ApiProperty({
+    description: 'e.g. "CHE". Never a team id — see the collision note below.',
+  })
+  teamShortName!: string;
+
+  @ApiProperty({
+    description:
+      'Premier League appearances, archive plus this season. Below the threshold, which is why ' +
+      'this player was not eligible.',
+  })
+  appearances!: number;
+
+  @ApiProperty({
+    description: 'Horizon expected points the unguarded solve valued them at.',
+  })
+  epHorizon!: number;
+}
+
+export class AppearanceFloorDto {
+  @ApiProperty({
+    description: 'Minimum appearances to enter the candidate pool.',
+  })
+  threshold!: number;
+
+  @ApiProperty({ description: 'How many of the league the floor removed.' })
+  excluded!: number;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'Horizon EP the floor cost, measured against the same solve with the floor lifted and the ' +
+      'collision penalty unchanged — so the number isolates the floor. Null when not computed.',
+  })
+  costEp!: number | null;
+
+  @ApiProperty({
+    type: [FloorExcludedPlayerDto],
+    description:
+      'The excluded players an unguarded solve would actually have picked. Not "everyone below ' +
+      'the threshold" — that list is hundreds long and says nothing about this recommendation.',
+  })
+  wouldHaveMadeTheSquad!: FloorExcludedPlayerDto[];
+
+  @ApiProperty({
+    description:
+      'What this guard IS, carried in the payload so a UI cannot restate it more confidently ' +
+      'than the evidence allows.',
+  })
+  statement!: string;
+}
+
+export class CollisionTakenDto {
+  @ApiProperty({
+    description:
+      'The match, home side first — e.g. "CHE vs BHA". Plan 009 specified this and what shipped ' +
+      'emitted two team cuids, which is why nothing could render it: a cuid on screen looks like data.',
+  })
+  fixture!: string;
+
+  @ApiProperty()
+  attacker!: string;
+
+  @ApiProperty()
+  defender!: string;
+
+  @ApiProperty({ description: 'Horizon points charged for holding this pair.' })
+  lambda!: number;
+}
+
+export class FixtureCollisionsDto {
+  @ApiProperty({
+    description: 'Horizon points charged per conflicting pair held.',
+  })
+  lambda!: number;
+
+  @ApiProperty({
+    description: 'Conflicting pairs across the whole candidate pool.',
+  })
+  pairsConsidered!: number;
+
+  @ApiProperty({
+    description: 'Horizon EP this XI was charged for the pairs it kept.',
+  })
+  penaltyEp!: number;
+
+  @ApiProperty({ type: [CollisionTakenDto] })
+  taken!: CollisionTakenDto[];
+
+  @ApiProperty({
+    description:
+      'What this guard is, and — unlike the floor — what it is NOT. It was measured over 103 ' +
+      'archived gameweeks and did not improve realised points. A UI must not present it as if it had.',
+  })
+  statement!: string;
+}
+
+export class ReasoningDto {
+  @ApiProperty({ type: AppearanceFloorDto })
+  appearanceFloor!: AppearanceFloorDto;
+
+  @ApiProperty({ type: FixtureCollisionsDto })
+  fixtureCollisions!: FixtureCollisionsDto;
+}
+
 export class AdviceDto {
   @ApiProperty({
     type: Number,
@@ -200,6 +341,17 @@ export class AdviceDto {
 
   @ApiProperty({ type: ComparisonDto })
   comparison!: ComparisonDto;
+
+  @ApiProperty({
+    type: ReasoningDto,
+    nullable: true,
+    description:
+      'Why the RECOMMENDED squad is what it is — which players the appearance floor removed and ' +
+      'what that cost, and which fixture collisions the recommendation kept and what it paid. It ' +
+      'describes the optimal squad, not the one being advised on, and is null only if the solve ' +
+      'produced none.',
+  })
+  reasoning!: ReasoningDto | null;
 
   @ApiProperty({
     type: [String],

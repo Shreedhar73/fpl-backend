@@ -651,7 +651,7 @@
     },
     "/api/insights/advice/{managerId}": {
       "get": {
-        "description": "Captain, vice, bench order and the gap against the best legal 15, with the model's per-term reasoning on every player. Does NOT recommend transfers or chips — see `notAdvisedOn` in the response, and B-008.",
+        "description": "Captain, vice, bench order and the gap against the best legal 15, with the model's per-term reasoning on every player, and `reasoning` for what the optimizer refused. Transfers and chips are a separate call: GET /insights/transfers/{managerId}.",
         "operationId": "InsightsController_adviceForManager",
         "parameters": [
           {
@@ -741,6 +741,103 @@
           }
         },
         "summary": "Advice for a previously imported squad.",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/api/insights/transfers/{managerId}": {
+      "get": {
+        "description": "Transfers with the −4 hit inside the objective, priced at reconstructed SELL values rather than market prices, plus chip WINDOWS — a chip is unspendable once used, so the model names the gameweek the calendar argues for and never commits one.",
+        "operationId": "InsightsController_transferPlan",
+        "parameters": [
+          {
+            "name": "managerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/TransferPlanDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Import the squad first: POST /api/squad/import.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "SQUAD_NOT_IMPORTED"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "What to do with the squad this manager already has.",
         "tags": [
           "insights"
         ]
@@ -1135,12 +1232,30 @@
           "playProbability": {
             "type": "number",
             "description": "P(the player features at all). The term that dominates every other one — a 9-point forward who might not start is worth less than a 4-point one who certainly will."
+          },
+          "sd": {
+            "type": "number",
+            "nullable": true,
+            "description": "Standard deviation of the points distribution (B-017). NULL for a projection written by a model version that composed none — read it as unknown, never as zero. A zero here is a claim of certainty."
+          },
+          "pBlank": {
+            "type": "number",
+            "nullable": true,
+            "description": "P(2 points or fewer — the appearance and nothing else). What a human means by a blank, and the number that separates two players with the same expected points."
+          },
+          "pHaul": {
+            "type": "number",
+            "nullable": true,
+            "description": "P(10 points or more)."
           }
         },
         "required": [
           "components",
           "expectedMinutes",
-          "playProbability"
+          "playProbability",
+          "sd",
+          "pBlank",
+          "pHaul"
         ]
       },
       "AdvicePlayerDto": {
@@ -1321,6 +1436,156 @@
           "youHaveThatOptimalDoesNot"
         ]
       },
+      "FloorExcludedPlayerDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string"
+          },
+          "webName": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string",
+            "description": "e.g. \"CHE\". Never a team id — see the collision note below."
+          },
+          "appearances": {
+            "type": "number",
+            "description": "Premier League appearances, archive plus this season. Below the threshold, which is why this player was not eligible."
+          },
+          "epHorizon": {
+            "type": "number",
+            "description": "Horizon expected points the unguarded solve valued them at."
+          }
+        },
+        "required": [
+          "playerId",
+          "webName",
+          "position",
+          "teamShortName",
+          "appearances",
+          "epHorizon"
+        ]
+      },
+      "AppearanceFloorDto": {
+        "type": "object",
+        "properties": {
+          "threshold": {
+            "type": "number",
+            "description": "Minimum appearances to enter the candidate pool."
+          },
+          "excluded": {
+            "type": "number",
+            "description": "How many of the league the floor removed."
+          },
+          "costEp": {
+            "type": "number",
+            "nullable": true,
+            "description": "Horizon EP the floor cost, measured against the same solve with the floor lifted and the collision penalty unchanged — so the number isolates the floor. Null when not computed."
+          },
+          "wouldHaveMadeTheSquad": {
+            "description": "The excluded players an unguarded solve would actually have picked. Not \"everyone below the threshold\" — that list is hundreds long and says nothing about this recommendation.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FloorExcludedPlayerDto"
+            }
+          },
+          "statement": {
+            "type": "string",
+            "description": "What this guard IS, carried in the payload so a UI cannot restate it more confidently than the evidence allows."
+          }
+        },
+        "required": [
+          "threshold",
+          "excluded",
+          "costEp",
+          "wouldHaveMadeTheSquad",
+          "statement"
+        ]
+      },
+      "CollisionTakenDto": {
+        "type": "object",
+        "properties": {
+          "fixture": {
+            "type": "string",
+            "description": "The match, home side first — e.g. \"CHE vs BHA\". Plan 009 specified this and what shipped emitted two team cuids, which is why nothing could render it: a cuid on screen looks like data."
+          },
+          "attacker": {
+            "type": "string"
+          },
+          "defender": {
+            "type": "string"
+          },
+          "lambda": {
+            "type": "number",
+            "description": "Horizon points charged for holding this pair."
+          }
+        },
+        "required": [
+          "fixture",
+          "attacker",
+          "defender",
+          "lambda"
+        ]
+      },
+      "FixtureCollisionsDto": {
+        "type": "object",
+        "properties": {
+          "lambda": {
+            "type": "number",
+            "description": "Horizon points charged per conflicting pair held."
+          },
+          "pairsConsidered": {
+            "type": "number",
+            "description": "Conflicting pairs across the whole candidate pool."
+          },
+          "penaltyEp": {
+            "type": "number",
+            "description": "Horizon EP this XI was charged for the pairs it kept."
+          },
+          "taken": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollisionTakenDto"
+            }
+          },
+          "statement": {
+            "type": "string",
+            "description": "What this guard is, and — unlike the floor — what it is NOT. It was measured over 103 archived gameweeks and did not improve realised points. A UI must not present it as if it had."
+          }
+        },
+        "required": [
+          "lambda",
+          "pairsConsidered",
+          "penaltyEp",
+          "taken",
+          "statement"
+        ]
+      },
+      "ReasoningDto": {
+        "type": "object",
+        "properties": {
+          "appearanceFloor": {
+            "$ref": "#/components/schemas/AppearanceFloorDto"
+          },
+          "fixtureCollisions": {
+            "$ref": "#/components/schemas/FixtureCollisionsDto"
+          }
+        },
+        "required": [
+          "appearanceFloor",
+          "fixtureCollisions"
+        ]
+      },
       "AdviceDto": {
         "type": "object",
         "properties": {
@@ -1374,6 +1639,16 @@
           "comparison": {
             "$ref": "#/components/schemas/ComparisonDto"
           },
+          "reasoning": {
+            "nullable": true,
+            "description": "Why the RECOMMENDED squad is what it is — which players the appearance floor removed and what that cost, and which fixture collisions the recommendation kept and what it paid. It describes the optimal squad, not the one being advised on, and is null only if the solve produced none.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReasoningDto"
+              }
+            ]
+          },
           "notAdvisedOn": {
             "description": "What this advice deliberately does not answer, in plain language, so the gap is visible in the payload rather than only in a plan file.",
             "type": "array",
@@ -1391,6 +1666,7 @@
           "viceCaptain",
           "players",
           "comparison",
+          "reasoning",
           "notAdvisedOn"
         ]
       },
@@ -1407,6 +1683,256 @@
         },
         "required": [
           "playerIds"
+        ]
+      },
+      "TransferOutDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string"
+          },
+          "webName": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string"
+          },
+          "nowCost": {
+            "type": "number",
+            "description": "Market price in tenths of a million."
+          },
+          "epHorizon": {
+            "type": "number",
+            "description": "Horizon expected points, decayed."
+          },
+          "sellValue": {
+            "type": "number",
+            "nullable": true,
+            "description": "What selling returns, in tenths: purchase price plus half the rise, rounded down. Null when the purchase price could not be reconstructed at all."
+          },
+          "sellValueSource": {
+            "type": "string",
+            "enum": [
+              "transfer-log",
+              "starting-gameweek-price",
+              "unknown"
+            ],
+            "description": "Where the purchase price came from. 'transfer-log' is exact — the manager's own element_in_cost. 'starting-gameweek-price' is exact for a player held since their first gameweek, because FPL's per-gameweek value IS the price that week. 'unknown' means the budget used the market price, which overstates it."
+          }
+        },
+        "required": [
+          "playerId",
+          "webName",
+          "position",
+          "teamShortName",
+          "nowCost",
+          "epHorizon",
+          "sellValue",
+          "sellValueSource"
+        ]
+      },
+      "TransferSideDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string"
+          },
+          "webName": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string"
+          },
+          "nowCost": {
+            "type": "number",
+            "description": "Market price in tenths of a million."
+          },
+          "epHorizon": {
+            "type": "number",
+            "description": "Horizon expected points, decayed."
+          }
+        },
+        "required": [
+          "playerId",
+          "webName",
+          "position",
+          "teamShortName",
+          "nowCost",
+          "epHorizon"
+        ]
+      },
+      "PlannedMoveDto": {
+        "type": "object",
+        "properties": {
+          "out": {
+            "$ref": "#/components/schemas/TransferOutDto"
+          },
+          "in": {
+            "$ref": "#/components/schemas/TransferSideDto"
+          },
+          "gainEp": {
+            "type": "number",
+            "description": "Horizon EP this single move adds, before any hit. The hit is charged once against the plan, not per move, because it is a property of how many moves there are."
+          }
+        },
+        "required": [
+          "out",
+          "in",
+          "gainEp"
+        ]
+      },
+      "ChipAdviceDto": {
+        "type": "object",
+        "properties": {
+          "chip": {
+            "type": "string",
+            "enum": [
+              "bboost",
+              "3xc",
+              "freehit",
+              "wildcard",
+              "manager"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "gameweekId": {
+            "type": "number",
+            "nullable": true,
+            "description": "The gameweek the CALENDAR argues for, or null when none in the horizon does — which is the common answer early in a season, not a failure. Never a gameweek for the wildcard: nothing in a fixture list argues for one."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why, in the words a user would use."
+          },
+          "spent": {
+            "type": "boolean",
+            "description": "Already used, so there is nothing to advise."
+          }
+        },
+        "required": [
+          "chip",
+          "label",
+          "gameweekId",
+          "reason",
+          "spent"
+        ]
+      },
+      "TransferPlanDto": {
+        "type": "object",
+        "properties": {
+          "managerId": {
+            "type": "number"
+          },
+          "gameweekId": {
+            "type": "number",
+            "description": "The gameweek the plan is for — the next one."
+          },
+          "horizonGameweekIds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "modelVersion": {
+            "type": "string"
+          },
+          "freeTransfers": {
+            "type": "number",
+            "description": "Free transfers in hand, replayed from the manager's own gameweek history. FPL exposes no free-transfer count publicly."
+          },
+          "freeTransfersReconstructed": {
+            "type": "boolean",
+            "description": "False when that replay had a gap in it, which makes the count a lower bound rather than a number."
+          },
+          "bank": {
+            "type": "number",
+            "description": "Bank, in tenths of a million."
+          },
+          "moves": {
+            "description": "Empty means hold — the solver always has holding available to it, so an empty plan is a decision and not a missing answer.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlannedMoveDto"
+            }
+          },
+          "hits": {
+            "type": "number",
+            "description": "Transfers beyond the free ones."
+          },
+          "hitCost": {
+            "type": "number",
+            "description": "Points those hits cost, as a positive number."
+          },
+          "currentEp": {
+            "type": "number",
+            "description": "Horizon EP of the squad as it stands."
+          },
+          "plannedEp": {
+            "type": "number",
+            "description": "Horizon EP after the moves, with the hit already subtracted."
+          },
+          "netGainEp": {
+            "type": "number",
+            "description": "plannedEp − currentEp. Never negative: holding is always in the solver’s feasible set."
+          },
+          "sellValueUnknown": {
+            "description": "Picks whose sell value could not be reconstructed, so the budget used their market price.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "chips": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChipAdviceDto"
+            }
+          },
+          "caveats": {
+            "description": "What this plan is not, in the payload rather than only in a plan file.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "managerId",
+          "gameweekId",
+          "horizonGameweekIds",
+          "modelVersion",
+          "freeTransfers",
+          "freeTransfersReconstructed",
+          "bank",
+          "moves",
+          "hits",
+          "hitCost",
+          "currentEp",
+          "plannedEp",
+          "netGainEp",
+          "sellValueUnknown",
+          "chips",
+          "caveats"
         ]
       },
       "PlayerListItemDto": {

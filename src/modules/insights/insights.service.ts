@@ -36,9 +36,18 @@ import { round2, squadDifference, squadHorizonEp, xiNextGwEp } from './advice';
 export class InsightsService {
   private readonly log = new Logger(InsightsService.name);
 
+  /**
+   * What this payload deliberately does not answer.
+   *
+   * Transfers and chips came off this list when B-008 shipped — they are answered, at
+   * `GET /insights/transfers/{managerId}`, and a list that still refused them would have the app
+   * telling a user it cannot do something it does on the next screen. What replaced them is the
+   * limit that is now true and was always the more important one.
+   */
   private static readonly NOT_ADVISED_ON = [
-    'Transfers — needs sell value, which no public FPL endpoint exposes, and a hit calculation (B-008).',
-    'Chip timing — a chip is unspendable once spent, so it is a season-level decision, not a weekly one (B-008).',
+    'Uncertainty — every number here is a mean with no dispersion attached, so a 6.0 from a nailed starter and a 6.0 from a rotation risk read identically (B-017).',
+    'Whether a chip is worth playing — the transfer endpoint names the gameweek the calendar argues for and stops. A chip is unspendable once used, and no model here can price the week you would then never get to use it in.',
+    'Availability beyond what FPL publishes — the injury and doubt multiplier is a hand-drawn scalar, not a fitted term, because the archive carries no per-gameweek status (B-015).',
   ];
 
   constructor(
@@ -83,10 +92,14 @@ export class InsightsService {
     // A fresh optimal solve, unpersisted: this runs on every advice request purely to measure a
     // gap, and filling optimizer_runs with those would bury the solves a human asked for.
     // The GUARDED optimum: what we would actually recommend, not a bigger and misleading gap against
-    // an optimum we would refuse to serve. The penalty totals that explain the difference are written
-    // to `optimizer_runs.reasoning` by the solve; surfacing them in the UI is B-009's territory, and
-    // this plan changes no DTO.
-    const optimal = await this.optimizer.run({ persist: false });
+    // an optimum we would refuse to serve. The penalty totals that explain the difference used to go
+    // only to `optimizer_runs.reasoning`, where no user could reach them; B-018 carries them out on
+    // `AdviceDto.reasoning`, which is the DTO change plan 009 deliberately did not make.
+    //
+    // `explain: true` costs a second ILP solve over an unguarded pool. It buys the number a user
+    // actually reads — what the appearance floor cost this recommendation — and that number was
+    // being computed, persisted and then shown to nobody.
+    const optimal = await this.optimizer.run({ persist: false, explain: true });
     const optimalCandidates = this.byPlayerId(universe, optimal.squad);
     const optimalArranged = {
       squad: optimal.squad,
@@ -163,6 +176,7 @@ export class InsightsService {
           toDifference(c, meta),
         ),
       },
+      reasoning: optimal.reasoning,
       notAdvisedOn: InsightsService.NOT_ADVISED_ON,
     };
   }
@@ -189,7 +203,10 @@ export class InsightsService {
         playerId: pick.playerId,
         webName: pick.webName,
         position: pick.position,
+        // A removed player has no row in the candidate universe, so there is no cuid to use. The
+        // short name doubles as the id here, and is stated so rather than left looking like one.
         teamId: pick.teamShortName,
+        teamShortName: pick.teamShortName,
         cost: pick.nowCost,
         ep: 0,
         pPlay: 0,
@@ -230,6 +247,9 @@ export class InsightsService {
             components: projection.components,
             expectedMinutes: projection.expectedMinutes,
             playProbability: projection.playProbability,
+            sd: projection.sd,
+            pBlank: projection.pBlank,
+            pHaul: projection.pHaul,
           }
         : null,
     };
