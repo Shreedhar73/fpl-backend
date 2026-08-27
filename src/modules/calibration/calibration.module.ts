@@ -4,6 +4,7 @@ import { CalibrationService } from './calibration.service';
 import { CalibrationRepository } from './calibration.repository';
 import { DecisionService } from './decision.service';
 import { ComponentCalibrationService } from './component-calibration.service';
+import { ServedScoringService } from './served-scoring.service';
 import { ProjectionsModule } from '../projections/projections.module';
 
 /**
@@ -20,7 +21,13 @@ import { ProjectionsModule } from '../projections/projections.module';
     CalibrationRepository,
     DecisionService,
     ComponentCalibrationService,
+    ServedScoringService,
   ],
-  exports: [CalibrationService, DecisionService, ComponentCalibrationService],
+  exports: [
+    CalibrationService,
+    DecisionService,
+    ComponentCalibrationService,
+    ServedScoringService,
+  ],
 })
 export class CalibrationModule {}
