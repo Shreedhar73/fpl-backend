@@ -158,3 +158,66 @@ Bench weight 0.7, collision lambda 0. Season 2025-26, fifteen bought in round 1 
 | 38 | 80 | 80 | 5-4-1 | 0 | 0 | 0 | 0.00 |
 
 </details>
+
+## penalty on ownership (after B-025)
+
+Bench weight 0.7, collision lambda 1. Season 2025-26, fifteen bought in round 1 and held — no transfers, so every difference between arms is the objective.
+
+| | |
+|---|---:|
+| rounds | 38 |
+| realised points (the LP's own XI) | 1713 |
+| ceiling (best XI these fifteen could field) | 1968 |
+| XI efficiency | 87.0% |
+| rounds owning a conflicting pair | 30 |
+| rounds starting both sides of one | 27 |
+| projected points forgone in the XI and armband | 0.00 |
+| rounds forgoing any | 0 |
+
+**The fifteen.** Ismaïla Sarr (MID, T31), Ezri Konsa Ngoyo (DEF, T7), Matz Sels (GKP, T17), Pedro Porro Sauceda (DEF, T6), Bryan Mbeumo (MID, T1), Virgil van Dijk (DEF, T14), Cole Palmer (MID, T8), Nicolas Jackson (FWD, T8), Bernd Leno (GKP, T54), Darwin Núñez Ribeiro (FWD, T14), Nikola Milenković (DEF, T17), Ollie Watkins (FWD, T7), Diogo Dalot Teixeira (DEF, T1), Luis Díaz Marulanda (MID, T14), Bruno Borges Fernandes (MID, T1).
+
+**No round benched a better-projected player for a worse one.** That is the claim this harness exists to be able to make or refuse, and here it is made.
+<details><summary>Every round</summary>
+
+| round | points | ceiling | formation | owned pairs | started | captain exposure | forgone |
+|---:|---:|---:|---|---:|---:|---:|---:|
+| 1 | 32 | 36 | 3-5-2 | 0 | 0 | 0 | 0.00 |
+| 2 | 36 | 36 | 5-4-1 | 8 | 3 | 0 | 0.00 |
+| 3 | 59 | 59 | 5-4-1 | 3 | 1 | 0 | 0.00 |
+| 4 | 37 | 50 | 5-4-1 | 6 | 4 | 0 | 0.00 |
+| 5 | 36 | 38 | 3-5-2 | 2 | 0 | 0 | 0.00 |
+| 6 | 27 | 41 | 5-4-1 | 3 | 3 | 0 | 0.00 |
+| 7 | 45 | 52 | 5-4-1 | 2 | 1 | 0 | 0.00 |
+| 8 | 41 | 43 | 5-4-1 | 12 | 7 | 1 | 0.00 |
+| 9 | 53 | 64 | 5-4-1 | 0 | 0 | 0 | 0.00 |
+| 10 | 34 | 36 | 5-4-1 | 12 | 7 | 2 | -0.00 |
+| 11 | 37 | 39 | 5-4-1 | 9 | 3 | 1 | 0.00 |
+| 12 | 29 | 37 | 5-4-1 | 4 | 0 | 0 | 0.00 |
+| 13 | 44 | 45 | 5-4-1 | 2 | 2 | 0 | 0.00 |
+| 14 | 51 | 68 | 5-4-1 | 2 | 1 | 0 | 0.00 |
+| 15 | 63 | 63 | 5-4-1 | 2 | 2 | 0 | 0.00 |
+| 16 | 61 | 61 | 5-4-1 | 1 | 1 | 0 | 0.00 |
+| 17 | 25 | 31 | 5-4-1 | 7 | 5 | 1 | 0.00 |
+| 18 | 48 | 61 | 5-4-1 | 3 | 2 | 0 | 0.00 |
+| 19 | 34 | 43 | 5-4-1 | 1 | 1 | 0 | 0.00 |
+| 20 | 25 | 29 | 5-4-1 | 12 | 4 | 0 | -0.00 |
+| 21 | 36 | 36 | 5-4-1 | 3 | 2 | 0 | -0.00 |
+| 22 | 54 | 69 | 5-4-1 | 0 | 0 | 0 | 0.00 |
+| 23 | 58 | 66 | 5-4-1 | 0 | 0 | 0 | 0.00 |
+| 24 | 37 | 44 | 5-4-1 | 4 | 3 | 1 | 0.00 |
+| 25 | 72 | 83 | 5-4-1 | 2 | 2 | 1 | 0.00 |
+| 26 | 61 | 72 | 5-4-1 | 0 | 0 | 0 | 0.00 |
+| 27 | 57 | 57 | 5-4-1 | 4 | 0 | 0 | -0.00 |
+| 28 | 39 | 45 | 5-4-1 | 1 | 1 | 0 | 0.00 |
+| 29 | 48 | 55 | 5-4-1 | 3 | 2 | 0 | -0.00 |
+| 30 | 39 | 47 | 5-4-1 | 5 | 3 | 0 | 0.00 |
+| 31 | 52 | 66 | 5-4-1 | 0 | 0 | 0 | -0.00 |
+| 32 | 31 | 37 | 5-4-1 | 4 | 1 | 0 | 0.00 |
+| 33 | 71 | 82 | 5-4-1 | 0 | 0 | 0 | 0.00 |
+| 34 | 52 | 56 | 5-4-1 | 2 | 2 | 1 | 0.00 |
+| 35 | 24 | 32 | 5-4-1 | 9 | 4 | 1 | 0.00 |
+| 36 | 28 | 34 | 5-4-1 | 2 | 1 | 0 | -0.00 |
+| 37 | 68 | 74 | 5-4-1 | 9 | 4 | 1 | 0.00 |
+| 38 | 69 | 81 | 5-4-1 | 0 | 0 | 0 | 0.00 |
+
+</details>
