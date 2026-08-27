@@ -156,20 +156,33 @@ is about *holding* both sides of a fixture, and a squad that pays £9.6m for two
 start has evaded the rule rather than obeyed it. The charge is on `x` again, at `benchWeight × λ`, and
 there is no charge on the XI or the armband at all.
 
-**The recommendation of record changes.** Re-solved on the same universe, same model version:
+**The recommendation of record changes, and it changes the fifteen — not only the eleven.**
+Re-solved on the same universe and the same model version. Every projection quoted in the B-023 table
+above is unchanged in this solve (Palmer 22.01, Saka 21.15, Mbeumo 18.57, Isak 19.33, Wieffer 17.22,
+De Cuyper 16.34, Senesi 16.12, Ballard 15.20), so nothing below is projection drift:
 
-| | before B-025 | after |
+| | before B-025 (the B-023 objective) | after |
 |---|---|---|
-| starting defenders | Ballard 15.20, Lacroix 15.06, Senesi | **Wieffer 17.22, De Cuyper 16.34, Senesi 16.12** |
-| benched | Wieffer 17.22, De Cuyper 16.34 | Canvot 15.23, Ballard 15.20 |
+| starting defenders | Senesi 16.12, Ballard 15.20, Lacroix 15.06 | **Wieffer 17.22, De Cuyper 16.34, Senesi 16.12** |
+| benched defenders | **Wieffer 17.22, De Cuyper 16.34** | Canvot 15.23, Ballard 15.20 |
+| midfield | Palmer, Saka, Mbeumo, Foden, Gakpo | Palmer, Saka, **B.Fernandes**, Mbeumo, **Gomez** |
+| forwards | Isak, João Pedro, Richarlison | Isak, Richarlison, **Nketiah** |
 | captain | Palmer | Palmer |
 | formation | 3-5-2 | 3-5-2 |
-| squad cost | £99.6m | £99.6m |
+| squad cost | £99.7m | £99.6m |
 | horizon EP given up in the XI | 3.30 | **0** |
 | what the panel said | `penaltyEp: 0, taken: []` | `penaltyEp: 1.4`, both pairs named, `bothStarted: true` |
 
-The squad is the same fifteen. What changed is that it now fields the players it paid for, and the
-guard panel states the conflict it is carrying instead of reporting none.
+**Four of the fifteen changed** — Lacroix, Foden, Gakpo and João Pedro out; Canvot, B.Fernandes, Gomez
+and Nketiah in — and that is the point of the change rather than a side effect of it. Charging the XI
+made a cheap non-colliding defender valuable *to start*, so the squad bought Lacroix and Ballard and
+then sat the two better defenders it already owned. Charging ownership removes that incentive
+entirely: the eleven is a points question, so the money goes where the points are. The objective
+values (257.84 before, 250.57 in the first table above) are **not comparable** across the two
+programs; they are different expressions.
+
+What did not change is the conflict itself. The squad still holds Palmer against two Brighton
+defenders — it now pays 1.40 horizon EP for them, fields them, and says so.
 
 **Over an archived season** (`pnpm replay:xi`, 2025-26, one fifteen held for 38 rounds — the first
 harness in this project that reads the eleven the solver itself chose):
