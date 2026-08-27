@@ -40,7 +40,7 @@ export interface SyncRunSummary {
  * `hoursToDeadline` so a distant capture is visible as one rather than being silently equal to a late
  * one.
  */
-const SNAPSHOT_WINDOW_HOURS = 36;
+export const SNAPSHOT_WINDOW_HOURS = 36;
 
 /**
  * How many `event/{gw}/live/` payloads one sync run will fetch.
