@@ -1232,12 +1232,30 @@
           "playProbability": {
             "type": "number",
             "description": "P(the player features at all). The term that dominates every other one — a 9-point forward who might not start is worth less than a 4-point one who certainly will."
+          },
+          "sd": {
+            "type": "number",
+            "nullable": true,
+            "description": "Standard deviation of the points distribution (B-017). NULL for a projection written by a model version that composed none — read it as unknown, never as zero. A zero here is a claim of certainty."
+          },
+          "pBlank": {
+            "type": "number",
+            "nullable": true,
+            "description": "P(2 points or fewer — the appearance and nothing else). What a human means by a blank, and the number that separates two players with the same expected points."
+          },
+          "pHaul": {
+            "type": "number",
+            "nullable": true,
+            "description": "P(10 points or more)."
           }
         },
         "required": [
           "components",
           "expectedMinutes",
-          "playProbability"
+          "playProbability",
+          "sd",
+          "pBlank",
+          "pHaul"
         ]
       },
       "AdvicePlayerDto": {

@@ -68,6 +68,9 @@ export interface League {
  * is the opponent's sum. Both sides are read off the same rows, so no fixture table is needed and the
  * archive and the live database produce identical numbers from identical inputs.
  */
+/** Shared empty map for a fixture with no goal rows, so the fallback carries a concrete type. */
+const EMPTY_GOALS: ReadonlyMap<number, number> = new Map<number, number>();
+
 export function buildLeague(
   rows: StrengthInputRow[],
   /**
@@ -138,8 +141,7 @@ export function buildLeague(
     // clean sheet nobody kept.
     if (sides.length !== 2) continue;
     const w = fixtureWeight.get(key) ?? 1;
-    const goalsByTeam: Map<number, number> =
-      goalsPerFixture.get(key) ?? new Map();
+    const goalsByTeam = goalsPerFixture.get(key) ?? EMPTY_GOALS;
 
     for (const [team] of sides) {
       const opponent = sides.find(([t]) => t !== team)![0];

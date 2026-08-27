@@ -25,6 +25,32 @@ export class EvidenceDto {
       'forward who might not start is worth less than a 4-point one who certainly will.',
   })
   playProbability!: number;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'Standard deviation of the points distribution (B-017). NULL for a projection written by a ' +
+      'model version that composed none — read it as unknown, never as zero. A zero here is a ' +
+      'claim of certainty.',
+  })
+  sd!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'P(2 points or fewer — the appearance and nothing else). What a human means by a blank, and ' +
+      'the number that separates two players with the same expected points.',
+  })
+  pBlank!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: 'P(10 points or more).',
+  })
+  pHaul!: number | null;
 }
 
 export class AdvicePlayerDto {

@@ -291,6 +291,16 @@ model Projection {
   playProbability Decimal  @db.Decimal(4, 3)
   /// per-term breakdown + the inputs, so the UI can show WHY and the run can be reconstructed
   components      Json
+  /// Standard deviation of the points distribution (B-017).
+  ///
+  /// NULLABLE, and null means "written by a model version that had no distribution" — every row
+  /// before v3-fitted-2026-08-27. Reading a null as 0 would report a rotation risk as a certainty,
+  /// which is the exact inversion of what this column is for.
+  sd              Decimal? @db.Decimal(6, 3)
+  /// P(2 points or fewer — the appearance and nothing else). What a human means by a blank.
+  pBlank          Decimal? @db.Decimal(4, 3)
+  /// P(10 points or more).
+  pHaul           Decimal? @db.Decimal(4, 3)
   createdAt       DateTime @default(now())
 
   player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)

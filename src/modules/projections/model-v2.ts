@@ -1,7 +1,20 @@
 import { PositionCode } from '../fpl-sync/mappers';
 import { Scoring } from './scoring';
 import { DEFCON_THRESHOLD } from './points';
-import { expectedFloorDiv, thresholdProbability } from './distributions';
+import {
+  bernoulliPmf,
+  bonusPmf,
+  convolve,
+  countPmf,
+  expectedFloorDiv,
+  floorDivPmf,
+  mixPmf,
+  pmfAt,
+  summarise,
+  thresholdProbability,
+  type PmfSummary,
+  type PointsPmf,
+} from './distributions';
 import { cleanSheetProbability, GoalRates } from './strength';
 import { FittedParams } from './fitted';
 
@@ -82,6 +95,22 @@ export interface FixtureExpectations {
 export interface FixtureProjectionV2 {
   ep: number;
   components: Record<string, number>;
+  /**
+   * The whole points distribution, summarised (B-017).
+   *
+   * `distribution.mean` and `ep` are two independent routes to the same number — one composed from
+   * component means, one from a convolution of component distributions — and a test asserts they
+   * agree. If they ever stop agreeing, one of the two is wrong and neither would look it.
+   */
+  distribution: PmfSummary;
+  /**
+   * The distribution itself, kept so a DOUBLE gameweek can be composed exactly.
+   *
+   * Two fixtures in one event are two independent matches whose points add, which is a convolution
+   * and not a sum of summaries: adding two standard deviations would overstate the spread by about
+   * 40%, and there is no way at all to add two `P(blank)`s.
+   */
+  pmf: PointsPmf;
   /** what the model believed, term by term — scored by B-013, ignored by the points sum */
   probabilities: FixtureProbabilities;
   expected: FixtureExpectations;
@@ -200,15 +229,18 @@ export function projectFixtureV2(
   // --- Bonus, from BPS rather than from attacking output. Only three players in a match get any, so
   // the relationship saturates and the cap is part of the model, not a safety rail.
   const expectedBps = ninetieths * rates.bps90;
-  const expectedBonus =
-    minutes.pPlay *
+  /** Expected bonus GIVEN a minutes state — the cap and the floor are non-linear, so this is mixed
+   * over the states like every other non-linear term (B-020), not evaluated at the mean. */
+  const bonusInState = (n: number): number =>
     Math.min(
       params.bonus.maxBonus,
       Math.max(
         0,
-        params.bonus.bpsIntercept + params.bonus.bonusPerBps * expectedBps,
+        params.bonus.bpsIntercept +
+          params.bonus.bonusPerBps * (n * rates.bps90),
       ),
     );
+  const expectedBonus = overStates(bonusInState);
   const bonusPoints = expectedBonus * scoring.bonus();
 
   const components = {
@@ -222,9 +254,101 @@ export function projectFixtureV2(
     bonus: bonusPoints,
   };
 
+  // --- The whole distribution, not only its mean (B-017).
+  //
+  // Built INSIDE each minutes state and mixed by state probability, which captures exactly the one
+  // correlation that dominates: every component depends on the same minutes outcome, and a player
+  // who does not play scores nothing anywhere. Within a state the components are convolved as
+  // independent — a much weaker assumption than independence overall, and its residual is named:
+  // goals and bonus move together (a goalscorer collects BPS), and a clean sheet and a conceded goal
+  // are mutually exclusive. Both make the true spread WIDER than this, so `sd` is a floor.
+  const pmfForState = (n: number, pSixtyGivenState: number): PointsPmf => {
+    const appearance = bernoulliPmf(
+      pSixtyGivenState,
+      scoring.longPlay() - scoring.shortPlay(),
+    );
+    let pmf = convolve(pmfAt(scoring.shortPlay()), appearance);
+    pmf = convolve(
+      pmf,
+      countPmf(
+        n * rates.xg90 * attackFactor * params.attack.goalsPerXg,
+        scoring.goal(position),
+        8,
+      ),
+    );
+    pmf = convolve(
+      pmf,
+      countPmf(
+        n * rates.xa90 * assistFactor * params.attack.assistsPerXa,
+        scoring.assist(),
+        8,
+      ),
+    );
+    pmf = convolve(
+      pmf,
+      bernoulliPmf(
+        pSixtyGivenState * cleanSheetProbability(goals.lambdaAgainst),
+        scoring.cleanSheet(position),
+      ),
+    );
+    pmf = convolve(pmf, floorDivPmf(goals.lambdaAgainst * n, 2, concededUnit));
+    if (position === 'GKP') {
+      pmf = convolve(
+        pmf,
+        floorDivPmf(saveRate(rates, n, goals), 3, scoring.savePoint()),
+      );
+    }
+    if (threshold > 0) {
+      pmf = convolve(
+        pmf,
+        bernoulliPmf(
+          thresholdProbability(
+            rates.defcon90 * n * params.defcon.ratePer90ToMatch,
+            threshold,
+            params.defcon.dispersion,
+          ),
+          defconUnit,
+        ),
+      );
+    }
+    // `bonusInState / MEAN_BONUS_GIVEN_ANY` is P(any bonus), the same identity the reported
+    // `bonusAtLeastOne` uses — so the distribution's bonus mean equals the analytic one exactly.
+    pmf = convolve(
+      pmf,
+      bonusPmf(
+        Math.min(1, bonusInState(n) / MEAN_BONUS_GIVEN_ANY),
+        scoring.bonus(),
+      ),
+    );
+    return pmf;
+  };
+
+  const distribution = mixPmf([
+    {
+      weight: minutes.pStart,
+      pmf: pmfForState(
+        params.minutes.minutesGivenStart / 90,
+        params.minutes.sixtyGivenStart,
+      ),
+    },
+    {
+      weight: minutes.pSub,
+      pmf: pmfForState(
+        params.minutes.minutesGivenSub / 90,
+        params.minutes.sixtyGivenSub,
+      ),
+    },
+    // Not playing is a state too, and it is the one that makes a rotation risk different from a
+    // nailed player at the same expected points. Leaving it out would normalise the distribution
+    // over "played" and quietly report the spread of a player who is certain to feature.
+    { weight: Math.max(0, 1 - minutes.pPlay), pmf: pmfAt(0) },
+  ]);
+
   return {
     ep: Object.values(components).reduce((a, b) => a + b, 0),
     components,
+    distribution: summarise(distribution),
+    pmf: distribution,
     probabilities: {
       start: minutes.pStart,
       play: minutes.pPlay,

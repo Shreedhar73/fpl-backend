@@ -13,6 +13,16 @@ export interface NextGwProjection {
   expectedMinutes: number;
   playProbability: number;
   components: Record<string, number>;
+  /**
+   * The points distribution (B-017). Null for a projection written by a model version that composed
+   * none — every row before `v3-fitted-2026-08-27`.
+   *
+   * Null rather than 0 all the way to the UI. A 0 standard deviation is a claim of certainty, and it
+   * is the one claim this project has spent three entries learning not to make by accident.
+   */
+  sd: number | null;
+  pBlank: number | null;
+  pHaul: number | null;
 }
 
 /**
@@ -56,6 +66,9 @@ export class InsightsRepository {
         expectedMinutes: true,
         playProbability: true,
         components: true,
+        sd: true,
+        pBlank: true,
+        pHaul: true,
       },
     });
     return new Map(
@@ -67,6 +80,9 @@ export class InsightsRepository {
           expectedMinutes: Number(r.expectedMinutes),
           playProbability: Number(r.playProbability),
           components: (r.components ?? {}) as Record<string, number>,
+          sd: r.sd === null ? null : Number(r.sd),
+          pBlank: r.pBlank === null ? null : Number(r.pBlank),
+          pHaul: r.pHaul === null ? null : Number(r.pHaul),
         },
       ]),
     );

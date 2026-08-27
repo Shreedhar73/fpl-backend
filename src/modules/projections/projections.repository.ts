@@ -3,9 +3,6 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 import { PositionCode } from '../fpl-sync/mappers';
 
-
-
-
 export interface ProjectionRow {
   playerId: string;
   gameweekId: number;
@@ -14,6 +11,10 @@ export interface ProjectionRow {
   expectedMinutes: number;
   playProbability: number;
   components: Record<string, number>;
+  /** B-017. Null only for a model version that composes no distribution. */
+  sd: number | null;
+  pBlank: number | null;
+  pHaul: number | null;
 }
 
 /**
@@ -29,8 +30,6 @@ export class ProjectionsRepository {
     return v === null ? 0 : Number(v);
   }
 
-
-
   /** The next `n` unfinished gameweeks, in order. */
   async horizonGameweeks(n: number): Promise<number[]> {
     const rows = await this.prisma.gameweek.findMany({
@@ -41,10 +40,6 @@ export class ProjectionsRepository {
     });
     return rows.map((r) => r.id);
   }
-
-
-
-
 
   /** Append-only via upsert on (playerId, gameweekId, modelVersion). */
   async writeProjections(rows: ProjectionRow[]): Promise<number> {
@@ -57,6 +52,9 @@ export class ProjectionsRepository {
             expectedMinutes: r.expectedMinutes,
             playProbability: r.playProbability,
             components: r.components as Prisma.InputJsonValue,
+            sd: r.sd,
+            pBlank: r.pBlank,
+            pHaul: r.pHaul,
           };
           return this.prisma.projection.upsert({
             where: {
