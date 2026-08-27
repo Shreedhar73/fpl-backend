@@ -22,7 +22,12 @@ import {
   type PurchasePriceSource,
 } from '../squad/entry-state';
 import { adviseChips, type ChipAdvice } from './chips';
-import { buildTransferLp, type OwnedCandidate } from './transfer-lp';
+import {
+  buildTransferLp,
+  HIT_COST,
+  MAX_TRANSFERS,
+  type OwnedCandidate,
+} from './transfer-lp';
 import { TransfersRepository } from './transfers.repository';
 
 /**
@@ -42,15 +47,9 @@ import { TransfersRepository } from './transfers.repository';
  *    substituting `nowCost`, because that substitution is exactly the error and it is silent.
  */
 
-/** Points charged per transfer beyond the free ones. A rule, not a policy knob. */
-export const HIT_COST = 4;
-/**
- * The most moves a single plan may propose.
- *
- * Three, not fifteen. Beyond about three a "transfer plan" is a wildcard by another name, and this
- * planner does not hold one — recommending eight moves would be recommending a chip without saying so.
- */
-export const MAX_TRANSFERS = 3;
+// Both moved to `transfer-lp.ts` so a backtest can read them without importing this service; they
+// are re-exported here because callers and tests refer to them by this path.
+export { HIT_COST, MAX_TRANSFERS };
 
 export interface PlannedMove {
   out: {

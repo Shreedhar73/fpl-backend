@@ -19,11 +19,12 @@ import {
   MIN_APPEARANCES,
   DEFENCE_CONCENTRATION_LAMBDA,
   BENCH_WEIGHT,
+  HORIZON,
+  HORIZON_DECAY as DECAY,
 } from './policy';
 
 export const OPTIMIZER_VERSION = 'v1-ilp';
-const HORIZON = 5;
-const DECAY = 0.84;
+
 /** Candidate-pool pruning: the top-EP players per position plus the cheapest few (budget enablers and
  * bench fodder). A player outside both sets is dominated and never in an optimal squad — this keeps the
  * solve fast without changing the answer. */

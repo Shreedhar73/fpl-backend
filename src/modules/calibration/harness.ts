@@ -7,7 +7,13 @@ import {
   projectFixtureV2,
 } from '../projections/model-v2';
 import { DEFCON_THRESHOLD } from '../projections/points';
-import { HistoryRow, walkRounds } from '../projections/features';
+import {
+  HistoryRow,
+  PlayerFeatures,
+  ScoredRow,
+  walkRounds,
+} from '../projections/features';
+import { HORIZON_DECAY } from '../optimizer/policy';
 import { Observation } from './metrics';
 
 /**
@@ -100,6 +106,24 @@ export interface PredictionRow {
   probabilities: FixtureProbabilities;
   expected: FixtureExpectations;
   realised: RealisedOutcomes;
+  /**
+   * `Σ EP(round + i) × decay^i` over the horizon, or **null** when the run did not ask for one.
+   *
+   * This is what a transfer decision is actually made on — a transfer is a bet about the future, and
+   * a −4 has to be worth more than four points over several rounds, not this one. `predicted.model`
+   * is the single round and is what the calibration reports score.
+   *
+   * **Every term is built from the state before `round`.** The future rounds are scored by
+   * `walkRounds`' own horizon, with the accumulators and the form window frozen at this deadline;
+   * only the fixture (opponent, home) comes from the future row, because fixtures are published in
+   * advance and results are not. Taking the number from a later round's own context instead would
+   * read features built from rounds nobody had played yet — the leak that produces no error and
+   * nothing wrong-looking in the output.
+   *
+   * A player with no row in a future round had no fixture — a blank — and contributes 0. A player
+   * with two contributes both, which is a double gameweek.
+   */
+  horizonEp: number | null;
 }
 
 /**
@@ -137,6 +161,16 @@ export interface RunOptions {
    * `player_deadline_snapshot` has gameweeks in it.
    */
   availability?: (row: HistoryRow) => number;
+  /**
+   * Rounds to project at each deadline, this one included, for `PredictionRow.horizonEp`.
+   *
+   * Defaults to 1, which leaves `horizonEp` null: the calibration reports score a single round and
+   * paying for four extra feature passes to fill a field nothing reads would be waste. The transfer
+   * harness passes `HORIZON`.
+   */
+  horizon?: number;
+  /** Discount on a later round in the horizon sum. Defaults to what the product serves. */
+  horizonDecay?: number;
 }
 
 export interface RunResult {
@@ -162,7 +196,46 @@ export function runBacktest(
   const skip = (reason: string) =>
     skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
 
-  for (const context of walkRounds(rows, params)) {
+  const horizon = Math.max(1, Math.floor(options.horizon ?? 1));
+  const decay = options.horizonDecay ?? HORIZON_DECAY;
+
+  // One projection path for the round being scored and for every round in its horizon. Two would be
+  // two models, and the horizon one would drift from the one the reports measure.
+  const project = (
+    row: HistoryRow,
+    features: PlayerFeatures,
+    goalRates: ScoredRow['goalRates'],
+  ) =>
+    projectFixtureV2(
+      row.position,
+      minutesDistribution(
+        { startRate: features.laggedStartRate, subRate: features.laggedSubRate },
+        options.availability?.(row) ?? 1,
+        params,
+      ),
+      features.rates,
+      goalRates,
+      scoringFor(row.season),
+      params,
+    );
+
+  for (const context of walkRounds(rows, params, { horizon })) {
+    // The horizon tail, per player: rounds after this one, discounted, summed over each player's
+    // fixtures in them. A player absent from a round had no fixture and contributes nothing.
+    const tail = new Map<number, number>();
+    for (const [i, ahead] of context.future.entries()) {
+      const weight = decay ** (i + 1);
+      for (const { row, features, goalRates } of ahead.items) {
+        if (row.teamCode === null || row.opponentTeamCode === null) continue;
+        if (features.matchesSample === 0) continue;
+        tail.set(
+          row.playerCode,
+          (tail.get(row.playerCode) ?? 0) +
+            weight * project(row, features, goalRates).ep,
+        );
+      }
+    }
+
     for (const { row, features, goalRates } of context.items) {
       if (!options.evaluate(row)) continue;
 
@@ -181,23 +254,15 @@ export function runBacktest(
       // The archive has no per-gameweek availability, so every row is treated as available. This is
       // the honest ceiling of an archive backtest, not an oversight: the injury/doubt multiplier can
       // only be validated once `player_deadline_snapshot` has live gameweeks in it.
-      const availability = options.availability?.(row) ?? 1;
       const minutes = minutesDistribution(
         {
           startRate: features.laggedStartRate,
           subRate: features.laggedSubRate,
         },
-        availability,
+        options.availability?.(row) ?? 1,
         params,
       );
-      const projection = projectFixtureV2(
-        row.position,
-        minutes,
-        features.rates,
-        goalRates,
-        scoringFor(row.season),
-        params,
-      );
+      const projection = project(row, features, goalRates);
 
       out.push({
         season: row.season,
@@ -221,6 +286,8 @@ export function runBacktest(
         probabilities: projection.probabilities,
         expected: projection.expected,
         realised: realisedOutcomes(row),
+        horizonEp:
+          horizon > 1 ? projection.ep + (tail.get(row.playerCode) ?? 0) : null,
       });
     }
   }

@@ -44,6 +44,12 @@ export interface SimVerdictInput {
   greedyFormPoints: number | null;
   /** the crowd proxy — the legal fifteen maximising ownership, walked under `greedy-1ft` */
   templatePoints: number | null;
+  /** the shipped transfer planner's season, or null when it did not run */
+  plannerPoints: number | null;
+  plannerHitCost: number | null;
+  plannerTransfers: number | null;
+  /** paired against `greedy-1ft` on the SAME opening fifteen, so it isolates the policy */
+  plannerVsGreedy: PairedStat | null;
   holdVsForm: PairedStat | null;
   greedyVsForm: PairedStat | null;
   vsTemplate: PairedStat | null;
@@ -71,6 +77,10 @@ export function simulatedSeasonVerdict(input: SimVerdictInput): string[] {
     vsTemplate,
     capturedWins,
     ks,
+    plannerPoints,
+    plannerHitCost,
+    plannerTransfers,
+    plannerVsGreedy,
   } = input;
 
   if (holdModelPoints !== null && holdFormPoints !== null) {
@@ -158,6 +168,32 @@ export function simulatedSeasonVerdict(input: SimVerdictInput): string[] {
         `**The model's opening fifteen scores ${greedyModelPoints} against the crowd proxy's ` +
           `${templatePoints}** — ahead by ${-diff}${noise}. The crowd proxy is a stand-in for the ` +
           `FPL average, not the average itself.`,
+      );
+    }
+  }
+
+  if (plannerPoints !== null && greedyModelPoints !== null) {
+    const diff = plannerPoints - greedyModelPoints;
+    const floor = plannerVsGreedy ? fixed(detectableAt(plannerVsGreedy)) : null;
+    const hits = plannerHitCost ?? 0;
+    const clears = plannerVsGreedy?.clearsNoise ?? false;
+    out.push(
+      `**The transfer planner the product actually ships has now walked a season, for the first ` +
+        `time.** It scores ${plannerPoints} against \`greedy-1ft\`'s ${greedyModelPoints} from ` +
+        `**the same opening fifteen** — ${diff >= 0 ? `${diff} ahead` : `${-diff} behind`}` +
+        `${floor ? `, against a noise floor of ${floor} points` : ''}` +
+        `${clears ? ' , which it clears' : ', which it does not clear'}. It made ` +
+        `${plannerTransfers ?? 0} transfers and paid ${hits} points in hits` +
+        `${hits > 0 ? `, so the −4 path is exercised by a walked season rather than by a unit test alone` : ` — the −4 path is still exercised by nothing but a unit test`}.`,
+    );
+    if (diff < 0 && hits > 0) {
+      out.push(
+        `**Read that against what it paid.** The planner is ${-diff} points behind a policy that ` +
+          `takes one free transfer a week on this round's number and never takes a hit, having ` +
+          `spent ${hits} points on hits to get there. Both arms started from the identical fifteen ` +
+          `and saw the identical predictions, so nothing but the policy separates them. The ` +
+          `planner optimises a five-round discounted horizon and the baseline optimises this week; ` +
+          `on this season, looking further ahead and paying for the privilege did not pay.`,
       );
     }
   }

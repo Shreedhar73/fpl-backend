@@ -131,3 +131,16 @@ export const DEFENSIVE_POSITIONS = ['DEF', 'GKP'] as const;
  * answer rather than the original oversight.
  */
 export const BENCH_WEIGHT = 0.7;
+
+/**
+ * How many gameweeks a selection decision looks at, and how much a later one is discounted.
+ *
+ * Exported from here rather than declared in `optimizer.service.ts` because a harness that measures
+ * the planner has to use the SAME horizon the planner serves. They were two private constants in two
+ * files; a harness copying the numbers would have measured a planner nobody is served.
+ *
+ * `Σ EP(gw + i) × decay^i`, decay 0.84 — a fifth gameweek is worth about half the first. Optimising
+ * for the next gameweek alone is how a model sells a player the week before a run of easy fixtures.
+ */
+export const HORIZON = 5;
+export const HORIZON_DECAY = 0.84;

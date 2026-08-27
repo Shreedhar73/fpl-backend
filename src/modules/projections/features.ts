@@ -144,6 +144,30 @@ export interface RoundContext {
   round: number;
   league: League;
   items: ScoredRow[];
+  /**
+   * The next rounds of the same season, scored with the state **as it stands before this round** —
+   * the horizon a decision taken at this deadline could actually see.
+   *
+   * Empty unless the caller asks for a horizon. A transfer is a bet about the future, so a planner
+   * needs several rounds of projections at one deadline; taking them from a later round's own
+   * context would hand it features built from rounds that had not been played when the decision was
+   * made. That is the leak plan 010's invariant 2 exists for, and it produces no error and nothing
+   * wrong-looking in the output.
+   *
+   * What IS knowable at this deadline and is therefore used: each future row's opponent, and whether
+   * it is at home. Fixtures are published in advance; results are not.
+   */
+  future: { round: number; items: ScoredRow[] }[];
+}
+
+export interface WalkOptions {
+  /**
+   * How many rounds to score at each deadline, this one included. 1 (the default) is the plain walk.
+   *
+   * Costs a full feature pass per extra round, so it is opt-in: the calibration reports need one
+   * round and the transfer harness needs five.
+   */
+  horizon?: number;
 }
 
 /**
@@ -155,10 +179,23 @@ export interface RoundContext {
 export function* walkRounds(
   rows: HistoryRow[],
   params: FittedParams,
+  options: WalkOptions = {},
 ): Generator<RoundContext> {
+  const horizon = Math.max(1, Math.floor(options.horizon ?? 1));
   const sorted = [...rows].sort(
     (a, b) => a.season.localeCompare(b.season) || a.round - b.round,
   );
+  // Rounds are looked up by key rather than by walking forward from `i`, because a horizon runs off
+  // the end of a season and a double gameweek puts two rows of one player in one round.
+  const byRound = new Map<string, HistoryRow[]>();
+  if (horizon > 1) {
+    for (const row of sorted) {
+      const key = `${row.season}|${row.round}`;
+      const at = byRound.get(key);
+      if (at) at.push(row);
+      else byRound.set(key, [row]);
+    }
+  }
 
   /** playerCode → career accumulator, carried across seasons */
   const career = new Map<number, Accumulator>();
@@ -223,7 +260,32 @@ export function* walkRounds(
       ),
     }));
 
-    yield { season, round, league, items };
+    // Scored with the accumulators as they stand NOW — before this round is folded in — and with the
+    // form window of THIS deadline rather than of the future round, because rounds between the two
+    // have not been played. Only the fixture (opponent, home) comes from the future row.
+    const future: RoundContext['future'] = [];
+    for (let ahead = 1; ahead < horizon; ahead++) {
+      const rowsAhead = byRound.get(`${season}|${round + ahead}`);
+      if (!rowsAhead) continue;
+      future.push({
+        round: round + ahead,
+        items: rowsAhead.map((row) => ({
+          row,
+          features: featuresFor(row, career, seasonAcc, lastSeason, round),
+          goalRates: fixtureGoalRates(
+            row.teamCode === null ? undefined : league.teams.get(row.teamCode),
+            row.opponentTeamCode === null
+              ? undefined
+              : league.teams.get(row.opponentTeamCode),
+            row.wasHome,
+            league,
+            params.strength,
+          ),
+        })),
+      });
+    }
+
+    yield { season, round, league, items, future };
 
     // Only now does this round become visible to anything.
     for (const row of roundRows) {

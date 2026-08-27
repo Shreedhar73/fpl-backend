@@ -70,6 +70,7 @@ export const predictionRow = (over: Partial<PredictionRow>): PredictionRow => ({
   predicted: { model: 0, form: 0, priorSeason: 0 },
   pPlay: 1,
   appearances: 10,
+  horizonEp: null,
   probabilities: NEUTRAL_PROBABILITIES,
   expected: NEUTRAL_EXPECTATIONS,
   realised: NEUTRAL_REALISED,
