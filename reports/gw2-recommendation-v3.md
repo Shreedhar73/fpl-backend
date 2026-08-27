@@ -147,3 +147,41 @@ out-of-sample — all still stand.
 **And one that has:** every projection now carries a distribution (B-017). Palmer is 6.31 for the
 gameweek with a standard deviation of 4.21, a 23.0% chance of a blank and a 21.5% chance of ten or
 more. Doubling him doubles both ends of that.
+
+## Update, 2026-08-27 — B-025 moved the collision penalty back onto ownership
+
+The two paragraphs above about benching Wieffer and De Cuyper describe an objective this repo no
+longer serves. B-025 read the same arithmetic and reached the opposite verdict about it: B-011's rule
+is about *holding* both sides of a fixture, and a squad that pays £9.6m for two players it refuses to
+start has evaded the rule rather than obeyed it. The charge is on `x` again, at `benchWeight × λ`, and
+there is no charge on the XI or the armband at all.
+
+**The recommendation of record changes.** Re-solved on the same universe, same model version:
+
+| | before B-025 | after |
+|---|---|---|
+| starting defenders | Ballard 15.20, Lacroix 15.06, Senesi | **Wieffer 17.22, De Cuyper 16.34, Senesi 16.12** |
+| benched | Wieffer 17.22, De Cuyper 16.34 | Canvot 15.23, Ballard 15.20 |
+| captain | Palmer | Palmer |
+| formation | 3-5-2 | 3-5-2 |
+| squad cost | £99.6m | £99.6m |
+| horizon EP given up in the XI | 3.30 | **0** |
+| what the panel said | `penaltyEp: 0, taken: []` | `penaltyEp: 1.4`, both pairs named, `bothStarted: true` |
+
+The squad is the same fifteen. What changed is that it now fields the players it paid for, and the
+guard panel states the conflict it is carrying instead of reporting none.
+
+**Over an archived season** (`pnpm replay:xi`, 2025-26, one fifteen held for 38 rounds — the first
+harness in this project that reads the eleven the solver itself chose):
+
+| arm | realised | pairs owned | both sides started | projected points forgone in the XI |
+|---|---:|---:|---:|---:|
+| penalty on the XI (before B-025) | 1604 | 38 rounds | 8 rounds | 78.56 |
+| no penalty at all (λ = 0) | 1673 | 33 rounds | 31 rounds | 0.00 |
+| **penalty on ownership (after B-025)** | **1713** | 30 rounds | 27 rounds | **0.00** |
+
+Read this carefully. The three arms hold **different fifteens** — the objective picks the squad too —
+so the 109-point spread is not an XI effect and one squad over one season is not a result. What the
+table does establish is behavioural and is not noise: the served objective used to own a conflicting
+pair in every round of the season and start both sides in eight of them, and it no longer benches a
+better-projected player for a worse one at all.

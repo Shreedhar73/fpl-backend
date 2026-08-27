@@ -29,11 +29,12 @@ import {
 import {
   buildLp,
   buildConflictPairs,
+  pairsWithin,
   pickBestXi,
   Candidate,
   Collisions,
 } from '../modules/optimizer/ilp';
-import { MIN_APPEARANCES } from '../modules/optimizer/policy';
+import { BENCH_WEIGHT, MIN_APPEARANCES } from '../modules/optimizer/policy';
 import type { FixtureLite } from '../modules/optimizer/optimizer.repository';
 import { ForecastRepository } from '../modules/projections/forecast.repository';
 import { walkRounds, HistoryRow } from '../modules/projections/features';
@@ -215,7 +216,7 @@ async function main(): Promise<void> {
       let feasible = true;
       for (const lambda of LAMBDAS) {
         const collisions: Collisions = { pairs, lambda };
-        const sol = highs.solve(buildLp(pool, rules, collisions));
+        const sol = highs.solve(buildLp(pool, rules, collisions, BENCH_WEIGHT));
         if (sol.Status !== 'Optimal') {
           feasible = false;
           break;
@@ -224,12 +225,19 @@ async function main(): Promise<void> {
           (c) =>
             ((sol.Columns[c.key] as { Primal?: number })?.Primal ?? 0) > 0.5,
         );
-        const xi = pickBestXi(squad, rules, collisions);
+        const xi = pickBestXi(squad, rules);
         let realised = 0;
         for (const key of xi.starters) realised += realisedOf.get(key) ?? 0;
         if (xi.captainKey) realised += realisedOf.get(xi.captainKey) ?? 0;
         points[String(lambda)] = realised;
-        pairsHeld[String(lambda)] = xi.collisions.length;
+        // Pairs the SQUAD holds, which is what the penalty charges since B-025. It used to count the
+        // pairs inside the XI, and after the charge moved to `x` that would have been a different
+        // quantity from the one being swept — the sweep would have reported a lambda's effect using
+        // a number the lambda no longer acts on.
+        pairsHeld[String(lambda)] = pairsWithin(
+          new Set(squad.map((c) => c.key)),
+          pairs,
+        ).length;
       }
       if (!feasible) {
         skipped.n++;

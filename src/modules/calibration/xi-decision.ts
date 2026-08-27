@@ -54,7 +54,7 @@ export interface DecisionSummary {
   captainRegret: number | null;
 }
 
-function member(row: PredictionRow): SquadMember {
+export function member(row: PredictionRow): SquadMember {
   return {
     playerCode: row.playerCode,
     webName: row.webName,
@@ -65,7 +65,7 @@ function member(row: PredictionRow): SquadMember {
 }
 
 /** A squad member who had no fixture this round: present, scoring nothing, substitutable. */
-function blank(row: PredictionRow): SquadMember {
+export function blank(row: PredictionRow): SquadMember {
   return {
     playerCode: row.playerCode,
     webName: row.webName,
@@ -191,7 +191,7 @@ export function chooseLineup(
  * which is the tell. The ceiling is the perfect decision, and the perfect decision includes captaining
  * the highest scorer in the XI.
  */
-function ceilingFor(members: SquadMember[], rules: Rules): number {
+export function ceilingFor(members: SquadMember[], rules: Rules): number {
   const byPos = (p: PositionCode) =>
     members.filter((m) => m.position === p).sort((a, b) => b.actual - a.actual);
   const gk = byPos('GKP');

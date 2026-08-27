@@ -31,8 +31,9 @@
 export const MIN_APPEARANCES = 11;
 
 /**
- * Horizon points charged per conflicting (attacker, defender) pair held at once (B-011) — one of our
- * attackers against one of our defenders in the same fixture of the first horizon gameweek.
+ * Horizon points charged per conflicting (attacker, defender) pair the squad HOLDS (B-011, restored
+ * to ownership by B-025) — one of our attackers against one of our defenders in the same fixture of
+ * the first horizon gameweek.
  *
  * **A policy choice, and measured NOT to be an improvement** (`reports/guards-009.md`, 2026-08-27).
  * The two picks bet on opposite outcomes of one match, so owning both buys correlation the linear
@@ -49,8 +50,46 @@ export const MIN_APPEARANCES = 11;
  *
  * A penalty rather than an exclusion, by maintainer decision 2026-08-26: the solver may still take
  * the pair when it is worth more than this.
+ *
+ * **It is charged against `x`, and B-025 put it back there after B-023 moved it to `y`.** Charging
+ * the XI let the solver satisfy the rule by BENCHING one side while still paying for both — measured
+ * on the live GW2 solve, 3.30 horizon points given up in the eleven while £9.6m sat on two players it
+ * refused to start, and measured again over an archived season by `pnpm replay:xi`: a conflicting
+ * pair owned in all 38 rounds and both sides started in 8, at a cost of 78.56 projected points.
+ * B-011's own sentence is about *holding* both sides, so that is where the charge belongs. Once a
+ * pair is owned the eleven is chosen on points alone, which means a squad that pays for the pair
+ * also starts it if the projections say so — that is the intended behaviour, not a regression.
  */
 export const COLLISION_LAMBDA = 1.0;
+
+/**
+ * What the objective actually charges per held pair: `benchWeight × COLLISION_LAMBDA`.
+ *
+ * **The scaling exists because B-023 changed what a squad place is worth, and the arithmetic is only
+ * half as clean as it first looks.** B-011 measured lambda = 1.0 against a coefficient of `ep` on
+ * `x`. After B-023 a player's coefficients depend on whether he starts: a BENCHED owned player
+ * carries `benchWeight · ep`, so a raw lambda on `x` would be 1/benchWeight = 1.43x the measured
+ * strength for him — but a STARTER carries `benchWeight · ep + (1 − benchWeight) · ep = ep`, exactly
+ * the pre-B-023 weight, so a raw lambda was already right for him and this scaling under-charges him
+ * by 30%. Colliding pairs are usually startable players, which is the case that matters.
+ *
+ * So this is exact for bench-valued ownership, 0.7x the measured weight for starters, and
+ * indistinguishable from either at the resolution the sweep can see — every lambda from 0.5 to 4
+ * landed within 0.13 realised points. It is scaled here rather than folded into the constant so the
+ * constant keeps meaning "points per pair, measured against a full-value squad place", and so the
+ * charge tracks the bench weight if that ever moves again.
+ *
+ * **`transfer-lp.ts` deliberately does NOT use this.** Its objective is `Σ EP·x − hitCost·h − λ·Σ z`:
+ * the coefficient on `x` is the full `ep`, with no `y`/`c` split, so the same rule — lambda scales
+ * with the coefficient it is charged against — leaves it at raw 1.0. Changing it to match this
+ * function would be applying the constant instead of the rule.
+ */
+export function chargedCollisionLambda(
+  benchWeight: number,
+  lambda: number = COLLISION_LAMBDA,
+): number {
+  return benchWeight * lambda;
+}
 
 /**
  * Attacker = FWD + MID, defensive = DEF + GKP (maintainer decision 2026-08-26). FWD-only would have
@@ -90,13 +129,17 @@ export const DEFENSIVE_POSITIONS = ['DEF', 'GKP'] as const;
  * realised availability and never reads the LP's XI. A measurement that does not look at the thing
  * you are about to serve is not a licence to ship it.
  *
- * **What 0.7 does NOT fix, stated so nobody reads it as a fix.** On the live GW2 solve the collision
- * rule now expresses itself by BENCHING the two Brighton defenders behind cheaper ones rather than
- * by moving the armband off Palmer — Wieffer 17.22 and De Cuyper 16.34 sit, Ballard 15.20 and
- * Lacroix 15.06 start. That is B-011 working, not failing: benching the colliding pair costs
- * `(1 − 0.7) × 3.30 = 0.99` of objective and saves 4 penalty points, because the captain's exposure
- * counts twice. It is worth knowing that the same swap is still worth it at 0.1, so this is the
- * collision rule's arithmetic and not an artefact of the bench weight.
+ * **What 0.7 did NOT fix, and what B-025 did about it.** On the live GW2 solve the collision rule
+ * expressed itself by BENCHING the two Brighton defenders behind cheaper ones rather than by moving
+ * the armband off Palmer — Wieffer 17.22 and De Cuyper 16.34 sat, Ballard 15.20 and Lacroix 15.06
+ * started. This comment used to call that "B-011 working, not failing", on the arithmetic that
+ * benching the pair costs `(1 − 0.7) × 3.30 = 0.99` of objective and saves 4 penalty points. The
+ * arithmetic was right and the reading was wrong: B-011's rule is about *holding* both sides, and a
+ * squad that pays £9.6m for two players it refuses to start has not obeyed it, it has evaded it.
+ * B-025 moved the charge back onto `x`, where benching cannot answer it. The XI is now chosen on
+ * points alone, so this bench weight no longer interacts with the collision penalty at all — which
+ * is the other half of what B-025 fixed, because the two knobs were coupled and only one harness
+ * could see either.
  *
  * **Why a heavily discounted bench loses points, which is the interesting half.** A bench bought as
  * fodder cannot cover a blank. An auto-substitution only fires for a player who did not play, and if

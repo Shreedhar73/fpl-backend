@@ -60,6 +60,10 @@ export const predictionRow = (over: Partial<PredictionRow>): PredictionRow => ({
   webName: 'Player',
   position: 'MID',
   teamCode: 1,
+  // Team 1 at home to team 2 by default. A fixture a spec does not care about still has to be a
+  // fixture: an opponent equal to the team would make every player collide with their own side.
+  opponentTeamCode: 2,
+  wasHome: true,
   value: 50,
   actual: 0,
   minutes: 0,

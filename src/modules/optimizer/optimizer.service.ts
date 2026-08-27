@@ -10,9 +10,17 @@ import {
   Collisions,
   ConflictPair,
   NO_COLLISIONS,
+  pairsWithin,
+  readSolution,
+  SolvedSquad,
 } from './ilp';
 import { POSITIONS, Rules } from './rules';
-import { MIN_APPEARANCES, COLLISION_LAMBDA, BENCH_WEIGHT } from './policy';
+import {
+  MIN_APPEARANCES,
+  COLLISION_LAMBDA,
+  BENCH_WEIGHT,
+  chargedCollisionLambda,
+} from './policy';
 
 export const OPTIMIZER_VERSION = 'v1-ilp';
 const HORIZON = 5;
@@ -84,15 +92,20 @@ export interface RecommendationReasoning {
     statement: string;
   };
   fixtureCollisions: {
+    /** what a held pair actually costs the objective: `benchWeight × lambdaConstant` */
     lambda: number;
+    /** the policy constant behind it, so the payload can be read against `policy.ts` */
+    lambdaConstant: number;
     pairsConsidered: number;
-    /** horizon EP charged to the chosen XI for the pairs it kept */
+    /** horizon EP charged to the squad for the pairs it HOLDS */
     penaltyEp: number;
     taken: {
       fixture: string;
       attacker: string;
       defender: string;
       lambda: number;
+      /** whether the eleven started both sides; holding is what is charged, starting is not */
+      bothStarted: boolean;
     }[];
     statement: string;
   };
@@ -117,7 +130,8 @@ const FLOOR_STATEMENT =
   'they are bad.';
 const COLLISION_STATEMENT =
   'Owning one of our attackers against one of our defenders in the same match bets on both ' +
-  'outcomes at once. This penalty was measured over 103 archived gameweeks and did NOT improve ' +
+  'outcomes at once, so the squad is charged for every such pair it HOLDS — benching one side does ' +
+  'not avoid it. This penalty was measured over 103 archived gameweeks and did NOT improve ' +
   'realised points (+0.59 +/- 0.92 per gameweek, per-season signs that flip, downside worse). It ' +
   'is on as a policy choice — a squad that bets against itself is not one we want to recommend — ' +
   'and not because it scores more.';
@@ -146,6 +160,20 @@ export interface Universe {
 }
 
 /**
+ * A conflicting pair the squad holds, and what became of it on the pitch.
+ *
+ * **`bothStarted` is the vocabulary the payload did not have.** Before B-025 the only things a
+ * recommendation could say about a pair were "charged" and "absent", so the squad that owned both
+ * Brighton defenders and started neither reported `taken: []` — a user told there was no conflict in
+ * a squad holding both sides of one. Holding is now the charged event and starting is a separate
+ * fact, and both are said.
+ */
+export interface HeldPair {
+  pair: ConflictPair;
+  bothStarted: boolean;
+}
+
+/**
  * Arrange a set of 15 into a legal XI, a captain, a vice and an ordered bench. Pure, and the only
  * implementation — `run()` calls it for the squad it solved and `insights` calls it for the squad a
  * user brought, so the two can never disagree about what "best XI" means.
@@ -163,19 +191,32 @@ export function arrangeSquad(
 ): {
   squad: SquadPlayer[];
   formation: string;
-  xiCollisions: ConflictPair[];
-  xiPenalty: number;
+  /** the conflicting pairs the FIFTEEN holds, and whether the XI started both sides of each */
+  heldCollisions: HeldPair[];
+  /** horizon EP the squad was charged for holding them, at the rate the LP charges */
+  heldPenalty: number;
 } {
-  // The captain comes back from the enumeration rather than being picked afterwards by raw EP: the
-  // armband doubles the stake on a collision, so it is part of the same decision (see `pickBestXi`).
-  const {
-    starters,
-    formation,
-    captainKey,
-    viceKey,
-    penaltyPoints,
-    collisions: xiCollisions,
-  } = pickBestXi(inSquad, rules, collisions, benchWeight);
+  // The captain comes back from the enumeration rather than being picked afterwards, so that the XI
+  // and the armband are one decision here exactly as they are one decision in the LP.
+  const { starters, formation, captainKey, viceKey } = pickBestXi(
+    inSquad,
+    rules,
+    benchWeight,
+  );
+
+  // What the pairs cost is a fact about the fifteen (B-025), so it is computed here from what is
+  // held — not returned by the XI enumeration, which no longer charges anything.
+  const held = new Set(inSquad.map((c) => c.key));
+  const heldCollisions: HeldPair[] = pairsWithin(held, collisions.pairs).map(
+    (pair) => ({
+      pair,
+      bothStarted:
+        starters.has(pair.attacker.key) && starters.has(pair.defender.key),
+    }),
+  );
+  const heldPenalty =
+    chargedCollisionLambda(benchWeight, collisions.lambda) *
+    heldCollisions.length;
 
   const bench = inSquad.filter((c) => !starters.has(c.key));
   const benchGk = bench.filter((c) => c.position === 'GKP');
@@ -206,7 +247,7 @@ export function arrangeSquad(
     };
   });
 
-  return { squad, formation, xiCollisions, xiPenalty: penaltyPoints };
+  return { squad, formation, heldCollisions, heldPenalty };
 }
 
 /**
@@ -316,35 +357,16 @@ export class OptimizerService {
     const eligible = candidates.filter((c) => c.appearances >= MIN_APPEARANCES);
     const pool = prunePool(candidates);
     const highs = await highsLoader();
-    const solve = (
-      from: Candidate[],
-    ): { squad: Candidate[]; objective: number; xi: Set<string> } => {
-      const solution = highs.solve(
-        buildLp(from, rules, collisions, BENCH_WEIGHT),
+    // One reader for the solved columns, shared with the season simulator and the replay harness
+    // (`readSolution`) — it validates the squad, the XI and the armband rather than trusting them.
+    const solve = (from: Candidate[]): SolvedSquad =>
+      readSolution(
+        from,
+        highs.solve(buildLp(from, rules, collisions, BENCH_WEIGHT)),
+        rules,
       );
-      if (solution.Status !== 'Optimal') {
-        throw new Error(
-          `optimiser did not find an optimal squad (status: ${solution.Status})`,
-        );
-      }
-      return {
-        squad: from.filter((c) => (solution.Columns[c.key]?.Primal ?? 0) > 0.5),
-        objective: solution.ObjectiveValue,
-        // The XI the SOLVER chose, so it can be compared against the enumeration below.
-        xi: new Set(
-          from
-            .filter((c) => (solution.Columns[`y_${c.key}`]?.Primal ?? 0) > 0.5)
-            .map((c) => c.key),
-        ),
-      };
-    };
 
     const { squad: inSquad, objective: objectiveValue, xi: lpXi } = solve(pool);
-    if (inSquad.length !== rules.squadSize()) {
-      throw new Error(
-        `solver returned ${inSquad.length} players, expected ${rules.squadSize()}`,
-      );
-    }
 
     // What the floor cost, in players rather than in adjectives: the same solve with the floor
     // lifted and LAMBDA unchanged, so the diff isolates B-010 and does not smuggle B-011 into it.
@@ -370,7 +392,7 @@ export class OptimizerService {
 
     // best legal XI, captain, vice and bench order — the same arrangement `insights` applies to a
     // squad the optimizer did not choose.
-    const { squad, formation, xiCollisions, xiPenalty } = arrangeSquad(
+    const { squad, formation, heldCollisions, heldPenalty } = arrangeSquad(
       inSquad,
       rules,
       collisions,
@@ -407,14 +429,19 @@ export class OptimizerService {
         statement: FLOOR_STATEMENT,
       },
       fixtureCollisions: {
-        lambda: COLLISION_LAMBDA,
+        // The EFFECTIVE charge, not the constant. They differ since B-025 (`chargedCollisionLambda`),
+        // and a panel that printed 1.0 beside a penalty computed at 0.7 would be showing arithmetic
+        // that does not add up on screen.
+        lambda: round2(chargedCollisionLambda(BENCH_WEIGHT, COLLISION_LAMBDA)),
+        lambdaConstant: COLLISION_LAMBDA,
         pairsConsidered: collisions.pairs.length,
-        penaltyEp: round2(xiPenalty),
-        taken: xiCollisions.map((p) => ({
-          fixture: p.fixture,
-          attacker: p.attacker.webName,
-          defender: p.defender.webName,
-          lambda: COLLISION_LAMBDA,
+        penaltyEp: round2(heldPenalty),
+        taken: heldCollisions.map(({ pair, bothStarted }) => ({
+          fixture: pair.fixture,
+          attacker: pair.attacker.webName,
+          defender: pair.defender.webName,
+          lambda: round2(chargedCollisionLambda(BENCH_WEIGHT, COLLISION_LAMBDA)),
+          bothStarted,
         })),
         statement: COLLISION_STATEMENT,
       },
@@ -439,6 +466,13 @@ export class OptimizerService {
               projectionModel: modelVersion,
               minAppearances: MIN_APPEARANCES,
               collisionLambda: COLLISION_LAMBDA,
+              // The constant alone cannot reconstruct a run since B-025 — what the objective charged
+              // is `benchWeight × lambda`, and both halves have moved once already.
+              benchWeight: BENCH_WEIGHT,
+              collisionLambdaCharged: chargedCollisionLambda(
+                BENCH_WEIGHT,
+                COLLISION_LAMBDA,
+              ),
             },
             result: { squad, totalCost, formation },
             // The SAME object the caller gets. Built once: the persisted JSON and the API payload

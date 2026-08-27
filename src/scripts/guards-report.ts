@@ -23,7 +23,12 @@ import {
   Collisions,
   NO_COLLISIONS,
 } from '../modules/optimizer/ilp';
-import { MIN_APPEARANCES, COLLISION_LAMBDA } from '../modules/optimizer/policy';
+import {
+  MIN_APPEARANCES,
+  COLLISION_LAMBDA,
+  BENCH_WEIGHT,
+  chargedCollisionLambda,
+} from '../modules/optimizer/policy';
 import { Rules } from '../modules/optimizer/rules';
 
 async function main(): Promise<void> {
@@ -74,7 +79,7 @@ async function main(): Promise<void> {
       console.log(
         `    £${(squad.reduce((s, c) => s + c.cost, 0) / 10).toFixed(1)}m  ${arranged.formation}  ` +
           `raw horizon EP ${rawEp.toFixed(2)}  penalised ${heldPairs.toFixed(2)}  ` +
-          `pairs held ${((rawEp - heldPairs) / (collisions.lambda || 1)).toFixed(0)}  ` +
+          `pairs held ${((rawEp - heldPairs) / (chargedCollisionLambda(BENCH_WEIGHT, collisions.lambda) || 1)).toFixed(0)}  ` +
           `sub-floor players ${under.length}`,
       );
       for (const p of arranged.squad
@@ -87,10 +92,17 @@ async function main(): Promise<void> {
             `${p.role === 'bench' ? `bench ${p.benchOrder}` : p.role}`,
         );
       }
-      if (arranged.xiCollisions.length) {
-        console.log('    collisions kept in the XI:');
-        for (const pair of arranged.xiCollisions)
-          console.log(`      ${pair.attacker.webName} vs ${pair.defender.webName}`);
+      if (arranged.heldCollisions.length) {
+        // Held, and separately whether the eleven started both sides. Since B-025 holding is the
+        // charged event; "kept in the XI" was the old wording and is now a different fact.
+        console.log(
+          `    collisions held (charged ${arranged.heldPenalty.toFixed(2)} horizon EP):`,
+        );
+        for (const { pair, bothStarted } of arranged.heldCollisions)
+          console.log(
+            `      ${pair.attacker.webName} vs ${pair.defender.webName}` +
+              `${bothStarted ? ' — both started' : ' — one of them benched'}`,
+          );
       }
       console.log('');
     }
