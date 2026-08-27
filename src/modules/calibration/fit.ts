@@ -4,6 +4,7 @@ import { DEFCON_THRESHOLD } from '../projections/points';
 import { thresholdProbability } from '../projections/distributions';
 import { FittedParams, UNFITTED_PARAMS } from '../projections/fitted';
 import { HistoryRow, walkRounds } from '../projections/features';
+import { availabilitySignal } from '../projections/model-v2';
 import { observationsFor, runBacktest } from './harness';
 import { errorStats } from './metrics';
 
@@ -107,6 +108,7 @@ export function fitParams(input: FitInput): FitReport {
       minutesGivenStart: measured.minutesGivenStart,
       minutesGivenSub: measured.minutesGivenSub,
       gkp: measured.gkp,
+      availability: measured.availability,
     },
     saves: { elasticity: 1 },
     attack: {
@@ -418,46 +420,114 @@ function fitMinutesCurves(rows: HistoryRow[]): {
     subSlope: number;
     n: { start: number; sub: number };
   };
+  /** the fitted availability terms (plan 024), joint with the base curves above */
+  availability: {
+    startInj: number;
+    startInjX: number;
+    startUnknown: number;
+    subInj: number;
+    subUnknown: number;
+    sixtyGivenStartFlagged: number;
+    minutesGivenStartFlagged: number;
+    n: {
+      startFlagged: number;
+      subFlagged: number;
+      unknown: number;
+      flaggedStarts: number;
+    };
+  };
 } {
-  const startPoints: { x: number; y: number }[] = [];
-  const subPoints: { x: number; y: number }[] = [];
-  // Keeper rows, separately (B-021): the global sub curve pays a benched keeper a midfielder's
-  // chance of a cameo, which B-013 measured as the model's largest positional gap. Same walk, so
-  // the two fits cannot disagree about the time cut.
+  // The joint refit (plan 024). Three populations, split by what the deadline-time flags say:
+  //
+  //   - RULE rows — status u/n/s or an effective 0% chance. Excluded from every curve: their
+  //     outcome is decided by the rule that zeroes them at prediction time, and feeding a
+  //     perfectly-predicted population to a logistic is how the 7.3e8 slope happened.
+  //   - The FITTED band — everything else with known flags. `inj = 1 − effective chance` enters
+  //     the start curve with an interaction against the lagged rate, and the sub curve as a main
+  //     effect (the flagged-sub sample cannot support an interaction).
+  //   - UNKNOWN rows — no capture inside the staleness bound. They keep their own offset, so the
+  //     base curves are not silently averaged over rows whose flags nobody knows.
+  const startPoints: { x: number[]; y: number }[] = [];
+  const subPoints: { x: number[]; y: number }[] = [];
+  // Keeper base curves (B-021) keep their own two-parameter fit, on the same filtered population;
+  // the availability terms are global — ~5% of rows are flagged, and a per-position flagged sample
+  // is too thin to defend.
   const gkpStartPoints: { x: number; y: number }[] = [];
   const gkpSubPoints: { x: number; y: number }[] = [];
+
+  let nStartFlagged = 0;
+  let nSubFlagged = 0;
+  let nUnknown = 0;
+  let flaggedStarts = 0;
+  let flaggedStartSixty = 0;
+  let flaggedStartMinutes = 0;
+  // Global starter frequencies over the same (rule-filtered) population — the fallback the flagged
+  // group constants collapse to when their sample is too thin to measure.
+  let allStarts = 0;
+  let allStartSixty = 0;
+  let allStartMinutes = 0;
 
   for (const context of walkRounds(rows, UNFITTED_PARAMS)) {
     for (const { row, features } of context.items) {
       if (features.matchesSample === 0) continue;
-      const startPoint = {
-        x: logit(features.laggedStartRate),
+      const known = row.deadlineStatus !== null && row.deadlineStatus !== undefined;
+      const sig = known
+        ? availabilitySignal(row.deadlineStatus as string, row.deadlineChance ?? null)
+        : null;
+      if (sig?.zero) continue;
+      const inj = sig?.inj ?? 0;
+      const unknown = known ? 0 : 1;
+      if (unknown === 1) nUnknown += 1;
+      if (row.starts > 0) {
+        allStarts += 1;
+        allStartMinutes += row.minutes;
+        if (row.minutes >= 60) allStartSixty += 1;
+      }
+      if (inj > 0) {
+        nStartFlagged += 1;
+        if (row.starts > 0) {
+          flaggedStarts += 1;
+          flaggedStartMinutes += row.minutes;
+          if (row.minutes >= 60) flaggedStartSixty += 1;
+        }
+      }
+
+      const startLogit = logit(features.laggedStartRate);
+      startPoints.push({
+        x: [startLogit, inj, inj * startLogit, unknown],
         y: row.starts > 0 ? 1 : 0,
-      };
-      startPoints.push(startPoint);
-      if (row.position === 'GKP') gkpStartPoints.push(startPoint);
+      });
+      if (row.position === 'GKP') {
+        gkpStartPoints.push({ x: startLogit, y: row.starts > 0 ? 1 : 0 });
+      }
       if (row.starts === 0) {
-        const subPoint = {
-          x: logit(features.laggedSubRate),
+        if (inj > 0) nSubFlagged += 1;
+        subPoints.push({
+          x: [logit(features.laggedSubRate), inj, unknown],
           y: row.minutes > 0 ? 1 : 0,
-        };
-        subPoints.push(subPoint);
-        if (row.position === 'GKP') gkpSubPoints.push(subPoint);
+        });
+        if (row.position === 'GKP') {
+          gkpSubPoints.push({
+            x: logit(features.laggedSubRate),
+            y: row.minutes > 0 ? 1 : 0,
+          });
+        }
       }
     }
   }
 
-  const start = fitLogistic(startPoints, { intercept: 0, slope: 1 });
-  // The sub fallback is the flat curve at the population rate — exactly the constant this replaces,
-  // so a failed fit degrades to the old behaviour rather than to nonsense.
+  // Feature order: [logit(startRate), inj, inj*logit(startRate), unknown]. The fallback keeps the
+  // incumbent base curve and zeroes every availability term, so a failed fit degrades to the old
+  // behaviour rather than to nonsense.
+  const start = fitLogisticK(startPoints, [0, 1, 0, 0, 0]);
+
+  // The sub fallback is the flat curve at the population rate — exactly the constant this replaces.
   const fallbackRate = (points: { y: number }[]) =>
     points.length
       ? points.reduce((t, p) => t + p.y, 0) / points.length
       : 0.15;
-  const sub = fitLogistic(subPoints, {
-    intercept: logit(fallbackRate(subPoints)),
-    slope: 0,
-  });
+  // Feature order: [logit(subRate), inj, unknown].
+  const sub = fitLogisticK(subPoints, [logit(fallbackRate(subPoints)), 0, 0, 0]);
 
   const gkpStart = fitLogistic(gkpStartPoints, { intercept: 0, slope: 1 });
   const gkpSub = fitLogistic(gkpSubPoints, {
@@ -465,11 +535,18 @@ function fitMinutesCurves(rows: HistoryRow[]): {
     slope: 0,
   });
 
+  // Group constants for flagged starters. Thin-sample guard: below 200 flagged starts the measured
+  // frequency is noise, and the global constants are the honest value.
+  const globalSixty = allStarts > 0 ? allStartSixty / allStarts : 0.85;
+  const globalMinutes = allStarts > 0 ? allStartMinutes / allStarts : 85;
+  const sixtyGivenStartFlagged =
+    flaggedStarts >= 200 ? flaggedStartSixty / flaggedStarts : globalSixty;
+
   return {
-    startIntercept: start.intercept,
-    startSlope: start.slope,
-    subIntercept: sub.intercept,
-    subSlope: sub.slope,
+    startIntercept: start[0],
+    startSlope: start[1],
+    subIntercept: sub[0],
+    subSlope: sub[1],
     gkp: {
       startIntercept: gkpStart.intercept,
       startSlope: gkpStart.slope,
@@ -477,7 +554,107 @@ function fitMinutesCurves(rows: HistoryRow[]): {
       subSlope: gkpSub.slope,
       n: { start: gkpStartPoints.length, sub: gkpSubPoints.length },
     },
+    availability: {
+      startInj: start[2],
+      startInjX: start[3],
+      startUnknown: start[4],
+      subInj: sub[2],
+      subUnknown: sub[3],
+      sixtyGivenStartFlagged,
+      minutesGivenStartFlagged:
+        flaggedStarts >= 200 ? flaggedStartMinutes / flaggedStarts : globalMinutes,
+      n: {
+        startFlagged: nStartFlagged,
+        subFlagged: nSubFlagged,
+        unknown: nUnknown,
+        flaggedStarts,
+      },
+    },
   };
+}
+
+/**
+ * K-feature logistic regression by the same damped, ridge-penalised Newton (IRLS) machinery as the
+ * two-parameter version below — generalised for the availability terms (plan 024), with the same
+ * two guards for the same measured reason: ridge against complete separation, and a coefficient
+ * bound past which the "fit" is a step function that no error metric would flag.
+ *
+ * `x` excludes the intercept; `fallback` includes it — `fallback[0]` is the intercept, then one
+ * per feature, and it is returned whole when the fit is unusable.
+ */
+function fitLogisticK(
+  points: { x: number[]; y: number }[],
+  fallback: number[],
+): number[] {
+  if (points.length === 0) return fallback;
+  const k = fallback.length;
+  const RIDGE = 1e-3;
+  const beta = [...fallback];
+  const xi = (p: { x: number[] }, j: number) => (j === 0 ? 1 : p.x[j - 1]);
+
+  for (let iter = 0; iter < 50; iter++) {
+    const g = new Array(k).fill(0);
+    const h: number[][] = Array.from({ length: k }, () => new Array(k).fill(0));
+    for (const p of points) {
+      let z = beta[0];
+      for (let j = 1; j < k; j++) z += beta[j] * p.x[j - 1];
+      const mu = 1 / (1 + Math.exp(-z));
+      const w = mu * (1 - mu);
+      const r = p.y - mu;
+      for (let a = 0; a < k; a++) {
+        g[a] += r * xi(p, a);
+        for (let b = a; b < k; b++) h[a][b] += w * xi(p, a) * xi(p, b);
+      }
+    }
+    for (let a = 0; a < k; a++) {
+      g[a] -= RIDGE * beta[a] * points.length;
+      h[a][a] += RIDGE * points.length;
+      for (let b = 0; b < a; b++) h[a][b] = h[b][a];
+    }
+
+    const delta = solveSymmetric(h, g);
+    if (delta === null) break;
+    // Cap the step so a near-singular Hessian cannot throw the parameters into the millions.
+    const step = Math.max(...delta.map((d) => Math.abs(d)));
+    if (step > 1) for (let a = 0; a < k; a++) delta[a] /= step;
+    let converged = true;
+    for (let a = 0; a < k; a++) {
+      beta[a] += delta[a];
+      if (Math.abs(delta[a]) >= 1e-8) converged = false;
+    }
+    if (converged) break;
+  }
+
+  // Same separation bound as the 2-parameter fit: a coefficient past it is not a fit.
+  if (beta.some((b) => !Number.isFinite(b) || Math.abs(b) > 20)) {
+    return fallback;
+  }
+  return beta;
+}
+
+/** Gaussian elimination with partial pivoting for the small symmetric Newton system. */
+function solveSymmetric(h: number[][], g: number[]): number[] | null {
+  const k = g.length;
+  const a = h.map((row, i) => [...row, g[i]]);
+  for (let col = 0; col < k; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < k; r++) {
+      if (Math.abs(a[r][col]) > Math.abs(a[pivot][col])) pivot = r;
+    }
+    if (Math.abs(a[pivot][col]) < 1e-12) return null;
+    [a[col], a[pivot]] = [a[pivot], a[col]];
+    for (let r = 0; r < k; r++) {
+      if (r === col) continue;
+      const f = a[r][col] / a[col][col];
+      for (let c = col; c <= k; c++) a[r][c] -= f * a[col][c];
+    }
+  }
+  const out = new Array(k);
+  for (let i = 0; i < k; i++) {
+    if (!Number.isFinite(a[i][i]) || Math.abs(a[i][i]) < 1e-12) return null;
+    out[i] = a[i][k] / a[i][i];
+  }
+  return out;
 }
 
 /**

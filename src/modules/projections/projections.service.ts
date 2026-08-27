@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ProjectionsRepository, ProjectionRow } from './projections.repository';
 import { ForecastService, PlayerForecast } from './forecast.service';
 import { CandidateService } from './candidate.service';
-import { FITTED_PARAMS } from './fitted';
+import { AVAILABILITY_CANDIDATE_PARAMS, FITTED_PARAMS } from './fitted';
 
 /**
  * The ONE thing that writes projections.
@@ -41,6 +41,13 @@ import { FITTED_PARAMS } from './fitted';
  * is queried by name.
  */
 export const MODEL_VERSION = `v3-fitted-${FITTED_PARAMS.provenance.date}`;
+
+/**
+ * The availability candidate's version (plan 024). Never served — the optimizer's version is pinned
+ * to MODEL_VERSION; these rows exist so `pnpm score:gameweek` scores the fitted-availability regime
+ * beside the incumbent on the live season, which is the prospective half of plan 024's referee.
+ */
+export const AVAILABILITY_MODEL_VERSION = `v3-avail-${AVAILABILITY_CANDIDATE_PARAMS.provenance.date}`;
 
 const HORIZON = 5;
 
@@ -125,6 +132,47 @@ export class ProjectionsService {
       // The incumbent's projections must not be hostage to the candidate's: log and continue.
       this.log.warn(
         `candidate projections failed (incumbent rows are written): ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
+    // The availability candidate (plan 024) rides the same run, through the SAME forecast machinery
+    // with its own params — one feature engine, one projection path, a second version of rows.
+    try {
+      const availResults = await this.forecast.forecastMany(
+        gameweekIds,
+        AVAILABILITY_CANDIDATE_PARAMS,
+      );
+      const availRows: ProjectionRow[] = [];
+      for (const { summary, players } of availResults) {
+        for (const p of players) {
+          if (p.playerId === null) continue;
+          availRows.push({
+            playerId: p.playerId,
+            gameweekId: summary.gameweekId,
+            modelVersion: AVAILABILITY_MODEL_VERSION,
+            expectedPoints: round(p.expectedPoints, 2),
+            expectedMinutes: round(p.expectedMinutes, 2),
+            playProbability: round(p.playProbability, 3),
+            components: {
+              ...Object.fromEntries(
+                Object.entries(p.components).map(([k, v]) => [k, round(v, 3)]),
+              ),
+              fixtures: p.fixtures,
+            },
+            sd: round(p.distribution.sd, 3),
+            pBlank: round(p.distribution.pBlank, 3),
+            pHaul: round(p.distribution.pHaul, 3),
+          });
+        }
+      }
+      const availWritten = await this.repo.writeProjections(availRows);
+      this.log.log(
+        `${AVAILABILITY_MODEL_VERSION}: ${availWritten} candidate rows — scored weekly beside the ` +
+          `incumbent; never served (the optimizer's version is pinned)`,
+      );
+    } catch (err) {
+      this.log.warn(
+        `availability-candidate projections failed (incumbent rows are written): ${err instanceof Error ? err.message : err}`,
       );
     }
 

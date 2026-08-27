@@ -1,8 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PositionCode } from '../fpl-sync/mappers';
 import { Scoring } from './scoring';
-import { FITTED_PARAMS } from './fitted';
-import { minutesDistribution, projectFixtureV2 } from './model-v2';
+import { FITTED_PARAMS, FittedParams } from './fitted';
+import {
+  availabilityMultiplier,
+  minutesDistribution,
+  projectFixtureV2,
+} from './model-v2';
 import {
   convolve,
   pmfAt,
@@ -88,6 +92,12 @@ export class ForecastService {
    */
   async forecastMany(
     gameweekIds: number[],
+    /**
+     * The model to project with. Defaults to the served incumbent; the availability candidate
+     * (plan 024) rides the same machinery with its own params, so the two versions differ only in
+     * the constants — one feature engine, one projection path, two rows per player.
+     */
+    params: FittedParams = FITTED_PARAMS,
   ): Promise<{ summary: ForecastSummary; players: PlayerForecast[] }[]> {
     const scoring = Scoring.from(await this.repo.liveScoring());
     const [archive, current, playerId] = await Promise.all([
@@ -99,7 +109,7 @@ export class ForecastService {
 
     const out: { summary: ForecastSummary; players: PlayerForecast[] }[] = [];
     for (const gw of gameweekIds) {
-      out.push(await this.forecastOne(gw, history, scoring, playerId));
+      out.push(await this.forecastOne(gw, history, scoring, playerId, params));
     }
     return out;
   }
@@ -109,6 +119,7 @@ export class ForecastService {
     history: HistoryRow[],
     scoring: Scoring,
     playerId: Map<number, string>,
+    params: FittedParams,
   ): Promise<{ summary: ForecastSummary; players: PlayerForecast[] }> {
     const [synthetic, availability] = await Promise.all([
       this.repo.syntheticRowsFor(target),
@@ -133,7 +144,7 @@ export class ForecastService {
     let withoutHistory = 0;
     let fromSnapshot = 0;
 
-    for (const context of walkRounds(rows, FITTED_PARAMS)) {
+    for (const context of walkRounds(rows, params)) {
       for (const { row, features, goalRates } of context.items) {
         if (!syntheticSet.has(row)) continue;
 
@@ -148,8 +159,15 @@ export class ForecastService {
             subRate: features.laggedSubRate,
           },
           multiplier,
-          FITTED_PARAMS,
+          params,
           row.position,
+          // Serving-time flags are always known: the live row (or the captured snapshot) is what
+          // the fitted-availability regime reads instead of the multiplier above.
+          {
+            status: avail?.status ?? 'a',
+            chance: avail?.chance ?? null,
+            known: avail !== undefined,
+          },
         );
         const projection = projectFixtureV2(
           row.position,
@@ -157,7 +175,7 @@ export class ForecastService {
           features.rates,
           goalRates,
           scoring,
-          FITTED_PARAMS,
+          params,
         );
 
         let entry = byCode.get(row.playerCode);
@@ -264,20 +282,8 @@ export function foldFixture(
 }
 
 /**
- * Availability from FPL's own status and chance fields.
- *
- * This is the half of the minutes model that is NOT fitted — the archive carries no per-gameweek
- * status, so there is nothing to fit it against until `player_deadline_snapshot` accumulates.
- * Deliberately simple, and deliberately conservative about `d`: a doubt with no percentage attached
- * is a doubt, not a probable start.
- *
- * `chance === null` means FULLY FIT, not unknown. Reading it as 0 benches every healthy player.
+ * The hand-drawn availability layer, moved to `model-v2.ts` (plan 024) so the backtest harness can
+ * apply it to historical flags without importing the serving layer. Re-exported here because the
+ * serving callers and their tests import it from this module.
  */
-export function availabilityMultiplier(
-  status: string,
-  chance: number | null,
-): number {
-  if (['i', 's', 'u', 'n'].includes(status)) return 0;
-  if (chance !== null) return Math.max(0, Math.min(1, chance / 100));
-  return status === 'd' ? 0.5 : 1;
-}
+export { availabilityMultiplier } from './model-v2';

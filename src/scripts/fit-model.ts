@@ -30,6 +30,16 @@ async function main(): Promise<void> {
     for (const [k, v] of Object.entries(report.measured)) {
       if (typeof v === 'number') {
         log.log(`  ${k.padEnd(24)} ${v.toFixed(4)}`);
+      } else if ('startInj' in v) {
+        // the availability block (plan 024), printed with its n so thin samples read as thin
+        log.log(
+          `  ${k.padEnd(24)} startInj ${v.startInj.toFixed(3)} x ${v.startInjX.toFixed(3)} ` +
+            `unk ${v.startUnknown.toFixed(3)} (n=${v.n.startFlagged}), ` +
+            `subInj ${v.subInj.toFixed(3)} unk ${v.subUnknown.toFixed(3)} (n=${v.n.subFlagged}), ` +
+            `60|start,flagged ${v.sixtyGivenStartFlagged.toFixed(3)} ` +
+            `min|start,flagged ${v.minutesGivenStartFlagged.toFixed(1)} (n=${v.n.flaggedStarts}), ` +
+            `unknown rows ${v.n.unknown}`,
+        );
       } else {
         // the keeper block (B-021), printed with its n so a fit on ~3,400 rows reads as one
         log.log(

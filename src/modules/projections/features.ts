@@ -60,6 +60,15 @@ export interface HistoryRow {
   creativity: number | null;
   threat: number | null;
   value: number;
+  /**
+   * Deadline-time availability flags (plan 024), joined from `archive_availability_snapshot` for
+   * archive rows within the staleness bound. OPTIONAL and nullable, and the two states differ:
+   * `undefined`/`null` means the record has no capture for this round — unknown, which the fitted
+   * model prices with its own coefficient, never as available. These are what was knowable BEFORE
+   * the round; they are features for the minutes fit and are read by nothing else.
+   */
+  deadlineStatus?: string | null;
+  deadlineChance?: number | null;
 }
 
 /** What the model is allowed to know about a player before a round it has not seen. */

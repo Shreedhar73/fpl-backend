@@ -1,6 +1,8 @@
 import { Scoring } from '../projections/scoring';
 import { FittedParams } from '../projections/fitted';
 import {
+  AvailabilityInput,
+  availabilityMultiplier,
   FixtureExpectations,
   FixtureProbabilities,
   minutesDistribution,
@@ -161,10 +163,13 @@ export interface RunOptions {
   /** rows to predict; anything outside is history the model may read but is never scored on */
   evaluate: (row: HistoryRow) => boolean;
   /**
-   * The injury/doubt multiplier, 0 to 1. Defaults to 1 — fully available — because the archive
-   * carries no per-gameweek `status` or `chance_of_playing`. That is the honest ceiling of an archive
-   * backtest, and the hook exists so a live run can supply the real thing once
-   * `player_deadline_snapshot` has gameweeks in it.
+   * Override for the injury/doubt multiplier, 0 to 1.
+   *
+   * Since plan 024 the DEFAULT is no longer a flat 1: `HistoryRow` carries the deadline-time flags
+   * recovered from the Wayback archive, so params without a fitted availability block get the hand
+   * multiplier applied to those flags — the incumbent as it would actually have served — and params
+   * WITH the block read the flags directly. A row with no capture (`deadlineStatus` null) falls
+   * back to multiplier 1 for the hand rule, and to the fitted unknown offset for the fitted one.
    */
   availability?: (row: HistoryRow) => number;
   /**
@@ -223,6 +228,28 @@ export function runBacktest(
     ? indexExportedFeatures(rows, params, scoringFor)
     : null;
 
+  // What the deadline-time flags say about a row, in both regimes: the raw input for fitted
+  // params, and the hand multiplier for legacy ones. One place, so the round being scored and the
+  // horizon rounds cannot disagree about what availability means.
+  const availInput = (row: HistoryRow): AvailabilityInput => ({
+    status: row.deadlineStatus ?? 'a',
+    chance: row.deadlineChance ?? null,
+    known: row.deadlineStatus !== null && row.deadlineStatus !== undefined,
+  });
+  const legacyMultiplier = (row: HistoryRow): number =>
+    options.availability?.(row) ??
+    (row.deadlineStatus === null || row.deadlineStatus === undefined
+      ? 1
+      : availabilityMultiplier(row.deadlineStatus, row.deadlineChance ?? null));
+  const minutesFor = (row: HistoryRow, features: PlayerFeatures) =>
+    minutesDistribution(
+      { startRate: features.laggedStartRate, subRate: features.laggedSubRate },
+      legacyMultiplier(row),
+      params,
+      row.position,
+      availInput(row),
+    );
+
   // One projection path for the round being scored and for every round in its horizon. Two would be
   // two models, and the horizon one would drift from the one the reports measure.
   const project = (
@@ -232,12 +259,7 @@ export function runBacktest(
   ) =>
     projectFixtureV2(
       row.position,
-      minutesDistribution(
-        { startRate: features.laggedStartRate, subRate: features.laggedSubRate },
-        options.availability?.(row) ?? 1,
-        params,
-        row.position,
-      ),
+      minutesFor(row, features),
       features.rates,
       goalRates,
       scoringFor(row.season),
@@ -276,18 +298,7 @@ export function runBacktest(
         continue;
       }
 
-      // The archive has no per-gameweek availability, so every row is treated as available. This is
-      // the honest ceiling of an archive backtest, not an oversight: the injury/doubt multiplier can
-      // only be validated once `player_deadline_snapshot` has live gameweeks in it.
-      const minutes = minutesDistribution(
-        {
-          startRate: features.laggedStartRate,
-          subRate: features.laggedSubRate,
-        },
-        options.availability?.(row) ?? 1,
-        params,
-        row.position,
-      );
+      const minutes = minutesFor(row, features);
       const projection = project(row, features, goalRates);
 
       out.push({

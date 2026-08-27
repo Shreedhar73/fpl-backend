@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { ArchiveService } from './archive.service';
 import { ArchiveRepository } from './archive.repository';
+import { WaybackAvailabilityService } from './wayback-availability.service';
 
 /**
  * The third-party per-gameweek archive (B-007 Phase 2b): three completed seasons of history the
@@ -13,7 +14,7 @@ import { ArchiveRepository } from './archive.repository';
  */
 @Module({
   imports: [PrismaModule],
-  providers: [ArchiveService, ArchiveRepository],
-  exports: [ArchiveService, ArchiveRepository],
+  providers: [ArchiveService, ArchiveRepository, WaybackAvailabilityService],
+  exports: [ArchiveService, ArchiveRepository, WaybackAvailabilityService],
 })
 export class ArchiveModule {}

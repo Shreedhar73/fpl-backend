@@ -22,3 +22,7 @@ src/generated/
 .archive-cache/
 reports/datasets/*.csv
 tools/fit-v4/venv/
+tools/lab/venv/
+data/lab-raw/
+tools/lab/reports/*.json
+tools/lab/reports/*.csv
