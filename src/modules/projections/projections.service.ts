@@ -23,8 +23,23 @@ import { FITTED_PARAMS } from './fitted';
  * MAE, and its availability term is not fitted at all.
  */
 
-/** Bumped when the fitted parameters change, so older projections stay comparable rather than lost. */
-export const MODEL_VERSION = `v2-fitted-${FITTED_PARAMS.provenance.date}`;
+/**
+ * Bumped when the fitted parameters change, so older projections stay comparable rather than lost.
+ *
+ * **v3, not v2, and the major number is not decoration.** v2 was v1's structure with fitted
+ * constants. v3 changed the STRUCTURE in three places, each measured on the same held-out rows:
+ *
+ * - the substitute-appearance term became a per-player curve instead of one league-wide constant
+ *   (B-019) — `P(any appearance)` Brier reliability 0.0121 to 0.0009;
+ * - every non-linear term is integrated over the minutes distribution and not only over the count
+ *   (B-020) — `P(defcon >= threshold)` 0.013 predicted against a 0.054 base rate, now 0.048;
+ * - team strength reads decay-weighted actual goals alongside expected goals (B-014), which is what
+ *   let the fixture elasticities fit to something other than zero for the first time.
+ *
+ * Two models that disagree about a player's expected points must not share a name in a table that
+ * is queried by name.
+ */
+export const MODEL_VERSION = `v3-fitted-${FITTED_PARAMS.provenance.date}`;
 
 const HORIZON = 5;
 
