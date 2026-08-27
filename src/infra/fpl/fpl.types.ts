@@ -217,3 +217,57 @@ export interface RawEntryPicks {
   entry_history: RawEntryHistoryEvent;
   picks: RawEntryPick[];
 }
+
+/**
+ * `entry/{manager_id}/transfers/` — every transfer this manager has made, newest first.
+ *
+ * Probed live 2026-08-27: returns `[]` for a manager who has made none, which is the normal case two
+ * gameweeks into a season and NOT an error. This is the only public record of what a player cost the
+ * manager who owns them, and therefore the only route to a sell value (B-008) — `purchase_price` and
+ * `selling_price` exist nowhere outside `my-team/{id}/`, which is 403 and which we never call.
+ */
+export interface RawEntryTransfer {
+  element_in: number;
+  /** tenths of a million — what the incoming player cost at the moment of the transfer */
+  element_in_cost: number;
+  element_out: number;
+  element_out_cost: number;
+  entry: number;
+  /** the gameweek the transfer was made for */
+  event: number;
+  time: string;
+}
+
+/** One gameweek of a manager's season, from `entry/{manager_id}/history/`. */
+export interface RawEntryHistoryRow {
+  event: number;
+  points: number;
+  total_points: number;
+  /** tenths of a million */
+  bank: number;
+  /** tenths of a million — squad value excluding the bank */
+  value: number;
+  event_transfers: number;
+  event_transfers_cost: number;
+  points_on_bench: number;
+}
+
+/** A chip this manager has USED. What remains is the complement against `scoring_config.chips`. */
+export interface RawEntryChip {
+  name: string;
+  time: string;
+  event: number;
+}
+
+/**
+ * `entry/{manager_id}/history/`.
+ *
+ * Carries neither the free-transfer count nor the remaining chips as a state — both are reconstructed
+ * from what is here: `current[].event_transfers` replayed forward against the one-per-gameweek grant,
+ * and `chips` as the used set.
+ */
+export interface RawEntryHistory {
+  current: RawEntryHistoryRow[];
+  past: { season_name: string; total_points: number; rank: number }[];
+  chips: RawEntryChip[];
+}
