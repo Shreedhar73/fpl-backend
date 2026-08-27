@@ -48,6 +48,17 @@ export interface PredictionRow {
   webName: string;
   position: string;
   teamCode: number | null;
+  /**
+   * Who they faced, and where. Fixture data, not outcome data: the fixture list is public weeks
+   * before a deadline, so carrying it on the row leaks nothing.
+   *
+   * Here so the replay harness can price B-011's collisions over an archived round — a collision is
+   * "our attacker against our defender in the same match", and without the opponent there is no way
+   * to know which of our players are on opposite sides of one. `runBacktest` already refuses any row
+   * whose team or opponent is null, so both are non-null by the time a row exists.
+   */
+  opponentTeamCode: number;
+  wasHome: boolean;
   /** price in tenths, that round */
   value: number;
   actual: number;
@@ -195,6 +206,8 @@ export function runBacktest(
         webName: row.webName,
         position: row.position,
         teamCode: row.teamCode,
+        opponentTeamCode: row.opponentTeamCode,
+        wasHome: row.wasHome,
         value: row.value,
         actual: row.totalPoints,
         minutes: row.minutes,

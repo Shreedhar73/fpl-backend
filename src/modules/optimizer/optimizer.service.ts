@@ -10,6 +10,8 @@ import {
   Collisions,
   ConflictPair,
   NO_COLLISIONS,
+  readSolution,
+  SolvedSquad,
 } from './ilp';
 import { POSITIONS, Rules } from './rules';
 import { MIN_APPEARANCES, COLLISION_LAMBDA, BENCH_WEIGHT } from './policy';
@@ -316,35 +318,16 @@ export class OptimizerService {
     const eligible = candidates.filter((c) => c.appearances >= MIN_APPEARANCES);
     const pool = prunePool(candidates);
     const highs = await highsLoader();
-    const solve = (
-      from: Candidate[],
-    ): { squad: Candidate[]; objective: number; xi: Set<string> } => {
-      const solution = highs.solve(
-        buildLp(from, rules, collisions, BENCH_WEIGHT),
+    // One reader for the solved columns, shared with the season simulator and the replay harness
+    // (`readSolution`) — it validates the squad, the XI and the armband rather than trusting them.
+    const solve = (from: Candidate[]): SolvedSquad =>
+      readSolution(
+        from,
+        highs.solve(buildLp(from, rules, collisions, BENCH_WEIGHT)),
+        rules,
       );
-      if (solution.Status !== 'Optimal') {
-        throw new Error(
-          `optimiser did not find an optimal squad (status: ${solution.Status})`,
-        );
-      }
-      return {
-        squad: from.filter((c) => (solution.Columns[c.key]?.Primal ?? 0) > 0.5),
-        objective: solution.ObjectiveValue,
-        // The XI the SOLVER chose, so it can be compared against the enumeration below.
-        xi: new Set(
-          from
-            .filter((c) => (solution.Columns[`y_${c.key}`]?.Primal ?? 0) > 0.5)
-            .map((c) => c.key),
-        ),
-      };
-    };
 
     const { squad: inSquad, objective: objectiveValue, xi: lpXi } = solve(pool);
-    if (inSquad.length !== rules.squadSize()) {
-      throw new Error(
-        `solver returned ${inSquad.length} players, expected ${rules.squadSize()}`,
-      );
-    }
 
     // What the floor cost, in players rather than in adjectives: the same solve with the floor
     // lifted and LAMBDA unchanged, so the diff isolates B-010 and does not smuggle B-011 into it.

@@ -448,3 +448,119 @@ export function pickBestXi(
   const { score: _score, ...result } = best as XiResult & { score: number };
   return result;
 }
+
+/**
+ * What HiGHS hands back, as much of it as anything here reads.
+ *
+ * Declared structurally rather than imported: the `highs` package's own types describe a solved
+ * model in more generality than this file needs, and a narrow local shape is what lets `readSolution`
+ * be unit-tested without loading a WASM solver.
+ */
+export interface LpSolution {
+  Status: string;
+  ObjectiveValue: number;
+  /**
+   * `Primal` is OPTIONAL because an infeasible solve really does hand back columns without one —
+   * that is HiGHS's own declared shape (`HighsInfeasibleSolutionColumn` has no `Primal` at all), not
+   * defensiveness. `Index` is listed only so this stays a structural match for both of the package's
+   * column types: a shape whose every property is optional is a *weak* type, and TypeScript refuses
+   * to assign anything with no property in common with it. Requiring `Primal` instead would have
+   * forced every caller to cast, and a cast is exactly how "we never checked the status" gets
+   * written.
+   */
+  Columns: Record<string, { Index: number; Primal?: number } | undefined>;
+}
+
+/** A solved squad program, read back into the domain. */
+export interface SolvedSquad {
+  squad: Candidate[];
+  /** the eleven the SOLVER chose — its own `y` columns, not a re-derivation */
+  xi: Set<string>;
+  /** the armband the SOLVER chose — its own `k` column */
+  captainKey: string;
+  /** "DEF-MID-FWD" of the solver's XI */
+  formation: string;
+  objective: number;
+}
+
+/**
+ * Read a solved `buildLp` back into candidates, XI and armband — one implementation, three callers.
+ *
+ * **Every caller used to read the columns itself, and each read a different subset.** The served
+ * optimizer read `x` and `y`; the season simulator read `x` alone; nothing read `k`. A harness that
+ * wants to score the eleven the objective actually chose cannot be built on top of three partial
+ * readers that may disagree, so the reading happens once, here.
+ *
+ * **It validates, and that is the point rather than a courtesy.** A solver that returns anything but
+ * `Optimal` still returns a `Columns` object, and reading it yields a squad of whatever happened to
+ * be there — usually nothing, occasionally something plausible. The failure then surfaces hundreds of
+ * lines later as "no legal XI from this squad", which is a true statement about an empty squad and
+ * says nothing about why. Worse for the replay harness: a silently short XI would be scored, and a
+ * ten-man lineup quietly loses points that would read as the objective being bad.
+ */
+export function readSolution(
+  candidates: Candidate[],
+  solution: LpSolution,
+  rules: Rules,
+): SolvedSquad {
+  if (solution.Status !== 'Optimal') {
+    throw new Error(
+      `the squad solve returned ${solution.Status} over ${candidates.length} candidates`,
+    );
+  }
+  const on = (name: string) => (solution.Columns[name]?.Primal ?? 0) > 0.5;
+
+  const squad = candidates.filter((c) => on(c.key));
+  if (squad.length !== rules.squadSize()) {
+    throw new Error(
+      `the squad solve returned ${squad.length} players, expected ${rules.squadSize()}`,
+    );
+  }
+
+  const xiMembers = candidates.filter((c) => on(`y_${c.key}`));
+  if (xiMembers.length !== rules.xiSize()) {
+    throw new Error(
+      `the squad solve returned an XI of ${xiMembers.length}, expected ${rules.xiSize()}`,
+    );
+  }
+  const inSquad = new Set(squad.map((c) => c.key));
+  const stray = xiMembers.find((c) => !inSquad.has(c.key));
+  if (stray) {
+    throw new Error(
+      `the squad solve started ${stray.webName}, who is not in the fifteen it chose`,
+    );
+  }
+
+  const captains = candidates.filter((c) => on(`k_${c.key}`));
+  if (captains.length !== 1) {
+    throw new Error(
+      `the squad solve returned ${captains.length} captains, expected exactly 1`,
+    );
+  }
+  const captainKey = captains[0].key;
+  if (!xiMembers.some((c) => c.key === captainKey)) {
+    throw new Error(
+      `the squad solve captained ${captains[0].webName}, who is not in the eleven it started`,
+    );
+  }
+
+  const count = (pos: PositionCode) =>
+    xiMembers.filter((c) => c.position === pos).length;
+  for (const pos of POSITIONS) {
+    const n = count(pos);
+    if (n < rules.minPlay(pos) || n > rules.maxPlay(pos)) {
+      throw new Error(
+        `the squad solve started ${n} ${pos}, outside the legal ` +
+          `${rules.minPlay(pos)}-${rules.maxPlay(pos)}`,
+      );
+    }
+  }
+
+  return {
+    squad,
+    xi: new Set(xiMembers.map((c) => c.key)),
+    captainKey,
+    formation: `${count('DEF')}-${count('MID')}-${count('FWD')}`,
+    objective: solution.ObjectiveValue,
+  };
+}

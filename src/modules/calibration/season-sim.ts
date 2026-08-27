@@ -1,6 +1,14 @@
 import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
-import { buildLp, Candidate } from '../optimizer/ilp';
+import {
+  buildConflictPairs,
+  buildLp,
+  Candidate,
+  Collisions,
+  NO_COLLISIONS,
+  readSolution,
+} from '../optimizer/ilp';
+import { FixtureLite } from '../optimizer/optimizer.repository';
 import { Rules } from '../optimizer/rules';
 import { BENCH_WEIGHT } from '../optimizer/policy';
 import { Predictor, PredictionRow } from './harness';
@@ -217,6 +225,20 @@ export async function openingSquad(
   fallback: Predictor | null,
   /** What a bench place is worth. Passed in so a sweep can vary it without touching this file. */
   benchWeight = BENCH_WEIGHT,
+  /**
+   * The collision context for the opening round (B-011/B-025), as the round's FIXTURES and a lambda
+   * rather than as ready-made pairs.
+   *
+   * Pairs name candidates, and the candidates are built inside this function — handing in pairs built
+   * against a caller's own copies would make the LP's `z` rows depend on two lists agreeing about
+   * keys, which is a coupling nobody would notice breaking. Fixtures have no such identity.
+   *
+   * Defaults to none, which is what the decision report and the bench sweep have always solved
+   * without. The replay harness passes the real ones, because the penalty it exists to measure is
+   * charged on OWNERSHIP — so a harness that chose its opening fifteen without it would be measuring
+   * an objective the product does not serve.
+   */
+  conflicts: { fixtures: FixtureLite[]; lambda: number } | null = null,
 ): Promise<PredictionRow[]> {
   const candidates: Candidate[] = rows
     .filter((r) => r.teamCode !== null)
@@ -237,29 +259,23 @@ export async function openingSquad(
   // The SAME objective the served optimizer solves (B-023): the XI, the armband and a discounted
   // bench. A simulator that picked its opening fifteen under a different objective from the product
   // would be measuring a squad nobody would ever be recommended.
-  const solution = highs.solve(
-    buildLp(candidates, rules, undefined, benchWeight),
+  //
+  // `readSolution` checks the status and the shape. A solver that returns anything but Optimal still
+  // returns a `Columns` object, and reading it produces a squad of whatever happened to be there —
+  // usually nothing, which then surfaces hundreds of lines later as "no legal XI from this squad".
+  const collisions: Collisions = conflicts
+    ? {
+        pairs: buildConflictPairs(candidates, conflicts.fixtures),
+        lambda: conflicts.lambda,
+      }
+    : NO_COLLISIONS;
+  const solved = readSolution(
+    candidates,
+    highs.solve(buildLp(candidates, rules, collisions, benchWeight)),
+    rules,
   );
-  // **Check the status.** A solver that returns anything but Optimal still returns a `Columns`
-  // object, and reading it produces a squad of whatever happened to be there — usually nothing. The
-  // failure then surfaces hundreds of lines later as "no legal XI from this squad", which is a true
-  // statement about an empty squad and tells you nothing about why.
-  if (solution.Status !== 'Optimal') {
-    throw new Error(
-      `the opening-squad solve returned ${solution.Status} over ${candidates.length} candidates`,
-    );
-  }
-  const chosen = new Set<string>();
-  for (const [key, col] of Object.entries(solution.Columns)) {
-    if ((col as { Primal: number }).Primal > 0.5) chosen.add(key);
-  }
-  const squad = rows.filter((r) => chosen.has(`p_${r.playerCode}`));
-  if (squad.length !== rules.squadSize()) {
-    throw new Error(
-      `the opening-squad solve returned ${squad.length} players, expected ${rules.squadSize()}`,
-    );
-  }
-  return squad;
+  const chosen = new Set(solved.squad.map((c) => c.key));
+  return rows.filter((r) => chosen.has(`p_${r.playerCode}`));
 }
 
 export interface SimOptions {

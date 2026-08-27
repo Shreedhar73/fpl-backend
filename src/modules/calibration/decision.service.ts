@@ -221,7 +221,14 @@ export class DecisionService {
     return { path, ordering, decisions, seasons };
   }
 
-  private async scoringResolver(): Promise<(season: string) => Scoring> {
+  /**
+   * Public because the replay harness needs the same tables (B-025).
+   *
+   * A second resolver would be a second answer to "which season is scored by which rules", and the
+   * fit already showed what that costs: scoring 2023-24 with the current table gives every player a
+   * defensive-contribution term in a season where the category did not exist.
+   */
+  async scoringResolver(): Promise<(season: string) => Scoring> {
     const cache = new Map<string, Scoring>();
     let live: Scoring | null = null;
     for (const season of [...TRAIN_SEASONS, TEST_SEASON]) {
