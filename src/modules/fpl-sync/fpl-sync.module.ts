@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ProjectionsModule } from '../projections/projections.module';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { FplInfraModule } from '../../infra/fpl/fpl-infra.module';
 import { SyncService } from './sync.service';
@@ -11,7 +12,7 @@ import { SyncScheduler } from './sync.scheduler';
  * modules can drive it.
  */
 @Module({
-  imports: [PrismaModule, FplInfraModule],
+  imports: [PrismaModule, FplInfraModule, ProjectionsModule],
   providers: [SyncService, SyncRepository, SyncScheduler],
   exports: [SyncService],
 })
