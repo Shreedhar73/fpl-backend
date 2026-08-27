@@ -202,7 +202,7 @@ describe('the feature export (B-034)', () => {
     const rows = exportFeatures(season(3), FITTED_PARAMS, scoringFor);
     const csv = toCsv(rows);
     const header = csv.split('\n')[0].split(',');
-    expect(header.length).toBe(7 + featureNames().length);
+    expect(header.length).toBe(8 + featureNames().length);
     expect(new Set(WINDOWS).size).toBe(5);
   });
 });
