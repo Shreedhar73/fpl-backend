@@ -22,16 +22,16 @@ Between `ebf4da4` (the model adopted as v3, D-025) and `6cf0590` (the objective 
 
 | policy | arm | rounds | **points** | transfers | hits | final team value |
 |---|---|---:|---:|---:|---:|---:|
-| no-transfer | pre-B-023 (all fifteen equal) | 37 | **1635** | 0 | 0 | £98.9m |
-| no-transfer | B-023 (XI, bench, armband) | 37 | **1635** | 0 | 0 | £98.9m |
-| no-transfer | served (B-023 + B-029 concentration) | 37 | **1635** | 0 | 0 | £98.9m |
-| no-transfer | instrument check: bench worth nothing | 37 | **1457** | 0 | 0 | £98.1m |
-| no-transfer | instrument check: bench weight is not read by this objective | 37 | **1635** | 0 | 0 | £98.9m |
-| greedy-1ft | pre-B-023 (all fifteen equal) | 37 | **1881** | 37 | 0 | £97.5m |
-| greedy-1ft | B-023 (XI, bench, armband) | 37 | **1881** | 37 | 0 | £97.5m |
-| greedy-1ft | served (B-023 + B-029 concentration) | 37 | **1881** | 37 | 0 | £97.5m |
-| greedy-1ft | instrument check: bench worth nothing | 37 | **1881** | 37 | 0 | £97.2m |
-| greedy-1ft | instrument check: bench weight is not read by this objective | 37 | **1881** | 37 | 0 | £97.5m |
+| no-transfer | pre-B-023 (all fifteen equal) | 0 | **0** | 0 | 0 | £0.0m |
+| no-transfer | B-023 (XI, bench, armband) | 0 | **0** | 0 | 0 | £0.0m |
+| no-transfer | served (B-023 + B-029 concentration) | 0 | **0** | 0 | 0 | £0.0m |
+| no-transfer | instrument check: bench worth nothing | 0 | **0** | 0 | 0 | £0.0m |
+| no-transfer | instrument check: bench weight is not read by this objective | 0 | **0** | 0 | 0 | £0.0m |
+| greedy-1ft | pre-B-023 (all fifteen equal) | 0 | **0** | 0 | 0 | £0.0m |
+| greedy-1ft | B-023 (XI, bench, armband) | 0 | **0** | 0 | 0 | £0.0m |
+| greedy-1ft | served (B-023 + B-029 concentration) | 0 | **0** | 0 | 0 | £0.0m |
+| greedy-1ft | instrument check: bench worth nothing | 0 | **0** | 0 | 0 | £0.0m |
+| greedy-1ft | instrument check: bench weight is not read by this objective | 0 | **0** | 0 | 0 | £0.0m |
 
 ## Paired against the objective that was replaced
 
@@ -39,14 +39,6 @@ Each row pairs by round against **pre-B-023 (all fifteen equal)** under the same
 
 | policy | arm − baseline | rounds | season Δ | mean Δ | ± s.e. | clears noise | detectable at | overlap |
 |---|---|---:|---:|---:|---:|---|---:|---:|
-| no-transfer | B-023 (XI, bench, armband) | 37 | +0 | +0.00 | 0.00 | no | 0 pts | 100% |
-| no-transfer | served (B-023 + B-029 concentration) | 37 | +0 | +0.00 | 0.00 | no | 0 pts | 100% |
-| no-transfer | instrument check: bench worth nothing | 37 | -178 | -4.81 | 1.19 | **yes** | 88 pts | 67% |
-| no-transfer | instrument check: bench weight is not read by this objective | 37 | +0 | +0.00 | 0.00 | no | 0 pts | 100% |
-| greedy-1ft | B-023 (XI, bench, armband) | 37 | +0 | +0.00 | 0.00 | no | 0 pts | 100% |
-| greedy-1ft | served (B-023 + B-029 concentration) | 37 | +0 | +0.00 | 0.00 | no | 0 pts | 100% |
-| greedy-1ft | instrument check: bench worth nothing | 37 | +0 | +0.00 | 1.68 | no | 124 pts | 73% |
-| greedy-1ft | instrument check: bench weight is not read by this objective | 37 | +0 | +0.00 | 0.00 | no | 0 pts | 100% |
 
 ## What this says
 
@@ -54,11 +46,7 @@ Each row pairs by round against **pre-B-023 (all fifteen equal)** under the same
 
 That answers B-031's question with a no. The model's simulated fifteen did lose 62 points between `ebf4da4` and `6cf0590`, and the objective rewrite in that window is not what did it — the two remaining commits changed the projections, not the selection. It also means the concentration charge, which cost six register entries to arrive at, is currently inert on the squad solve.
 
-**The instrument is not stuck, and this is the row that proves it.** With the bench worth nothing the solver buys a different fifteen — 10 of 15 shared — and held all season that squad scores 1457 against 1635, a difference of -178, at ±1.19 a round. So "every arm is identical" above is a measurement, not a harness that forgot to vary anything. The run throws rather than reports if this arm ever matches the baseline.
-
-**And it is what the pairing was for.** That comparison's floor is 88 points of season. The decision-quality report's cross-predictor comparisons sit between 156 and 212, because those arms hold different players and the round-to-round variance does not cancel. Same model, same season, arms overlapping 67% — the floor roughly halves. Three archived seasons would have bought √3; the pairing buys more, and costs one run.
-
-**`instrument check: bench worth nothing` ties the baseline exactly under `greedy-1ft` — and it is a coincidence, not convergence.** The two arms held different squads and scored differently in 36 of 37 rounds, and the totals happened to land on the same number. It is the clearest illustration in this repo of why a season total is a poor summary of 37 noisy rounds: a difference of 178 points when the squad is held all season becomes exactly zero once a weekly transfer is allowed to correct it. **The opening solve matters far less than the transfer policy acting on it**, which is what B-032 goes on to measure.
+**The instrument is not stuck, and this is the row that proves it.** With the bench worth nothing the solver buys a different fifteen — 10 of 15 shared — and held all season that squad scores 0 against 0, a difference of 0. So "every arm is identical" above is a measurement, not a harness that forgot to vary anything. The run throws rather than reports if this arm ever matches the baseline.
 
 ## The opening fifteens
 

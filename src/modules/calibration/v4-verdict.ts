@@ -189,13 +189,19 @@ export function v4Bar(input: V4BarInput): V4BarVerdict {
           `\`docs/decisions.md\` with the serving blockers answered first — a total-points GBM has ` +
           `no explain blocks (D-019), no distributions (B-017) and no pPlay, and a model that ` +
           `cannot ship its reasoning does not ship, however it measures.`
-      : `**The bar is not met on this run.** \`modelVersion\` does not move, and the negative ` +
-          `result stands in this report rather than being rerun until it passes. The I/C/T split ` +
-          `is already in the feature set (plan 023); the remaining OpenFPL groups are blocked at ` +
-          `the source — vaastav's understat player files stop before the test season, and ` +
-          `understat.com now serves a JS shell with no embedded data (probed 2026-08-27). The ` +
-          `candidates left are model-shaped, not feature-shaped: a distribution-aware objective, ` +
-          `or v4 as a residual on the incumbent's decomposition — both recorded in B-037.`,
+      : `**The bar is not met on this run, and this cycle's search is closed.** \`modelVersion\` ` +
+          `does not move. Two architectures were measured — the direct fit (best ordering, ` +
+          `@11 38.0% vs 32.7%, but a real Tickers regression) and the residual-on-incumbent fit ` +
+          `(first real haul-sizing gain anywhere in this project, Haulers Δse clearing its noise, ` +
+          `but a Blanks degradation past the 5% line and a weaker ordering) — and their misses are ` +
+          `COMPLEMENTARY, which is information: no single member of this family passes all three ` +
+          `legs on this holdout. Four TEST readings is the edge of what a holdout survives, so the ` +
+          `next attempt needs (1) a validation-side composite of the two, designed without another ` +
+          `TEST peek, and (2) the genuinely untouched holdout that is accumulating on its own: the ` +
+          `live 2026-27 season, scored prospectively by \`pnpm score:gameweek\` as B-016 already ` +
+          `does for the incumbent. Enrichment stays blocked at the source (probed 2026-08-27): ` +
+          `vaastav's understat player files stop before the test season and understat.com serves ` +
+          `a JS shell. All recorded in B-037.`,
   );
   return { orderingMet, highReturnMet, lowReturnHeld, met, lines };
 }

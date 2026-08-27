@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-27T11:06:30.398Z",
+  "generated": "2026-08-27T11:16:37.223Z",
   "seasons": {
     "2023-24": 28850,
     "2024-25": 27010,
@@ -12,8 +12,9 @@
     "MID": 37793
   },
   "totalRows": 85342,
-  "columns": 140,
+  "columns": 141,
   "featureNames": [
+    "v3ep",
     "value",
     "wasHome",
     "laggedStartRate",

@@ -16,6 +16,7 @@ import {
   TEST_SEASON,
   TRAIN_SEASONS,
 } from '../modules/calibration/calibration.service';
+import { DecisionService } from '../modules/calibration/decision.service';
 import {
   exportFeatures,
   featureNames,
@@ -32,7 +33,8 @@ async function main(): Promise<void> {
     const repo = app.get(CalibrationRepository);
     const seasons = [...TRAIN_SEASONS, TEST_SEASON];
     const rows = await repo.history(seasons);
-    const exported = exportFeatures(rows, FITTED_PARAMS);
+    const scoringFor = await app.get(DecisionService).scoringResolver();
+    const exported = exportFeatures(rows, FITTED_PARAMS, scoringFor);
 
     const dir = join(process.cwd(), 'reports', 'datasets');
     await mkdir(dir, { recursive: true });

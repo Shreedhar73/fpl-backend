@@ -8,6 +8,7 @@
    "fixture": 110,
    "playerCode": 67089,
    "features": {
+    "v3ep": 3.492980462781152,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -149,7 +150,7 @@
     "o_xgAgainst_10": 0.8010000000000002,
     "o_xgAgainst_38": 0.7889999999999999
    },
-   "expected": 2.8188066482543945
+   "expected": -0.5666323900222778
   },
   {
    "position": "GKP",
@@ -158,6 +159,7 @@
    "fixture": 184,
    "playerCode": 457569,
    "features": {
+    "v3ep": 3.3810937786661412,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -299,7 +301,7 @@
     "o_xgAgainst_10": 1.221,
     "o_xgAgainst_38": 1.0187499999999998
    },
-   "expected": 2.6925463676452637
+   "expected": -0.12558424472808838
   },
   {
    "position": "GKP",
@@ -308,6 +310,7 @@
    "fixture": 337,
    "playerCode": 235448,
    "features": {
+    "v3ep": 0.1055129767183296,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -449,7 +452,7 @@
     "o_xgAgainst_10": 1.38,
     "o_xgAgainst_38": 1.2924242424242427
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -458,6 +461,7 @@
    "fixture": 321,
    "playerCode": 74854,
    "features": {
+    "v3ep": 0.1117985785398939,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -599,7 +603,7 @@
     "o_xgAgainst_10": 1.193,
     "o_xgAgainst_38": 0.9247368421052634
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -608,6 +612,7 @@
    "fixture": 170,
    "playerCode": 149065,
    "features": {
+    "v3ep": 1.133336734604515,
     "value": 42.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.25,
@@ -749,7 +754,7 @@
     "o_xgAgainst_10": 1.226,
     "o_xgAgainst_38": 1.0605
    },
-   "expected": 0.2541240155696869
+   "expected": -0.3820435702800751
   },
   {
    "position": "GKP",
@@ -758,6 +763,7 @@
    "fixture": 275,
    "playerCode": 485055,
    "features": {
+    "v3ep": 0.1143383311216191,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -899,7 +905,7 @@
     "o_xgAgainst_10": 1.254,
     "o_xgAgainst_38": 0.8215789473684211
    },
-   "expected": 0.09959782660007477
+   "expected": -0.1130257099866867
   },
   {
    "position": "GKP",
@@ -908,6 +914,7 @@
    "fixture": 245,
    "playerCode": 505079,
    "features": {
+    "v3ep": 0.1693042883978117,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -1049,7 +1056,7 @@
     "o_xgAgainst_10": 0.7260000000000001,
     "o_xgAgainst_38": 0.7352631578947368
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -1058,6 +1065,7 @@
    "fixture": 190,
    "playerCode": 472739,
    "features": {
+    "v3ep": 0.1226744509624499,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -1199,7 +1207,7 @@
     "o_xgAgainst_10": 0.785,
     "o_xgAgainst_38": 0.858
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -1208,6 +1216,7 @@
    "fixture": 115,
    "playerCode": 80201,
    "features": {
+    "v3ep": 3.546832613925621,
     "value": 50.0,
     "wasHome": 1.0,
     "laggedStartRate": 1.0,
@@ -1349,7 +1358,7 @@
     "o_xgAgainst_10": 1.287,
     "o_xgAgainst_38": 1.2218181818181817
    },
-   "expected": 3.0310776233673096
+   "expected": -0.14962828159332275
   },
   {
    "position": "GKP",
@@ -1358,6 +1367,7 @@
    "fixture": 346,
    "playerCode": 138001,
    "features": {
+    "v3ep": 0.1121406823902589,
     "value": 39.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -1499,7 +1509,7 @@
     "o_xgAgainst_10": 1.082,
     "o_xgAgainst_38": 0.5921052631578947
    },
-   "expected": 0.0856911763548851
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -1508,6 +1518,7 @@
    "fixture": 130,
    "playerCode": 483364,
    "features": {
+    "v3ep": 0.1412661068688981,
     "value": 39.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -1649,7 +1660,7 @@
     "o_xgAgainst_10": 1.249,
     "o_xgAgainst_38": 1.116428571428571
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -1658,6 +1669,7 @@
    "fixture": 328,
    "playerCode": 225321,
    "features": {
+    "v3ep": 1.211385131681621,
     "value": 48.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.3125,
@@ -1799,7 +1811,7 @@
     "o_xgAgainst_10": 1.629,
     "o_xgAgainst_38": 1.5221875000000005
    },
-   "expected": 2.5153679847717285
+   "expected": 0.8338147401809692
   },
   {
    "position": "GKP",
@@ -1808,6 +1820,7 @@
    "fixture": 175,
    "playerCode": 485055,
    "features": {
+    "v3ep": 0.1402102537789009,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -1949,7 +1962,7 @@
     "o_xgAgainst_10": 0.393,
     "o_xgAgainst_38": 0.3407894736842105
    },
-   "expected": 0.09959782660007477
+   "expected": -0.1130257099866867
   },
   {
    "position": "GKP",
@@ -1958,6 +1971,7 @@
    "fixture": 336,
    "playerCode": 116535,
    "features": {
+    "v3ep": 2.1826671325627087,
     "value": 54.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.7575757575757576,
@@ -2099,7 +2113,7 @@
     "o_xgAgainst_10": 0.954,
     "o_xgAgainst_38": 0.6502631578947369
    },
-   "expected": 0.6359902620315552
+   "expected": -1.1862013339996338
   },
   {
    "position": "GKP",
@@ -2108,6 +2122,7 @@
    "fixture": 28,
    "playerCode": 507433,
    "features": {
+    "v3ep": 0.1036203470476711,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -2249,7 +2264,7 @@
     "o_xgAgainst_10": 0.78,
     "o_xgAgainst_38": 0.78
    },
-   "expected": 0.0856911763548851
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -2258,6 +2273,7 @@
    "fixture": 191,
    "playerCode": 462381,
    "features": {
+    "v3ep": 0.1494446751205415,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -2399,7 +2415,7 @@
     "o_xgAgainst_10": 0.567,
     "o_xgAgainst_38": 0.6523684210526317
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -2408,6 +2424,7 @@
    "fixture": 157,
    "playerCode": 69752,
    "features": {
+    "v3ep": 0.1303898392122868,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -2549,7 +2566,7 @@
     "o_xgAgainst_10": 1.2740000000000002,
     "o_xgAgainst_38": 1.3393333333333333
    },
-   "expected": 0.12159250676631927
+   "expected": -0.11452846974134445
   },
   {
    "position": "GKP",
@@ -2558,6 +2575,7 @@
    "fixture": 250,
    "playerCode": 79602,
    "features": {
+    "v3ep": 0.1267019283916976,
     "value": 39.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -2699,7 +2717,7 @@
     "o_xgAgainst_10": 1.5889999999999995,
     "o_xgAgainst_38": 1.1396666666666666
    },
-   "expected": 0.0856911763548851
+   "expected": -0.1130257099866867
   },
   {
    "position": "GKP",
@@ -2708,6 +2726,7 @@
    "fixture": 130,
    "playerCode": 467189,
    "features": {
+    "v3ep": 1.3151174614869945,
     "value": 43.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.3333333333333333,
@@ -2849,7 +2868,7 @@
     "o_xgAgainst_10": 1.249,
     "o_xgAgainst_38": 1.116428571428571
    },
-   "expected": 0.2548811137676239
+   "expected": -0.5214525461196899
   },
   {
    "position": "GKP",
@@ -2858,6 +2877,7 @@
    "fixture": 5,
    "playerCode": 467189,
    "features": {
+    "v3ep": 1.8362756243232743,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.7105263157894737,
@@ -2999,7 +3019,7 @@
     "o_xgAgainst_10": null,
     "o_xgAgainst_38": null
    },
-   "expected": 1.6030497550964355
+   "expected": 0.014181907288730145
   },
   {
    "position": "GKP",
@@ -3008,6 +3028,7 @@
    "fixture": 356,
    "playerCode": 432720,
    "features": {
+    "v3ep": 0.8407994908455906,
     "value": 45.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.088235294117647,
@@ -3149,7 +3170,7 @@
     "o_xgAgainst_10": 1.099,
     "o_xgAgainst_38": 1.182105263157895
    },
-   "expected": 0.12816429138183594
+   "expected": -0.49216896295547485
   },
   {
    "position": "GKP",
@@ -3158,6 +3179,7 @@
    "fixture": 250,
    "playerCode": 471798,
    "features": {
+    "v3ep": 0.1274082398663985,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -3299,7 +3321,7 @@
     "o_xgAgainst_10": 1.324,
     "o_xgAgainst_38": 1.3674999999999995
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -3308,6 +3330,7 @@
    "fixture": 39,
    "playerCode": 225321,
    "features": {
+    "v3ep": 0.1095169862877729,
     "value": 49.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -3449,7 +3472,7 @@
     "o_xgAgainst_10": 1.893333333333333,
     "o_xgAgainst_38": 1.893333333333333
    },
-   "expected": 0.28950855135917664
+   "expected": -0.07807280868291855
   },
   {
    "position": "GKP",
@@ -3458,6 +3481,7 @@
    "fixture": 339,
    "playerCode": 37096,
    "features": {
+    "v3ep": 0.1251768750450704,
     "value": 45.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -3599,7 +3623,7 @@
     "o_xgAgainst_10": 1.438,
     "o_xgAgainst_38": 0.9205263157894736
    },
-   "expected": 0.13549920916557312
+   "expected": -0.11452846974134445
   },
   {
    "position": "GKP",
@@ -3608,6 +3632,7 @@
    "fixture": 203,
    "playerCode": 503300,
    "features": {
+    "v3ep": 0.1211996241441449,
     "value": 39.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -3749,7 +3774,7 @@
     "o_xgAgainst_10": 1.687,
     "o_xgAgainst_38": 1.415
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -3758,6 +3783,7 @@
    "fixture": 87,
    "playerCode": 59735,
    "features": {
+    "v3ep": 1.742188260775897,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.625,
@@ -3899,7 +3925,7 @@
     "o_xgAgainst_10": 0.956,
     "o_xgAgainst_38": 0.858125
    },
-   "expected": 2.4691879749298096
+   "expected": 0.6294249892234802
   },
   {
    "position": "GKP",
@@ -3908,6 +3934,7 @@
    "fixture": 373,
    "playerCode": 463748,
    "features": {
+    "v3ep": 0.1175937307751981,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -4049,7 +4076,7 @@
     "o_xgAgainst_10": 1.458,
     "o_xgAgainst_38": 0.8313157894736841
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -4058,6 +4085,7 @@
    "fixture": 27,
    "playerCode": 475123,
    "features": {
+    "v3ep": 0.1135154556644511,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -4199,7 +4227,7 @@
     "o_xgAgainst_10": 0.8575,
     "o_xgAgainst_38": 0.8575
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -4208,6 +4236,7 @@
    "fixture": 88,
    "playerCode": 202641,
    "features": {
+    "v3ep": 0.1467118473423951,
     "value": 49.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -4349,7 +4378,7 @@
     "o_xgAgainst_10": 0.6500000000000001,
     "o_xgAgainst_38": 0.8230769230769233
    },
-   "expected": 0.31954142451286316
+   "expected": 0.12279080599546432
   },
   {
    "position": "GKP",
@@ -4358,6 +4387,7 @@
    "fixture": 48,
    "playerCode": 232571,
    "features": {
+    "v3ep": 0.1828996771029549,
     "value": 44.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -4499,7 +4529,7 @@
     "o_xgAgainst_10": 0.5980000000000001,
     "o_xgAgainst_38": 0.5692307692307692
    },
-   "expected": 0.11180040240287781
+   "expected": -0.11269122362136841
   },
   {
    "position": "GKP",
@@ -4508,6 +4538,7 @@
    "fixture": 49,
    "playerCode": 467189,
    "features": {
+    "v3ep": 3.3875932626312975,
     "value": 45.0,
     "wasHome": 1.0,
     "laggedStartRate": 1.0,
@@ -4649,7 +4680,7 @@
     "o_xgAgainst_10": 0.149,
     "o_xgAgainst_38": 0.268
    },
-   "expected": 3.1887292861938477
+   "expected": 0.3058925271034241
   },
   {
    "position": "GKP",
@@ -4658,6 +4689,7 @@
    "fixture": 78,
    "playerCode": 232571,
    "features": {
+    "v3ep": 0.1538954980432495,
     "value": 43.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -4799,7 +4831,7 @@
     "o_xgAgainst_10": 1.3957142857142857,
     "o_xgAgainst_38": 1.3957142857142857
    },
-   "expected": 0.10700595378875732
+   "expected": -0.11269122362136841
   },
   {
    "position": "GKP",
@@ -4808,6 +4840,7 @@
    "fixture": 179,
    "playerCode": 201595,
    "features": {
+    "v3ep": 1.4692598486480184,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.7058823529411765,
@@ -4949,7 +4982,7 @@
     "o_xgAgainst_10": 1.3850000000000002,
     "o_xgAgainst_38": 1.3341176470588234
    },
-   "expected": 2.6880016326904297
+   "expected": 0.11910055577754974
   },
   {
    "position": "GKP",
@@ -4958,6 +4991,7 @@
    "fixture": 240,
    "playerCode": 568791,
    "features": {
+    "v3ep": 0.1175068440408271,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -5099,7 +5133,7 @@
     "o_xgAgainst_10": 1.262,
     "o_xgAgainst_38": 1.3678260869565215
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -5108,6 +5142,7 @@
    "fixture": 324,
    "playerCode": 553742,
    "features": {
+    "v3ep": 0.2025426799165115,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -5249,7 +5284,7 @@
     "o_xgAgainst_10": 0.941,
     "o_xgAgainst_38": 0.6342105263157896
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -5258,6 +5293,7 @@
    "fixture": 257,
    "playerCode": 149065,
    "features": {
+    "v3ep": 1.5341119229967106,
     "value": 42.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.52,
@@ -5399,7 +5435,7 @@
     "o_xgAgainst_10": 0.926,
     "o_xgAgainst_38": 0.7747368421052632
    },
-   "expected": 3.652428150177002
+   "expected": 1.0860767364501953
   },
   {
    "position": "GKP",
@@ -5408,6 +5444,7 @@
    "fixture": 76,
    "playerCode": 432720,
    "features": {
+    "v3ep": 1.6778708680601886,
     "value": 47.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.4285714285714285,
@@ -5549,7 +5586,7 @@
     "o_xgAgainst_10": 0.543,
     "o_xgAgainst_38": 0.6626666666666667
    },
-   "expected": 0.5406466722488403
+   "expected": -0.502305269241333
   },
   {
    "position": "GKP",
@@ -5558,6 +5595,7 @@
    "fixture": 218,
    "playerCode": 121709,
    "features": {
+    "v3ep": 0.1382792485696679,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -5699,7 +5737,7 @@
     "o_xgAgainst_10": 1.81,
     "o_xgAgainst_38": 1.501904761904762
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -5708,6 +5746,7 @@
    "fixture": 160,
    "playerCode": 516875,
    "features": {
+    "v3ep": 0.2137038397805614,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -5849,7 +5888,7 @@
     "o_xgAgainst_10": 0.986,
     "o_xgAgainst_38": 0.8546666666666667
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -5858,6 +5897,7 @@
    "fixture": 359,
    "playerCode": 201595,
    "features": {
+    "v3ep": 1.3207063768712846,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.4571428571428571,
@@ -5999,7 +6039,7 @@
     "o_xgAgainst_10": 1.4840000000000002,
     "o_xgAgainst_38": 1.4142857142857146
    },
-   "expected": 0.1634330451488495
+   "expected": -0.9075770974159241
   },
   {
    "position": "GKP",
@@ -6008,6 +6048,7 @@
    "fixture": 262,
    "playerCode": 535017,
    "features": {
+    "v3ep": 0.1231030260947112,
     "value": 39.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -6149,7 +6190,7 @@
     "o_xgAgainst_10": 0.812,
     "o_xgAgainst_38": 0.7807894736842105
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -6158,6 +6199,7 @@
    "fixture": 113,
    "playerCode": 240514,
    "features": {
+    "v3ep": 0.1336765411557398,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -6299,7 +6341,7 @@
     "o_xgAgainst_10": 1.0499999999999998,
     "o_xgAgainst_38": 0.9033333333333332
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -6308,6 +6350,7 @@
    "fixture": 302,
    "playerCode": 465247,
    "features": {
+    "v3ep": 2.0302386360041367,
     "value": 50.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.8888888888888888,
@@ -6449,7 +6492,7 @@
     "o_xgAgainst_10": 1.451,
     "o_xgAgainst_38": 1.487666666666667
    },
-   "expected": 2.9793460369110107
+   "expected": 0.27058085799217224
   },
   {
    "position": "GKP",
@@ -6458,6 +6501,7 @@
    "fixture": 268,
    "playerCode": 428971,
    "features": {
+    "v3ep": 0.1122879389458333,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -6599,7 +6643,7 @@
     "o_xgAgainst_10": 1.621,
     "o_xgAgainst_38": 1.4523076923076923
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -6608,6 +6652,7 @@
    "fixture": 106,
    "playerCode": 449027,
    "features": {
+    "v3ep": 1.4103767550696462,
     "value": 43.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.4,
@@ -6749,7 +6794,7 @@
     "o_xgAgainst_10": 0.316,
     "o_xgAgainst_38": 0.3575
    },
-   "expected": 2.430711507797241
+   "expected": 0.8824023604393005
   },
   {
    "position": "GKP",
@@ -6758,6 +6803,7 @@
    "fixture": 272,
    "playerCode": 490000,
    "features": {
+    "v3ep": 0.1085839999600056,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -6899,7 +6945,7 @@
     "o_xgAgainst_10": 1.8349999999999995,
     "o_xgAgainst_38": 1.532592592592593
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -6908,6 +6954,7 @@
    "fixture": 207,
    "playerCode": 518335,
    "features": {
+    "v3ep": 0.2280549897740847,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -7049,7 +7096,7 @@
     "o_xgAgainst_10": 0.694,
     "o_xgAgainst_38": 0.6626315789473683
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -7058,6 +7105,7 @@
    "fixture": 338,
    "playerCode": 475123,
    "features": {
+    "v3ep": 0.1141068222082922,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -7199,7 +7247,7 @@
     "o_xgAgainst_10": 1.543,
     "o_xgAgainst_38": 1.4884848484848487
    },
-   "expected": 0.08055690675973892
+   "expected": -0.1189967691898346
   },
   {
    "position": "GKP",
@@ -7208,6 +7256,7 @@
    "fixture": 268,
    "playerCode": 232571,
    "features": {
+    "v3ep": 0.1230400120507702,
     "value": 42.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -7349,7 +7398,7 @@
     "o_xgAgainst_10": 1.0690000000000002,
     "o_xgAgainst_38": 0.8021052631578947
    },
-   "expected": 0.10700595378875732
+   "expected": -0.11269122362136841
   },
   {
    "position": "GKP",
@@ -7358,6 +7407,7 @@
    "fixture": 73,
    "playerCode": 457569,
    "features": {
+    "v3ep": 3.4560097120763085,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -7499,7 +7549,7 @@
     "o_xgAgainst_10": 0.4269999999999999,
     "o_xgAgainst_38": 0.345
    },
-   "expected": 3.414177179336548
+   "expected": 0.34109383821487427
   },
   {
    "position": "DEF",
@@ -7508,6 +7558,7 @@
    "fixture": 74,
    "playerCode": 499167,
    "features": {
+    "v3ep": 0.1128393452899465,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -7649,7 +7700,7 @@
     "o_xgAgainst_10": 0.598,
     "o_xgAgainst_38": 0.6507142857142857
    },
-   "expected": 0.06743337959051132
+   "expected": -0.11520203948020935
   },
   {
    "position": "DEF",
@@ -7658,6 +7709,7 @@
    "fixture": 220,
    "playerCode": 119471,
    "features": {
+    "v3ep": 2.068162644593457,
     "value": 53.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.5238095238095238,
@@ -7799,7 +7851,7 @@
     "o_xgAgainst_10": 1.307,
     "o_xgAgainst_38": 1.4119047619047618
    },
-   "expected": 2.71201229095459
+   "expected": 1.6367464065551758
   },
   {
    "position": "DEF",
@@ -7808,6 +7860,7 @@
    "fixture": 377,
    "playerCode": 159506,
    "features": {
+    "v3ep": 1.7413107537397703,
     "value": 47.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.4864864864864865,
@@ -7949,7 +8002,7 @@
     "o_xgAgainst_10": 1.367,
     "o_xgAgainst_38": 1.4878378378378383
    },
-   "expected": 0.7919771671295166
+   "expected": -0.9408006072044373
   },
   {
    "position": "DEF",
@@ -7958,6 +8011,7 @@
    "fixture": 85,
    "playerCode": 444463,
    "features": {
+    "v3ep": 1.3420990930578631,
     "value": 44.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.25,
@@ -8099,7 +8153,7 @@
     "o_xgAgainst_10": 1.20875,
     "o_xgAgainst_38": 1.20875
    },
-   "expected": 0.24364341795444489
+   "expected": -0.7612569332122803
   },
   {
    "position": "DEF",
@@ -8108,6 +8162,7 @@
    "fixture": 102,
    "playerCode": 578512,
    "features": {
+    "v3ep": 0.1215038299480225,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -8249,7 +8304,7 @@
     "o_xgAgainst_10": 1.0079999999999998,
     "o_xgAgainst_38": 0.9378571428571428
    },
-   "expected": 0.07046549022197723
+   "expected": -0.11223165690898895
   },
   {
    "position": "DEF",
@@ -8258,6 +8313,7 @@
    "fixture": 208,
    "playerCode": 550090,
    "features": {
+    "v3ep": 0.9583485220323203,
     "value": 42.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.1,
@@ -8399,7 +8455,7 @@
     "o_xgAgainst_10": 0.312,
     "o_xgAgainst_38": 0.3873684210526316
    },
-   "expected": 0.5383068919181824
+   "expected": -0.41049861907958984
   },
   {
    "position": "DEF",
@@ -8408,6 +8464,7 @@
    "fixture": 12,
    "playerCode": 223911,
    "features": {
+    "v3ep": 0.1493469055974959,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -8549,7 +8606,7 @@
     "o_xgAgainst_10": 2.46,
     "o_xgAgainst_38": 2.46
    },
-   "expected": 0.06610375642776489
+   "expected": 0.09936635196208954
   },
   {
    "position": "DEF",
@@ -8558,6 +8615,7 @@
    "fixture": 232,
    "playerCode": 224967,
    "features": {
+    "v3ep": 1.9162113540344548,
     "value": 49.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.8695652173913043,
@@ -8699,7 +8757,7 @@
     "o_xgAgainst_10": 0.732,
     "o_xgAgainst_38": 0.768157894736842
    },
-   "expected": 2.362173557281494
+   "expected": 0.5602526068687439
   },
   {
    "position": "DEF",
@@ -8708,6 +8766,7 @@
    "fixture": 138,
    "playerCode": 223434,
    "features": {
+    "v3ep": 0.7665773156038833,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0769230769230769,
@@ -8849,7 +8908,7 @@
     "o_xgAgainst_10": 1.457,
     "o_xgAgainst_38": 1.4530769230769232
    },
-   "expected": 0.571456253528595
+   "expected": -0.08020944893360138
   },
   {
    "position": "DEF",
@@ -8858,6 +8917,7 @@
    "fixture": 236,
    "playerCode": 219924,
    "features": {
+    "v3ep": 1.127252216812008,
     "value": 43.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.1739130434782608,
@@ -8999,7 +9059,7 @@
     "o_xgAgainst_10": 0.996,
     "o_xgAgainst_38": 1.2543478260869565
    },
-   "expected": 0.6900168061256409
+   "expected": -0.15112462639808655
   },
   {
    "position": "DEF",
@@ -9008,6 +9068,7 @@
    "fixture": 353,
    "playerCode": 427623,
    "features": {
+    "v3ep": 3.1334973048134387,
     "value": 44.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.8529411764705882,
@@ -9149,7 +9210,7 @@
     "o_xgAgainst_10": 1.505,
     "o_xgAgainst_38": 0.9613157894736843
    },
-   "expected": 1.8911752700805664
+   "expected": -0.40068912506103516
   },
   {
    "position": "DEF",
@@ -9158,6 +9219,7 @@
    "fixture": 89,
    "playerCode": 169528,
    "features": {
+    "v3ep": 0.4100372322035032,
     "value": 50.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -9299,7 +9361,7 @@
     "o_xgAgainst_10": 0.5690000000000001,
     "o_xgAgainst_38": 0.5354545454545454
    },
-   "expected": 1.1087138652801514
+   "expected": 0.2474900633096695
   },
   {
    "position": "DEF",
@@ -9308,6 +9370,7 @@
    "fixture": 300,
    "playerCode": 126184,
    "features": {
+    "v3ep": 1.4814439016245995,
     "value": 52.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.1379310344827586,
@@ -9449,7 +9512,7 @@
     "o_xgAgainst_10": 1.072,
     "o_xgAgainst_38": 0.9347368421052632
    },
-   "expected": 0.9361297488212585
+   "expected": -0.6289888620376587
   },
   {
    "position": "DEF",
@@ -9458,6 +9521,7 @@
    "fixture": 227,
    "playerCode": 439135,
    "features": {
+    "v3ep": 0.1304792626395225,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -9599,7 +9663,7 @@
     "o_xgAgainst_10": 0.783,
     "o_xgAgainst_38": 0.6613157894736842
    },
-   "expected": 0.06492065638303757
+   "expected": -0.11387865245342255
   },
   {
    "position": "DEF",
@@ -9608,6 +9672,7 @@
    "fixture": 170,
    "playerCode": 432830,
    "features": {
+    "v3ep": 3.058781831039289,
     "value": 49.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.9375,
@@ -9749,7 +9814,7 @@
     "o_xgAgainst_10": 1.626,
     "o_xgAgainst_38": 1.5531249999999996
    },
-   "expected": 2.9532201290130615
+   "expected": 0.6996652483940125
   },
   {
    "position": "DEF",
@@ -9758,6 +9823,7 @@
    "fixture": 287,
    "playerCode": 206325,
    "features": {
+    "v3ep": 0.9477723984378916,
     "value": 49.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.1428571428571428,
@@ -9899,7 +9965,7 @@
     "o_xgAgainst_10": 0.8670000000000002,
     "o_xgAgainst_38": 0.5657894736842105
    },
-   "expected": 0.36022573709487915
+   "expected": -0.30145782232284546
   },
   {
    "position": "DEF",
@@ -9908,6 +9974,7 @@
    "fixture": 291,
    "playerCode": 616065,
    "features": {
+    "v3ep": 0.1585426583955347,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -10049,7 +10116,7 @@
     "o_xgAgainst_10": 0.909,
     "o_xgAgainst_38": 0.8278947368421052
    },
-   "expected": 0.06743337959051132
+   "expected": -0.10088709741830826
   },
   {
    "position": "DEF",
@@ -10058,6 +10125,7 @@
    "fixture": 139,
    "playerCode": 553299,
    "features": {
+    "v3ep": 0.131558429666231,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -10199,7 +10267,7 @@
     "o_xgAgainst_10": 1.3850000000000002,
     "o_xgAgainst_38": 0.965625
    },
-   "expected": 0.07046549022197723
+   "expected": -0.13511952757835388
   },
   {
    "position": "DEF",
@@ -10208,6 +10276,7 @@
    "fixture": 193,
    "playerCode": 192290,
    "features": {
+    "v3ep": 0.0892576628387396,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -10349,7 +10418,7 @@
     "o_xgAgainst_10": 1.2260000000000002,
     "o_xgAgainst_38": 0.8521212121212122
    },
-   "expected": 0.10821498185396194
+   "expected": -0.09422270953655243
   },
   {
    "position": "DEF",
@@ -10358,6 +10427,7 @@
    "fixture": 75,
    "playerCode": 216094,
    "features": {
+    "v3ep": 1.257939060905079,
     "value": 58.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.1428571428571428,
@@ -10499,7 +10569,7 @@
     "o_xgAgainst_10": 1.4428571428571428,
     "o_xgAgainst_38": 1.4428571428571428
    },
-   "expected": 0.7367451786994934
+   "expected": -0.44825032353401184
   },
   {
    "position": "DEF",
@@ -10508,6 +10578,7 @@
    "fixture": 14,
    "playerCode": 487676,
    "features": {
+    "v3ep": 3.239462717342066,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -10649,7 +10720,7 @@
     "o_xgAgainst_10": 1.165,
     "o_xgAgainst_38": 1.165
    },
-   "expected": 3.2643237113952637
+   "expected": 0.24196293950080872
   },
   {
    "position": "DEF",
@@ -10658,6 +10729,7 @@
    "fixture": 18,
    "playerCode": 441164,
    "features": {
+    "v3ep": 3.553676943716521,
     "value": 55.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -10799,7 +10871,7 @@
     "o_xgAgainst_10": 0.1833333333333333,
     "o_xgAgainst_38": 0.1833333333333333
    },
-   "expected": 2.3189117908477783
+   "expected": -1.2853314876556396
   },
   {
    "position": "DEF",
@@ -10808,6 +10880,7 @@
    "fixture": 256,
    "playerCode": 616222,
    "features": {
+    "v3ep": 0.1569774090011047,
     "value": 50.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -10949,7 +11022,7 @@
     "o_xgAgainst_10": 1.067,
     "o_xgAgainst_38": 0.7657894736842105
    },
-   "expected": 0.15010017156600952
+   "expected": -0.09396666288375854
   },
   {
    "position": "DEF",
@@ -10958,6 +11031,7 @@
    "fixture": 173,
    "playerCode": 247245,
    "features": {
+    "v3ep": 0.1290603977492152,
     "value": 38.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -11099,7 +11173,7 @@
     "o_xgAgainst_10": 0.725,
     "o_xgAgainst_38": 0.7288235294117648
    },
-   "expected": 0.06799368560314178
+   "expected": -0.1552225947380066
   },
   {
    "position": "DEF",
@@ -11108,6 +11182,7 @@
    "fixture": 168,
    "playerCode": 545477,
    "features": {
+    "v3ep": 0.1410055686659625,
     "value": 38.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -11249,7 +11324,7 @@
     "o_xgAgainst_10": 1.283,
     "o_xgAgainst_38": 0.9436363636363636
    },
-   "expected": 0.06599921733140945
+   "expected": -0.1232035756111145
   },
   {
    "position": "DEF",
@@ -11258,6 +11333,7 @@
    "fixture": 283,
    "playerCode": 499169,
    "features": {
+    "v3ep": 0.8931552339198157,
     "value": 51.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0344827586206896,
@@ -11399,7 +11475,7 @@
     "o_xgAgainst_10": 0.8090000000000002,
     "o_xgAgainst_38": 0.7994736842105263
    },
-   "expected": 0.527886152267456
+   "expected": -0.2332901656627655
   },
   {
    "position": "DEF",
@@ -11408,6 +11484,7 @@
    "fixture": 272,
    "playerCode": 223911,
    "features": {
+    "v3ep": 0.1342028987391597,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -11549,7 +11626,7 @@
     "o_xgAgainst_10": 1.6959999999999995,
     "o_xgAgainst_38": 1.4681481481481484
    },
-   "expected": 0.06376360356807709
+   "expected": -0.12110891193151474
   },
   {
    "position": "DEF",
@@ -11558,6 +11635,7 @@
    "fixture": 245,
    "playerCode": 232892,
    "features": {
+    "v3ep": 1.9544591074902136,
     "value": 44.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.625,
@@ -11699,7 +11777,7 @@
     "o_xgAgainst_10": 0.7260000000000001,
     "o_xgAgainst_38": 0.7352631578947368
    },
-   "expected": 1.458271861076355
+   "expected": -0.19397133588790894
   },
   {
    "position": "DEF",
@@ -11708,6 +11786,7 @@
    "fixture": 198,
    "playerCode": 651426,
    "features": {
+    "v3ep": 1.1530077906551768,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0625,
@@ -11849,7 +11928,7 @@
     "o_xgAgainst_10": 1.427,
     "o_xgAgainst_38": 0.9863636363636364
    },
-   "expected": 1.0797336101531982
+   "expected": 0.018949173390865326
   },
   {
    "position": "DEF",
@@ -11858,6 +11937,7 @@
    "fixture": 328,
    "playerCode": 518906,
    "features": {
+    "v3ep": 0.1144343182762374,
     "value": 38.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -11999,7 +12079,7 @@
     "o_xgAgainst_10": 1.858,
     "o_xgAgainst_38": 1.2328571428571429
    },
-   "expected": 0.06599921733140945
+   "expected": -0.10795415192842484
   },
   {
    "position": "DEF",
@@ -12008,6 +12088,7 @@
    "fixture": 324,
    "playerCode": 156074,
    "features": {
+    "v3ep": 0.1438853254606395,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -12149,7 +12230,7 @@
     "o_xgAgainst_10": 1.289,
     "o_xgAgainst_38": 0.9878947368421052
    },
-   "expected": 0.0634864941239357
+   "expected": -0.12355954945087433
   },
   {
    "position": "DEF",
@@ -12158,6 +12239,7 @@
    "fixture": 93,
    "playerCode": 622536,
    "features": {
+    "v3ep": 0.1527880532665323,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -12299,7 +12381,7 @@
     "o_xgAgainst_10": 0.317,
     "o_xgAgainst_38": 0.3678787878787879
    },
-   "expected": 0.0690590962767601
+   "expected": -0.10177222639322281
   },
   {
    "position": "DEF",
@@ -12308,6 +12390,7 @@
    "fixture": 258,
    "playerCode": 204716,
    "features": {
+    "v3ep": 3.1327690501350087,
     "value": 54.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.96,
@@ -12449,7 +12532,7 @@
     "o_xgAgainst_10": 1.393,
     "o_xgAgainst_38": 1.4096000000000002
    },
-   "expected": 2.545869827270508
+   "expected": 0.19842176139354706
   },
   {
    "position": "DEF",
@@ -12458,6 +12541,7 @@
    "fixture": 14,
    "playerCode": 549329,
    "features": {
+    "v3ep": 0.2397147728758984,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -12599,7 +12683,7 @@
     "o_xgAgainst_10": 0.5700000000000001,
     "o_xgAgainst_38": 0.5700000000000001
    },
-   "expected": 0.12392133474349976
+   "expected": -0.13515208661556244
   },
   {
    "position": "DEF",
@@ -12608,6 +12692,7 @@
    "fixture": 25,
    "playerCode": 647681,
    "features": {
+    "v3ep": 0.2395009959903646,
     "value": 50.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -12749,7 +12834,7 @@
     "o_xgAgainst_10": 0.42,
     "o_xgAgainst_38": 0.42
    },
-   "expected": 0.2100241333246231
+   "expected": -0.040095388889312744
   },
   {
    "position": "DEF",
@@ -12758,6 +12843,7 @@
    "fixture": 363,
    "playerCode": 620487,
    "features": {
+    "v3ep": 1.0181868445354538,
     "value": 44.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.1212121212121212,
@@ -12899,7 +12985,7 @@
     "o_xgAgainst_10": 1.083,
     "o_xgAgainst_38": 0.6655263157894734
    },
-   "expected": 0.11416885256767273
+   "expected": -0.5090855956077576
   },
   {
    "position": "DEF",
@@ -12908,6 +12994,7 @@
    "fixture": 250,
    "playerCode": 460028,
    "features": {
+    "v3ep": 0.1394392441424991,
     "value": 47.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -13049,7 +13136,7 @@
     "o_xgAgainst_10": 1.324,
     "o_xgAgainst_38": 1.3674999999999995
    },
-   "expected": 0.5191962718963623
+   "expected": 0.08861209452152252
   },
   {
    "position": "DEF",
@@ -13058,6 +13145,7 @@
    "fixture": 261,
    "playerCode": 664015,
    "features": {
+    "v3ep": 0.1792554284350306,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -13199,7 +13287,7 @@
     "o_xgAgainst_10": 1.1700000000000002,
     "o_xgAgainst_38": 0.8971052631578948
    },
-   "expected": 0.06581055372953415
+   "expected": -0.129130020737648
   },
   {
    "position": "DEF",
@@ -13208,6 +13296,7 @@
    "fixture": 267,
    "playerCode": 97032,
    "features": {
+    "v3ep": 4.24186414719734,
     "value": 59.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -13349,7 +13438,7 @@
     "o_xgAgainst_10": 0.969,
     "o_xgAgainst_38": 0.7544736842105263
    },
-   "expected": 4.517205238342285
+   "expected": 0.7483111619949341
   },
   {
    "position": "DEF",
@@ -13358,6 +13447,7 @@
    "fixture": 100,
    "playerCode": 441191,
    "features": {
+    "v3ep": 1.832394307097066,
     "value": 49.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.6666666666666666,
@@ -13499,7 +13589,7 @@
     "o_xgAgainst_10": 0.979,
     "o_xgAgainst_38": 0.8477777777777777
    },
-   "expected": 1.6295597553253174
+   "expected": -0.8490296602249146
   },
   {
    "position": "DEF",
@@ -13508,6 +13598,7 @@
    "fixture": 181,
    "playerCode": 534836,
    "features": {
+    "v3ep": 0.1318311323653281,
     "value": 39.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -13649,7 +13740,7 @@
     "o_xgAgainst_10": 0.625,
     "o_xgAgainst_38": 0.5525
    },
-   "expected": 0.0634864941239357
+   "expected": -0.1386394202709198
   },
   {
    "position": "DEF",
@@ -13658,6 +13749,7 @@
    "fixture": 181,
    "playerCode": 226597,
    "features": {
+    "v3ep": 2.7296555363975012,
     "value": 63.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.6111111111111112,
@@ -13799,7 +13891,7 @@
     "o_xgAgainst_10": 0.8630000000000001,
     "o_xgAgainst_38": 0.6373684210526316
    },
-   "expected": 2.857189893722534
+   "expected": -0.049793072044849396
   },
   {
    "position": "DEF",
@@ -13808,6 +13900,7 @@
    "fixture": 19,
    "playerCode": 78916,
    "features": {
+    "v3ep": 3.942782931525119,
     "value": 50.0,
     "wasHome": 1.0,
     "laggedStartRate": 1.0,
@@ -13949,7 +14042,7 @@
     "o_xgAgainst_10": 0.855,
     "o_xgAgainst_38": 0.855
    },
-   "expected": 2.5020508766174316
+   "expected": -2.064223051071167
   },
   {
    "position": "DEF",
@@ -13958,6 +14051,7 @@
    "fixture": 149,
    "playerCode": 441164,
    "features": {
+    "v3ep": 3.105908430620494,
     "value": 54.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.8571428571428571,
@@ -14099,7 +14193,7 @@
     "o_xgAgainst_10": 1.168,
     "o_xgAgainst_38": 0.9738888888888888
    },
-   "expected": 2.2383487224578857
+   "expected": 0.2540535032749176
   },
   {
    "position": "DEF",
@@ -14108,6 +14202,7 @@
    "fixture": 160,
    "playerCode": 518438,
    "features": {
+    "v3ep": 0.1710899677948376,
     "value": 40.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -14249,7 +14344,7 @@
     "o_xgAgainst_10": 0.8210000000000001,
     "o_xgAgainst_38": 0.604
    },
-   "expected": 0.06601531058549881
+   "expected": -0.07962564378976822
   },
   {
    "position": "DEF",
@@ -14258,6 +14353,7 @@
    "fixture": 292,
    "playerCode": 231480,
    "features": {
+    "v3ep": 1.6971007672875196,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.6666666666666666,
@@ -14399,7 +14495,7 @@
     "o_xgAgainst_10": 1.417,
     "o_xgAgainst_38": 1.2230303030303034
    },
-   "expected": 2.190891742706299
+   "expected": 0.2532249093055725
   },
   {
    "position": "DEF",
@@ -14408,6 +14504,7 @@
    "fixture": 139,
    "playerCode": 220237,
    "features": {
+    "v3ep": 2.145878997291814,
     "value": 49.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.6153846153846154,
@@ -14549,7 +14646,7 @@
     "o_xgAgainst_10": 1.335,
     "o_xgAgainst_38": 1.3407692307692307
    },
-   "expected": 0.8122698664665222
+   "expected": -1.1033965349197388
   },
   {
    "position": "DEF",
@@ -14558,6 +14655,7 @@
    "fixture": 285,
    "playerCode": 158534,
    "features": {
+    "v3ep": 1.5170837970403452,
     "value": 42.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.3571428571428571,
@@ -14699,7 +14797,7 @@
     "o_xgAgainst_10": 1.089,
     "o_xgAgainst_38": 0.8444736842105264
    },
-   "expected": 0.5194329619407654
+   "expected": -1.036726474761963
   },
   {
    "position": "DEF",
@@ -14708,6 +14806,7 @@
    "fixture": 176,
    "playerCode": 97032,
    "features": {
+    "v3ep": 4.347247256774675,
     "value": 59.0,
     "wasHome": 1.0,
     "laggedStartRate": 1.0,
@@ -14849,7 +14948,7 @@
     "o_xgAgainst_10": 1.636,
     "o_xgAgainst_38": 1.5370588235294116
    },
-   "expected": 4.381420612335205
+   "expected": 0.8417962789535522
   },
   {
    "position": "DEF",
@@ -14858,6 +14957,7 @@
    "fixture": 30,
    "playerCode": 474907,
    "features": {
+    "v3ep": 0.152047237861034,
     "value": 40.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -14999,7 +15099,7 @@
     "o_xgAgainst_10": 1.875,
     "o_xgAgainst_38": 1.875
    },
-   "expected": 0.08421319723129272
+   "expected": -0.08609219640493393
   },
   {
    "position": "MID",
@@ -15008,6 +15108,7 @@
    "fixture": 151,
    "playerCode": 232413,
    "features": {
+    "v3ep": 3.4026685135284205,
     "value": 78.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.7333333333333333,
@@ -15149,7 +15250,7 @@
     "o_xgAgainst_10": 1.6020000000000003,
     "o_xgAgainst_38": 1.5826666666666662
    },
-   "expected": 2.904582977294922
+   "expected": -0.42775261402130127
   },
   {
    "position": "MID",
@@ -15158,6 +15259,7 @@
    "fixture": 169,
    "playerCode": 85971,
    "features": {
+    "v3ep": 0.2022066493681415,
     "value": 85.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -15299,7 +15401,7 @@
     "o_xgAgainst_10": 1.285,
     "o_xgAgainst_38": 1.097777777777778
    },
-   "expected": 0.45106473565101624
+   "expected": -0.06767616420984268
   },
   {
    "position": "MID",
@@ -15308,6 +15410,7 @@
    "fixture": 150,
    "playerCode": 618873,
    "features": {
+    "v3ep": 0.1461246202372358,
     "value": 43.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -15449,7 +15552,7 @@
     "o_xgAgainst_10": 1.235,
     "o_xgAgainst_38": 1.398571428571428
    },
-   "expected": 0.10718505829572678
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -15458,6 +15561,7 @@
    "fixture": 191,
    "playerCode": 195546,
    "features": {
+    "v3ep": 2.43425463495303,
     "value": 53.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.4210526315789473,
@@ -15599,7 +15703,7 @@
     "o_xgAgainst_10": 0.567,
     "o_xgAgainst_38": 0.6523684210526317
    },
-   "expected": 2.3598570823669434
+   "expected": 0.10988031327724457
   },
   {
    "position": "MID",
@@ -15608,6 +15712,7 @@
    "fixture": 69,
    "playerCode": 449434,
    "features": {
+    "v3ep": 2.2243161181711306,
     "value": 69.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.3333333333333333,
@@ -15749,7 +15854,7 @@
     "o_xgAgainst_10": 0.6319999999999999,
     "o_xgAgainst_38": 0.594
    },
-   "expected": 2.1709210872650146
+   "expected": 0.2922663986682892
   },
   {
    "position": "MID",
@@ -15758,6 +15863,7 @@
    "fixture": 216,
    "playerCode": 576628,
    "features": {
+    "v3ep": 0.3170391191190861,
     "value": 45.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -15899,7 +16005,7 @@
     "o_xgAgainst_10": 0.371,
     "o_xgAgainst_38": 0.3968421052631579
    },
-   "expected": 0.5132522583007812
+   "expected": 0.2076254040002823
   },
   {
    "position": "MID",
@@ -15908,6 +16014,7 @@
    "fixture": 211,
    "playerCode": 469247,
    "features": {
+    "v3ep": 0.1426032455598814,
     "value": 55.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -16049,7 +16156,7 @@
     "o_xgAgainst_10": 0.8210000000000001,
     "o_xgAgainst_38": 0.6934210526315789
    },
-   "expected": 0.12963777780532837
+   "expected": -0.10193384438753128
   },
   {
    "position": "MID",
@@ -16058,6 +16165,7 @@
    "fixture": 75,
    "playerCode": 430871,
    "features": {
+    "v3ep": 2.6741437636002656,
     "value": 80.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.5714285714285714,
@@ -16199,7 +16307,7 @@
     "o_xgAgainst_10": 0.8788888888888889,
     "o_xgAgainst_38": 0.8788888888888889
    },
-   "expected": 3.0555243492126465
+   "expected": 0.12892968952655792
   },
   {
    "position": "MID",
@@ -16208,6 +16316,7 @@
    "fixture": 100,
    "playerCode": 197024,
    "features": {
+    "v3ep": 0.8194343843169062,
     "value": 48.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.1111111111111111,
@@ -16349,7 +16458,7 @@
     "o_xgAgainst_10": 0.7230000000000001,
     "o_xgAgainst_38": 0.6191666666666666
    },
-   "expected": 0.3558507263660431
+   "expected": -0.5832577347755432
   },
   {
    "position": "MID",
@@ -16358,6 +16467,7 @@
    "fixture": 171,
    "playerCode": 513433,
    "features": {
+    "v3ep": 2.02001727148611,
     "value": 54.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.2941176470588235,
@@ -16499,7 +16609,7 @@
     "o_xgAgainst_10": 0.584,
     "o_xgAgainst_38": 0.5368421052631579
    },
-   "expected": 2.1773951053619385
+   "expected": 0.2302986979484558
   },
   {
    "position": "MID",
@@ -16508,6 +16618,7 @@
    "fixture": 169,
    "playerCode": 494595,
    "features": {
+    "v3ep": 2.3871006996678674,
     "value": 80.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.6875,
@@ -16649,7 +16760,7 @@
     "o_xgAgainst_10": 1.4899999999999998,
     "o_xgAgainst_38": 1.38
    },
-   "expected": 3.4051671028137207
+   "expected": 0.819128692150116
   },
   {
    "position": "MID",
@@ -16658,6 +16769,7 @@
    "fixture": 182,
    "playerCode": 200641,
    "features": {
+    "v3ep": 0.4196856502769698,
     "value": 48.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -16799,7 +16911,7 @@
     "o_xgAgainst_10": 1.485,
     "o_xgAgainst_38": 1.3372222222222223
    },
-   "expected": 0.811223030090332
+   "expected": 0.3348241448402405
   },
   {
    "position": "MID",
@@ -16808,6 +16920,7 @@
    "fixture": 126,
    "playerCode": 590039,
    "features": {
+    "v3ep": 0.1809321341419817,
     "value": 45.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -16949,7 +17062,7 @@
     "o_xgAgainst_10": 0.8300000000000001,
     "o_xgAgainst_38": 0.6745833333333335
    },
-   "expected": 0.10718505829572678
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -16958,6 +17071,7 @@
    "fixture": 333,
    "playerCode": 451340,
    "features": {
+    "v3ep": 2.2536029208027832,
     "value": 61.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.5,
@@ -17099,7 +17213,7 @@
     "o_xgAgainst_10": 1.3010000000000002,
     "o_xgAgainst_38": 1.1657894736842105
    },
-   "expected": 1.9787577390670776
+   "expected": -0.20122767984867096
   },
   {
    "position": "MID",
@@ -17108,6 +17222,7 @@
    "fixture": 210,
    "playerCode": 250199,
    "features": {
+    "v3ep": 1.4938062121871334,
     "value": 50.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.35,
@@ -17249,7 +17364,7 @@
     "o_xgAgainst_10": 0.92,
     "o_xgAgainst_38": 0.8989473684210525
    },
-   "expected": 1.765611171722412
+   "expected": 0.3409659266471863
   },
   {
    "position": "MID",
@@ -17258,6 +17373,7 @@
    "fixture": 169,
    "playerCode": 445044,
    "features": {
+    "v3ep": 0.1613848311134372,
     "value": 64.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -17399,7 +17515,7 @@
     "o_xgAgainst_10": 1.285,
     "o_xgAgainst_38": 1.097777777777778
    },
-   "expected": 0.24339084327220917
+   "expected": -0.0839562937617302
   },
   {
    "position": "MID",
@@ -17408,6 +17524,7 @@
    "fixture": 349,
    "playerCode": 208706,
    "features": {
+    "v3ep": 2.3942768903744467,
     "value": 68.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.6764705882352942,
@@ -17549,7 +17666,7 @@
     "o_xgAgainst_10": 0.923,
     "o_xgAgainst_38": 0.8389473684210527
    },
-   "expected": 2.9182288646698
+   "expected": 0.24122360348701477
   },
   {
    "position": "MID",
@@ -17558,6 +17675,7 @@
    "fixture": 318,
    "playerCode": 215379,
    "features": {
+    "v3ep": 4.536510327121521,
     "value": 55.0,
     "wasHome": 1.0,
     "laggedStartRate": 1.0,
@@ -17699,7 +17817,7 @@
     "o_xgAgainst_10": 1.295,
     "o_xgAgainst_38": 0.8944736842105265
    },
-   "expected": 3.5688257217407227
+   "expected": -0.03752204403281212
   },
   {
    "position": "MID",
@@ -17708,6 +17826,7 @@
    "fixture": 364,
    "playerCode": 466117,
    "features": {
+    "v3ep": 0.1088445360638658,
     "value": 43.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -17849,7 +17968,7 @@
     "o_xgAgainst_10": 1.341,
     "o_xgAgainst_38": 1.2613157894736844
    },
-   "expected": 0.11346492171287537
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -17858,6 +17977,7 @@
    "fixture": 180,
    "playerCode": 207189,
    "features": {
+    "v3ep": 2.994556783995862,
     "value": 49.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -17999,7 +18119,7 @@
     "o_xgAgainst_10": 0.7470000000000001,
     "o_xgAgainst_38": 0.8352941176470589
    },
-   "expected": 2.0579886436462402
+   "expected": -0.8393011689186096
   },
   {
    "position": "MID",
@@ -18008,6 +18128,7 @@
    "fixture": 251,
    "playerCode": 577285,
    "features": {
+    "v3ep": 0.2623659503628069,
     "value": 45.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -18149,7 +18270,7 @@
     "o_xgAgainst_10": 0.7690000000000001,
     "o_xgAgainst_38": 0.7936842105263159
    },
-   "expected": 0.12790866196155548
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -18158,6 +18279,7 @@
    "fixture": 253,
    "playerCode": 536916,
    "features": {
+    "v3ep": 0.6155825580852399,
     "value": 46.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.04,
@@ -18299,7 +18421,7 @@
     "o_xgAgainst_10": 1.552,
     "o_xgAgainst_38": 1.1367741935483868
    },
-   "expected": 0.4040965437889099
+   "expected": -0.13709284365177155
   },
   {
    "position": "MID",
@@ -18308,6 +18430,7 @@
    "fixture": 138,
    "playerCode": 224024,
    "features": {
+    "v3ep": 3.006625672473419,
     "value": 59.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.9230769230769232,
@@ -18449,7 +18572,7 @@
     "o_xgAgainst_10": 1.457,
     "o_xgAgainst_38": 1.4530769230769232
    },
-   "expected": 2.674729824066162
+   "expected": -0.5020378828048706
   },
   {
    "position": "MID",
@@ -18458,6 +18581,7 @@
    "fixture": 70,
    "playerCode": 592031,
    "features": {
+    "v3ep": 4.137931143973052,
     "value": 59.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -18599,7 +18723,7 @@
     "o_xgAgainst_10": 1.4316666666666666,
     "o_xgAgainst_38": 1.4316666666666666
    },
-   "expected": 3.782097339630127
+   "expected": 0.10089205950498581
   },
   {
    "position": "MID",
@@ -18608,6 +18732,7 @@
    "fixture": 288,
    "playerCode": 449434,
    "features": {
+    "v3ep": 2.2249002225605765,
     "value": 65.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.3928571428571428,
@@ -18749,7 +18874,7 @@
     "o_xgAgainst_10": 0.8610000000000001,
     "o_xgAgainst_38": 1.1921428571428572
    },
-   "expected": 2.140308380126953
+   "expected": 0.014452241361141205
   },
   {
    "position": "MID",
@@ -18758,6 +18883,7 @@
    "fixture": 351,
    "playerCode": 514254,
    "features": {
+    "v3ep": 2.914286126082835,
     "value": 49.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.7142857142857143,
@@ -18899,7 +19025,7 @@
     "o_xgAgainst_10": 1.875,
     "o_xgAgainst_38": 1.5714285714285712
    },
-   "expected": 0.8982686996459961
+   "expected": -1.3787474632263184
   },
   {
    "position": "MID",
@@ -18908,6 +19034,7 @@
    "fixture": 216,
    "playerCode": 556639,
    "features": {
+    "v3ep": 0.1317993105290865,
     "value": 43.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -19049,7 +19176,7 @@
     "o_xgAgainst_10": 0.371,
     "o_xgAgainst_38": 0.3968421052631579
    },
-   "expected": 0.10718505829572678
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -19058,6 +19185,7 @@
    "fixture": 130,
    "playerCode": 149519,
    "features": {
+    "v3ep": 0.1669474796729868,
     "value": 49.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -19199,7 +19327,7 @@
     "o_xgAgainst_10": 1.249,
     "o_xgAgainst_38": 1.116428571428571
    },
-   "expected": 0.11496489495038986
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -19208,6 +19336,7 @@
    "fixture": 109,
    "playerCode": 499721,
    "features": {
+    "v3ep": 0.1624872281587908,
     "value": 50.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -19349,7 +19478,7 @@
     "o_xgAgainst_10": 1.589,
     "o_xgAgainst_38": 1.589
    },
-   "expected": 0.11496489495038986
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -19358,6 +19487,7 @@
    "fixture": 107,
    "playerCode": 503301,
    "features": {
+    "v3ep": 0.644089967743448,
     "value": 54.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -19499,7 +19629,7 @@
     "o_xgAgainst_10": 0.5539999999999999,
     "o_xgAgainst_38": 0.6035000000000001
    },
-   "expected": 0.6313742399215698
+   "expected": 0.06317802518606186
   },
   {
    "position": "MID",
@@ -19508,6 +19638,7 @@
    "fixture": 227,
    "playerCode": 549074,
    "features": {
+    "v3ep": 0.3990952229714266,
     "value": 48.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -19649,7 +19780,7 @@
     "o_xgAgainst_10": 0.783,
     "o_xgAgainst_38": 0.6613157894736842
    },
-   "expected": 0.344417005777359
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -19658,6 +19789,7 @@
    "fixture": 60,
    "playerCode": 240299,
    "features": {
+    "v3ep": 0.1093857378704924,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -19799,7 +19931,7 @@
     "o_xgAgainst_10": 1.198,
     "o_xgAgainst_38": 1.198
    },
-   "expected": 0.10718505829572678
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -19808,6 +19940,7 @@
    "fixture": 25,
    "playerCode": 184029,
    "features": {
+    "v3ep": 4.482871439343833,
     "value": 79.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -19949,7 +20082,7 @@
     "o_xgAgainst_10": 0.8833333333333333,
     "o_xgAgainst_38": 0.8833333333333333
    },
-   "expected": 2.6686346530914307
+   "expected": -0.17987890541553497
   },
   {
    "position": "MID",
@@ -19958,6 +20091,7 @@
    "fixture": 179,
    "playerCode": 626844,
    "features": {
+    "v3ep": 0.168733123087916,
     "value": 49.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -20099,7 +20233,7 @@
     "o_xgAgainst_10": 0.825,
     "o_xgAgainst_38": 0.7406060606060607
    },
-   "expected": 0.11456853896379471
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -20108,6 +20242,7 @@
    "fixture": 17,
    "playerCode": 61256,
    "features": {
+    "v3ep": 3.4478943532655673,
     "value": 55.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -20249,7 +20384,7 @@
     "o_xgAgainst_10": 0.7450000000000002,
     "o_xgAgainst_38": 0.7450000000000002
    },
-   "expected": 2.0661652088165283
+   "expected": -0.8304740786552429
   },
   {
    "position": "MID",
@@ -20258,6 +20393,7 @@
    "fixture": 109,
    "playerCode": 547701,
    "features": {
+    "v3ep": 0.7616176439033591,
     "value": 48.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.1,
@@ -20399,7 +20535,7 @@
     "o_xgAgainst_10": 1.589,
     "o_xgAgainst_38": 1.589
    },
-   "expected": 0.21209320425987244
+   "expected": -0.49413225054740906
   },
   {
    "position": "MID",
@@ -20408,6 +20544,7 @@
    "fixture": 25,
    "playerCode": 200641,
    "features": {
+    "v3ep": 0.5006659730902773,
     "value": 50.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -20549,7 +20686,7 @@
     "o_xgAgainst_10": 0.8833333333333333,
     "o_xgAgainst_38": 0.8833333333333333
    },
-   "expected": 0.20969165861606598
+   "expected": -0.017178745940327644
   },
   {
    "position": "MID",
@@ -20558,6 +20695,7 @@
    "fixture": 182,
    "playerCode": 606689,
    "features": {
+    "v3ep": 0.1511683571188255,
     "value": 44.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -20699,7 +20837,7 @@
     "o_xgAgainst_10": 1.485,
     "o_xgAgainst_38": 1.3372222222222223
    },
-   "expected": 0.10718505829572678
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -20708,6 +20846,7 @@
    "fixture": 133,
    "playerCode": 244850,
    "features": {
+    "v3ep": 3.287580631475591,
     "value": 69.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -20849,7 +20988,7 @@
     "o_xgAgainst_10": 0.516,
     "o_xgAgainst_38": 0.6895652173913045
    },
-   "expected": 3.3060195446014404
+   "expected": -0.1180252805352211
   },
   {
    "position": "MID",
@@ -20858,6 +20997,7 @@
    "fixture": 34,
    "playerCode": 441266,
    "features": {
+    "v3ep": 2.103781416080319,
     "value": 55.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.6666666666666666,
@@ -20999,7 +21139,7 @@
     "o_xgAgainst_10": 1.12,
     "o_xgAgainst_38": 1.12
    },
-   "expected": 2.3800251483917236
+   "expected": 0.14256823062896729
   },
   {
    "position": "MID",
@@ -21008,6 +21148,7 @@
    "fixture": 303,
    "playerCode": 441266,
    "features": {
+    "v3ep": 2.8332338129342585,
     "value": 55.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.9333333333333332,
@@ -21149,7 +21290,7 @@
     "o_xgAgainst_10": 0.812,
     "o_xgAgainst_38": 0.8210526315789475
    },
-   "expected": 2.845693826675415
+   "expected": 0.23829518258571625
   },
   {
    "position": "MID",
@@ -21158,6 +21299,7 @@
    "fixture": 276,
    "playerCode": 248937,
    "features": {
+    "v3ep": 0.1208141682826432,
     "value": 49.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -21299,7 +21441,7 @@
     "o_xgAgainst_10": 0.834,
     "o_xgAgainst_38": 0.526578947368421
    },
-   "expected": 0.11456853896379471
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -21308,6 +21450,7 @@
    "fixture": 327,
    "playerCode": 575204,
    "features": {
+    "v3ep": 0.1344127509795157,
     "value": 54.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -21449,7 +21592,7 @@
     "o_xgAgainst_10": 0.771,
     "o_xgAgainst_38": 0.7185294117647059
    },
-   "expected": 0.11734279245138168
+   "expected": -0.10193384438753128
   },
   {
    "position": "MID",
@@ -21458,6 +21601,7 @@
    "fixture": 303,
    "playerCode": 243016,
    "features": {
+    "v3ep": 2.628667056946302,
     "value": 63.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.8333333333333334,
@@ -21599,7 +21743,7 @@
     "o_xgAgainst_10": 0.812,
     "o_xgAgainst_38": 0.8210526315789475
    },
-   "expected": 3.0281617641448975
+   "expected": 0.28644317388534546
   },
   {
    "position": "MID",
@@ -21608,6 +21752,7 @@
    "fixture": 301,
    "playerCode": 490142,
    "features": {
+    "v3ep": 1.614260796712275,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.3666666666666666,
@@ -21749,7 +21894,7 @@
     "o_xgAgainst_10": 1.202,
     "o_xgAgainst_38": 0.8894736842105266
    },
-   "expected": 0.39030542969703674
+   "expected": -0.9520619511604309
   },
   {
    "position": "MID",
@@ -21758,6 +21903,7 @@
    "fixture": 85,
    "playerCode": 500696,
    "features": {
+    "v3ep": 0.1606340144013679,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -21899,7 +22045,7 @@
     "o_xgAgainst_10": 1.086,
     "o_xgAgainst_38": 0.8742857142857144
    },
-   "expected": 0.10718505829572678
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -21908,6 +22054,7 @@
    "fixture": 219,
    "playerCode": 518442,
    "features": {
+    "v3ep": 0.1268031805521333,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -22049,7 +22196,7 @@
     "o_xgAgainst_10": 1.161,
     "o_xgAgainst_38": 1.2695238095238095
    },
-   "expected": 0.10718505829572678
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -22058,6 +22205,7 @@
    "fixture": 111,
    "playerCode": 623095,
    "features": {
+    "v3ep": 0.151229635472857,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -22199,7 +22347,7 @@
     "o_xgAgainst_10": 0.443,
     "o_xgAgainst_38": 0.47
    },
-   "expected": 0.10718505829572678
+   "expected": -0.11665517091751099
   },
   {
    "position": "MID",
@@ -22208,6 +22356,7 @@
    "fixture": 96,
    "playerCode": 222683,
    "features": {
+    "v3ep": 2.0447853269658367,
     "value": 70.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.3333333333333333,
@@ -22349,7 +22498,7 @@
     "o_xgAgainst_10": 0.244,
     "o_xgAgainst_38": 0.3573076923076923
    },
-   "expected": 2.467372417449951
+   "expected": 0.29060202836990356
   },
   {
    "position": "MID",
@@ -22358,6 +22507,7 @@
    "fixture": 142,
    "playerCode": 200785,
    "features": {
+    "v3ep": 3.5350266886664268,
     "value": 50.0,
     "wasHome": 1.0,
     "laggedStartRate": 1.0,
@@ -22499,7 +22649,7 @@
     "o_xgAgainst_10": 1.448,
     "o_xgAgainst_38": 0.915
    },
-   "expected": 2.2246556282043457
+   "expected": -0.48340287804603577
   },
   {
    "position": "FWD",
@@ -22508,6 +22658,7 @@
    "fixture": 12,
    "playerCode": 444102,
    "features": {
+    "v3ep": 4.291048819009466,
     "value": 70.0,
     "wasHome": 1.0,
     "laggedStartRate": 1.0,
@@ -22649,7 +22800,7 @@
     "o_xgAgainst_10": 2.46,
     "o_xgAgainst_38": 2.46
    },
-   "expected": 3.943373680114746
+   "expected": 1.244781255722046
   },
   {
    "position": "FWD",
@@ -22658,6 +22809,7 @@
    "fixture": 13,
    "playerCode": 216646,
    "features": {
+    "v3ep": 0.6919007421262097,
     "value": 75.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -22799,7 +22951,7 @@
     "o_xgAgainst_10": 0.4733333333333333,
     "o_xgAgainst_38": 0.4733333333333333
    },
-   "expected": 0.30397114157676697
+   "expected": -0.031061947345733643
   },
   {
    "position": "FWD",
@@ -22808,6 +22960,7 @@
    "fixture": 330,
    "playerCode": 490145,
    "features": {
+    "v3ep": 0.1786854404843364,
     "value": 43.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -22949,7 +23102,7 @@
     "o_xgAgainst_10": 0.897,
     "o_xgAgainst_38": 0.8331578947368421
    },
-   "expected": 0.1266867071390152
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -22958,6 +23111,7 @@
    "fixture": 373,
    "playerCode": 199670,
    "features": {
+    "v3ep": 0.1357484692316005,
     "value": 50.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -23099,7 +23253,7 @@
     "o_xgAgainst_10": 0.899,
     "o_xgAgainst_38": 0.7113157894736842
    },
-   "expected": 0.1918351799249649
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -23108,6 +23262,7 @@
    "fixture": 258,
    "playerCode": 500058,
    "features": {
+    "v3ep": 0.1325368552749121,
     "value": 43.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -23249,7 +23404,7 @@
     "o_xgAgainst_10": 1.393,
     "o_xgAgainst_38": 1.4096000000000002
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -23258,6 +23413,7 @@
    "fixture": 151,
    "playerCode": 488213,
    "features": {
+    "v3ep": 1.5838481443845651,
     "value": 54.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.25,
@@ -23399,7 +23555,7 @@
     "o_xgAgainst_10": 0.6360000000000001,
     "o_xgAgainst_38": 0.5658823529411764
    },
-   "expected": 1.5200172662734985
+   "expected": 0.3483821749687195
   },
   {
    "position": "FWD",
@@ -23408,6 +23564,7 @@
    "fixture": 253,
    "playerCode": 235826,
    "features": {
+    "v3ep": 1.0850580598748658,
     "value": 49.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.08,
@@ -23549,7 +23706,7 @@
     "o_xgAgainst_10": 1.552,
     "o_xgAgainst_38": 1.1367741935483868
    },
-   "expected": 0.46913784742355347
+   "expected": -0.44820910692214966
   },
   {
    "position": "FWD",
@@ -23558,6 +23715,7 @@
    "fixture": 163,
    "playerCode": 611975,
    "features": {
+    "v3ep": 0.1540464967826281,
     "value": 43.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -23699,7 +23857,7 @@
     "o_xgAgainst_10": 0.817,
     "o_xgAgainst_38": 0.7646428571428573
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -23708,6 +23866,7 @@
    "fixture": 291,
    "playerCode": 491012,
    "features": {
+    "v3ep": 0.1194368496313394,
     "value": 49.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -23849,7 +24008,7 @@
     "o_xgAgainst_10": 0.6149999999999999,
     "o_xgAgainst_38": 0.6928124999999999
    },
-   "expected": 0.15340721607208252
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -23858,6 +24017,7 @@
    "fixture": 115,
    "playerCode": 551153,
    "features": {
+    "v3ep": 0.1539034514542841,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -23999,7 +24159,7 @@
     "o_xgAgainst_10": 0.6880000000000001,
     "o_xgAgainst_38": 0.6759090909090909
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -24008,6 +24168,7 @@
    "fixture": 128,
    "playerCode": 441264,
    "features": {
+    "v3ep": 0.8876684027994973,
     "value": 55.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -24149,7 +24310,7 @@
     "o_xgAgainst_10": 1.3050000000000002,
     "o_xgAgainst_38": 1.3108333333333333
    },
-   "expected": 1.8813691139221191
+   "expected": 0.5292792320251465
   },
   {
    "position": "FWD",
@@ -24158,6 +24319,7 @@
    "fixture": 273,
    "playerCode": 60689,
    "features": {
+    "v3ep": 1.3749693813131494,
     "value": 72.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.2592592592592592,
@@ -24299,7 +24461,7 @@
     "o_xgAgainst_10": 0.972,
     "o_xgAgainst_38": 0.8228947368421052
    },
-   "expected": 0.3187551200389862
+   "expected": -0.6535621285438538
   },
   {
    "position": "FWD",
@@ -24308,6 +24470,7 @@
    "fixture": 207,
    "playerCode": 517052,
    "features": {
+    "v3ep": 0.1442940695525713,
     "value": 65.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -24449,7 +24612,7 @@
     "o_xgAgainst_10": 0.694,
     "o_xgAgainst_38": 0.6626315789473683
    },
-   "expected": 0.19010062515735626
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -24458,6 +24621,7 @@
    "fixture": 24,
    "playerCode": 538207,
    "features": {
+    "v3ep": 0.6415105993174782,
     "value": 55.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -24599,7 +24763,7 @@
     "o_xgAgainst_10": 0.8600000000000001,
     "o_xgAgainst_38": 0.8600000000000001
    },
-   "expected": 2.4864559173583984
+   "expected": 1.4382597208023071
   },
   {
    "position": "FWD",
@@ -24608,6 +24772,7 @@
    "fixture": 360,
    "playerCode": 247670,
    "features": {
+    "v3ep": 3.3768879875560174,
     "value": 55.0,
     "wasHome": 1.0,
     "laggedStartRate": 1.0,
@@ -24749,7 +24914,7 @@
     "o_xgAgainst_10": 0.9440000000000002,
     "o_xgAgainst_38": 0.7348648648648648
    },
-   "expected": 2.7150604724884033
+   "expected": -0.9791480302810669
   },
   {
    "position": "FWD",
@@ -24758,6 +24923,7 @@
    "fixture": 283,
    "playerCode": 608181,
    "features": {
+    "v3ep": 0.9351497806887178,
     "value": 52.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0357142857142857,
@@ -24899,7 +25065,7 @@
     "o_xgAgainst_10": 0.6769999999999999,
     "o_xgAgainst_38": 0.6890322580645161
    },
-   "expected": 0.15499378740787506
+   "expected": -0.4610770344734192
   },
   {
    "position": "FWD",
@@ -24908,6 +25074,7 @@
    "fixture": 292,
    "playerCode": 647671,
    "features": {
+    "v3ep": 1.8496834698823184,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.65,
@@ -25049,7 +25216,7 @@
     "o_xgAgainst_10": 1.417,
     "o_xgAgainst_38": 1.2230303030303034
    },
-   "expected": 3.321098804473877
+   "expected": 0.7549079656600952
   },
   {
    "position": "FWD",
@@ -25058,6 +25225,7 @@
    "fixture": 317,
    "playerCode": 174594,
    "features": {
+    "v3ep": 2.3202296943960223,
     "value": 50.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.2903225806451613,
@@ -25199,7 +25367,7 @@
     "o_xgAgainst_10": 1.15,
     "o_xgAgainst_38": 1.2483870967741937
    },
-   "expected": 2.562492609024048
+   "expected": 0.5688928961753845
   },
   {
    "position": "FWD",
@@ -25208,6 +25376,7 @@
    "fixture": 193,
    "playerCode": 608181,
    "features": {
+    "v3ep": 1.513048689210846,
     "value": 52.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0526315789473684,
@@ -25349,7 +25518,7 @@
     "o_xgAgainst_10": 0.893,
     "o_xgAgainst_38": 1.0416216216216216
    },
-   "expected": 0.31771546602249146
+   "expected": -0.5296642184257507
   },
   {
    "position": "FWD",
@@ -25358,6 +25527,7 @@
    "fixture": 91,
    "playerCode": 647850,
    "features": {
+    "v3ep": 0.445458765448968,
     "value": 48.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -25499,7 +25669,7 @@
     "o_xgAgainst_10": 0.425,
     "o_xgAgainst_38": 0.5000000000000001
    },
-   "expected": 2.1705148220062256
+   "expected": 1.8911131620407104
   },
   {
    "position": "FWD",
@@ -25508,6 +25678,7 @@
    "fixture": 361,
    "playerCode": 44699,
    "features": {
+    "v3ep": 0.2916759346176222,
     "value": 42.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -25649,7 +25820,7 @@
     "o_xgAgainst_10": 0.91,
     "o_xgAgainst_38": 0.7460526315789473
    },
-   "expected": 0.22198486328125
+   "expected": -0.13589660823345184
   },
   {
    "position": "FWD",
@@ -25658,6 +25829,7 @@
    "fixture": 68,
    "playerCode": 485711,
    "features": {
+    "v3ep": 2.20113860478331,
     "value": 73.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.5,
@@ -25799,7 +25971,7 @@
     "o_xgAgainst_10": 1.1566666666666665,
     "o_xgAgainst_38": 1.1566666666666665
    },
-   "expected": 3.2988247871398926
+   "expected": 1.6175572872161865
   },
   {
    "position": "FWD",
@@ -25808,6 +25980,7 @@
    "fixture": 366,
    "playerCode": 491012,
    "features": {
+    "v3ep": 0.1334657854710466,
     "value": 49.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -25949,7 +26122,7 @@
     "o_xgAgainst_10": 1.483,
     "o_xgAgainst_38": 1.4608333333333337
    },
-   "expected": 0.15340721607208252
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -25958,6 +26131,7 @@
    "fixture": 373,
    "playerCode": 205651,
    "features": {
+    "v3ep": 1.1164913308366415,
     "value": 64.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.054054054054054,
@@ -26099,7 +26273,7 @@
     "o_xgAgainst_10": 1.458,
     "o_xgAgainst_38": 0.8313157894736841
    },
-   "expected": 0.5677089691162109
+   "expected": -0.5345862507820129
   },
   {
    "position": "FWD",
@@ -26108,6 +26282,7 @@
    "fixture": 344,
    "playerCode": 247670,
    "features": {
+    "v3ep": 3.3416245323210374,
     "value": 55.0,
     "wasHome": 0.0,
     "laggedStartRate": 1.0,
@@ -26249,7 +26424,7 @@
     "o_xgAgainst_10": 1.231,
     "o_xgAgainst_38": 1.2068421052631582
    },
-   "expected": 3.4581243991851807
+   "expected": -0.13166260719299316
   },
   {
    "position": "FWD",
@@ -26258,6 +26433,7 @@
    "fixture": 278,
    "playerCode": 575034,
    "features": {
+    "v3ep": 0.1291516322731603,
     "value": 45.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -26399,7 +26575,7 @@
     "o_xgAgainst_10": 0.571,
     "o_xgAgainst_38": 0.4989473684210526
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -26408,6 +26584,7 @@
    "fixture": 346,
    "playerCode": 586309,
    "features": {
+    "v3ep": 2.191846233793085,
     "value": 57.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.5882352941176471,
@@ -26549,7 +26726,7 @@
     "o_xgAgainst_10": 1.082,
     "o_xgAgainst_38": 0.5921052631578947
    },
-   "expected": 2.5059473514556885
+   "expected": 0.3902578353881836
   },
   {
    "position": "FWD",
@@ -26558,6 +26735,7 @@
    "fixture": 320,
    "playerCode": 75115,
    "features": {
+    "v3ep": 2.3304639593499408,
     "value": 58.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.3225806451612903,
@@ -26699,7 +26877,7 @@
     "o_xgAgainst_10": 1.858,
     "o_xgAgainst_38": 1.555806451612903
    },
-   "expected": 2.218611717224121
+   "expected": 0.3765549957752228
   },
   {
    "position": "FWD",
@@ -26708,6 +26886,7 @@
    "fixture": 131,
    "playerCode": 205651,
    "features": {
+    "v3ep": 0.2124849075480093,
     "value": 64.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -26849,7 +27028,7 @@
     "o_xgAgainst_10": 1.114,
     "o_xgAgainst_38": 0.9252941176470588
    },
-   "expected": 0.1918351799249649
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -26858,6 +27037,7 @@
    "fixture": 122,
    "playerCode": 431639,
    "features": {
+    "v3ep": 1.829835671864145,
     "value": 53.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.4166666666666667,
@@ -26999,7 +27179,7 @@
     "o_xgAgainst_10": 1.018,
     "o_xgAgainst_38": 0.923125
    },
-   "expected": 2.0875189304351807
+   "expected": 0.5358538031578064
   },
   {
    "position": "FWD",
@@ -27008,6 +27188,7 @@
    "fixture": 215,
    "playerCode": 447203,
    "features": {
+    "v3ep": 0.2208378640947572,
     "value": 65.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -27149,7 +27330,7 @@
     "o_xgAgainst_10": 0.892,
     "o_xgAgainst_38": 1.0378947368421054
    },
-   "expected": 0.19010062515735626
+   "expected": -0.074590764939785
   },
   {
    "position": "FWD",
@@ -27158,6 +27339,7 @@
    "fixture": 151,
    "playerCode": 531363,
    "features": {
+    "v3ep": 0.1283707959157962,
     "value": 43.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -27299,7 +27481,7 @@
     "o_xgAgainst_10": 0.6360000000000001,
     "o_xgAgainst_38": 0.5658823529411764
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -27308,6 +27490,7 @@
    "fixture": 45,
    "playerCode": 533710,
    "features": {
+    "v3ep": 0.1394440451091042,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -27449,7 +27632,7 @@
     "o_xgAgainst_10": 0.7837500000000001,
     "o_xgAgainst_38": 0.7837500000000001
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -27458,6 +27641,7 @@
    "fixture": 275,
    "playerCode": 154566,
    "features": {
+    "v3ep": 1.247183564655894,
     "value": 72.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.1481481481481481,
@@ -27599,7 +27783,7 @@
     "o_xgAgainst_10": 1.254,
     "o_xgAgainst_38": 0.8215789473684211
    },
-   "expected": 2.308711528778076
+   "expected": 0.537125289440155
   },
   {
    "position": "FWD",
@@ -27608,6 +27792,7 @@
    "fixture": 109,
    "playerCode": 458249,
    "features": {
+    "v3ep": 0.5425445542026984,
     "value": 58.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -27749,7 +27934,7 @@
     "o_xgAgainst_10": 1.443,
     "o_xgAgainst_38": 1.443
    },
-   "expected": 0.6255878210067749
+   "expected": 0.2237267941236496
   },
   {
    "position": "FWD",
@@ -27758,6 +27943,7 @@
    "fixture": 240,
    "playerCode": 444102,
    "features": {
+    "v3ep": 2.6149320079482217,
     "value": 71.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.782608695652174,
@@ -27899,7 +28085,7 @@
     "o_xgAgainst_10": 1.262,
     "o_xgAgainst_38": 1.3678260869565215
    },
-   "expected": 3.633988380432129
+   "expected": 0.8531087636947632
   },
   {
    "position": "FWD",
@@ -27908,6 +28094,7 @@
    "fixture": 136,
    "playerCode": 565297,
    "features": {
+    "v3ep": 0.1487182375008513,
     "value": 50.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -28049,7 +28236,7 @@
     "o_xgAgainst_10": 1.311,
     "o_xgAgainst_38": 0.8163157894736843
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -28058,6 +28245,7 @@
    "fixture": 130,
    "playerCode": 91889,
    "features": {
+    "v3ep": 1.6804695573662394,
     "value": 56.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.4166666666666667,
@@ -28199,7 +28387,7 @@
     "o_xgAgainst_10": 1.249,
     "o_xgAgainst_38": 1.116428571428571
    },
-   "expected": 1.5746960639953613
+   "expected": 0.3246660828590393
   },
   {
    "position": "FWD",
@@ -28208,6 +28396,7 @@
    "fixture": 160,
    "playerCode": 178301,
    "features": {
+    "v3ep": 2.9130278604175284,
     "value": 85.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.8666666666666667,
@@ -28349,7 +28538,7 @@
     "o_xgAgainst_10": 0.986,
     "o_xgAgainst_38": 0.8546666666666667
    },
-   "expected": 4.12890625
+   "expected": 0.5821032524108887
   },
   {
    "position": "FWD",
@@ -28358,6 +28547,7 @@
    "fixture": 353,
    "playerCode": 486385,
    "features": {
+    "v3ep": 2.4032249554195166,
     "value": 50.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.4285714285714285,
@@ -28499,7 +28689,7 @@
     "o_xgAgainst_10": 1.275,
     "o_xgAgainst_38": 0.7034210526315788
    },
-   "expected": 3.2784111499786377
+   "expected": 0.989694356918335
   },
   {
    "position": "FWD",
@@ -28508,6 +28698,7 @@
    "fixture": 27,
    "playerCode": 565431,
    "features": {
+    "v3ep": 0.1356769252041546,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -28649,7 +28840,7 @@
     "o_xgAgainst_10": 0.4316666666666667,
     "o_xgAgainst_38": 0.4316666666666667
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -28658,6 +28849,7 @@
    "fixture": 255,
    "playerCode": 590760,
    "features": {
+    "v3ep": 0.1303204827902912,
     "value": 44.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -28799,7 +28991,7 @@
     "o_xgAgainst_10": 0.683,
     "o_xgAgainst_38": 0.7871052631578948
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -28808,6 +29000,7 @@
    "fixture": 129,
    "playerCode": 154566,
    "features": {
+    "v3ep": 0.3220920927810912,
     "value": 72.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -28949,7 +29142,7 @@
     "o_xgAgainst_10": 0.593,
     "o_xgAgainst_38": 0.6266666666666666
    },
-   "expected": 0.19010062515735626
+   "expected": -0.15058957040309906
   },
   {
    "position": "FWD",
@@ -28958,6 +29151,7 @@
    "fixture": 355,
    "playerCode": 510663,
    "features": {
+    "v3ep": 2.95251186728966,
     "value": 90.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.6,
@@ -29099,7 +29293,7 @@
     "o_xgAgainst_10": 1.354,
     "o_xgAgainst_38": 1.266315789473684
    },
-   "expected": 1.3300156593322754
+   "expected": -1.2140264511108398
   },
   {
    "position": "FWD",
@@ -29108,6 +29302,7 @@
    "fixture": 157,
    "playerCode": 596047,
    "features": {
+    "v3ep": 0.1546290445478128,
     "value": 42.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -29249,7 +29444,7 @@
     "o_xgAgainst_10": 1.5720000000000005,
     "o_xgAgainst_38": 1.29
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   },
   {
    "position": "FWD",
@@ -29258,6 +29453,7 @@
    "fixture": 1,
    "playerCode": 500058,
    "features": {
+    "v3ep": 0.2226292831912755,
     "value": 45.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0,
@@ -29399,7 +29595,7 @@
     "o_xgAgainst_10": null,
     "o_xgAgainst_38": null
    },
-   "expected": 1.0047156810760498
+   "expected": -0.009559853933751583
   },
   {
    "position": "FWD",
@@ -29408,6 +29604,7 @@
    "fixture": 295,
    "playerCode": 205533,
    "features": {
+    "v3ep": 1.2557337663938737,
     "value": 54.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.0689655172413793,
@@ -29549,7 +29746,7 @@
     "o_xgAgainst_10": 1.4440000000000002,
     "o_xgAgainst_38": 0.9423684210526316
    },
-   "expected": 0.2822246849536896
+   "expected": -0.7253691554069519
   },
   {
    "position": "FWD",
@@ -29558,6 +29755,7 @@
    "fixture": 311,
    "playerCode": 205651,
    "features": {
+    "v3ep": 1.2881630972468234,
     "value": 64.0,
     "wasHome": 1.0,
     "laggedStartRate": 0.064516129032258,
@@ -29699,7 +29897,7 @@
     "o_xgAgainst_10": 1.504,
     "o_xgAgainst_38": 1.4967741935483876
    },
-   "expected": 0.467975378036499
+   "expected": -0.6678191423416138
   },
   {
    "position": "FWD",
@@ -29708,6 +29906,7 @@
    "fixture": 350,
    "playerCode": 564406,
    "features": {
+    "v3ep": 1.444608147689214,
     "value": 52.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.2352941176470588,
@@ -29849,7 +30048,7 @@
     "o_xgAgainst_10": 2.152,
     "o_xgAgainst_38": 1.598235294117647
    },
-   "expected": 0.5173081159591675
+   "expected": -0.6926722526550293
   },
   {
    "position": "FWD",
@@ -29858,6 +30057,7 @@
    "fixture": 28,
    "playerCode": 533710,
    "features": {
+    "v3ep": 0.1476191665701594,
     "value": 45.0,
     "wasHome": 0.0,
     "laggedStartRate": 0.0,
@@ -29999,7 +30199,7 @@
     "o_xgAgainst_10": 0.78,
     "o_xgAgainst_38": 0.78
    },
-   "expected": 0.11267559230327606
+   "expected": -0.12881219387054443
   }
  ]
 }
