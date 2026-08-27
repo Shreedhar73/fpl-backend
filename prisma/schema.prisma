@@ -474,6 +474,11 @@ model ArchivePlayerGameweek {
   expectedAssists       Decimal @default(0) @db.Decimal(6, 2)
   expectedGoalsConceded Decimal @default(0) @db.Decimal(6, 2)
   ictIndex              Decimal @default(0) @db.Decimal(6, 1)
+  /// the ICT components, split (B-037). Nullable: rows imported before the columns existed are
+  /// missing, not zero — and the exporter reads missing as missing.
+  influence             Decimal? @db.Decimal(6, 1)
+  creativity            Decimal? @db.Decimal(6, 1)
+  threat                Decimal? @db.Decimal(6, 1)
 
   /// tenths of a million, the player's price that gameweek
   value      Int      @default(0)

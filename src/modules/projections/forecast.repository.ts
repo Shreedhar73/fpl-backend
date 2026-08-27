@@ -62,6 +62,9 @@ export class ForecastRepository {
         expectedAssists: true,
         expectedGoalsConceded: true,
         ictIndex: true,
+        influence: true,
+        creativity: true,
+        threat: true,
         value: true,
       },
     });
@@ -72,6 +75,9 @@ export class ForecastRepository {
       expectedAssists: Number(r.expectedAssists),
       expectedGoalsConceded: Number(r.expectedGoalsConceded),
       ictIndex: Number(r.ictIndex),
+      influence: r.influence === null ? null : Number(r.influence),
+      creativity: r.creativity === null ? null : Number(r.creativity),
+      threat: r.threat === null ? null : Number(r.threat),
     }));
   }
 
@@ -154,6 +160,11 @@ export class ForecastRepository {
         expectedAssists: Number(s.expectedAssists),
         expectedGoalsConceded: Number(s.expectedGoalsConceded),
         ictIndex: Number(s.ictIndex),
+        // The live table carries only the composite index; the split exists in the archive alone
+        // (B-037), so live rows are honestly missing rather than zero.
+        influence: null,
+        creativity: null,
+        threat: null,
         value: s.value,
       });
     }
@@ -226,6 +237,9 @@ export class ForecastRepository {
             defensiveContribution: null,
             expectedGoalsConceded: 0,
             ictIndex: 0,
+            influence: null,
+            creativity: null,
+            threat: null,
             expectedGoals: 0,
             expectedAssists: 0,
             value: p.nowCost,

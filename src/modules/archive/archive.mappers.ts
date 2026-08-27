@@ -51,6 +51,10 @@ export interface ArchiveGameweekRow {
   expectedAssists: number;
   expectedGoalsConceded: number;
   ictIndex: number;
+  /** the ICT split (B-037): null when the CSV lacks the column, never invented as zero */
+  influence: number | null;
+  creativity: number | null;
+  threat: number | null;
   value: number;
   selectedBy: number;
 }
@@ -170,6 +174,9 @@ export function mapArchiveRow(
     expectedAssists: num(rec, 'expected_assists') ?? 0,
     expectedGoalsConceded: num(rec, 'expected_goals_conceded') ?? 0,
     ictIndex: num(rec, 'ict_index') ?? 0,
+    influence: num(rec, 'influence'),
+    creativity: num(rec, 'creativity'),
+    threat: num(rec, 'threat'),
     value: int(rec, 'value'),
     selectedBy: intOrNull(rec, 'selected') ?? 0,
   };

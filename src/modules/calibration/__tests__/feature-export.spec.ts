@@ -27,6 +27,9 @@ const row = (over: Partial<HistoryRow> & { round: number }): HistoryRow => ({
   expectedAssists: 0.1,
   expectedGoalsConceded: 1.0,
   ictIndex: 5.0,
+  influence: 6.0,
+  creativity: 4.0,
+  threat: 30,
   value: 50,
   ...over,
 });
@@ -174,6 +177,28 @@ describe('the feature export (B-034)', () => {
       // only round 1 of 2025-26 is in the window; 2024-25 history is cleared
       expect(r2.features.get('p_points_38')).toBe(2);
     });
+  });
+
+  it('a nullable field averages the matches that have it, and is missing when none do', () => {
+    // player 1: round 1 has no split (null), rounds 2-3 carry threat 30 and 60.
+    const rows = exportFeatures(
+      season(4, (r, code) =>
+        code === 1
+          ? r === 1
+            ? { influence: null, creativity: null, threat: null }
+            : { threat: r * 15 } // r2: 30, r3: 45
+          : {},
+      ),
+      FITTED_PARAMS,
+    );
+    const r4 = at(rows, 4);
+    // window of 3 sees rounds 1-3: null, 30, 45 -> mean over present = 37.5, not (0+30+45)/3
+    expect(r4.features.get('p_threat_3')).toBeCloseTo(37.5, 10);
+    const r2 = at(rows, 2);
+    // window sees only round 1, which has no split: missing, never zero
+    expect(r2.features.get('p_threat_1')).toBeNull();
+    // and the non-nullable field on the same row is still defined
+    expect(r2.features.get('p_points_1')).not.toBeNull();
   });
 
   it('the CSV column count matches the declared names', () => {

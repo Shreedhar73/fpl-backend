@@ -189,10 +189,13 @@ export function v4Bar(input: V4BarInput): V4BarVerdict {
           `\`docs/decisions.md\` with the serving blockers answered first — a total-points GBM has ` +
           `no explain blocks (D-019), no distributions (B-017) and no pPlay, and a model that ` +
           `cannot ship its reasoning does not ship, however it measures.`
-      : `**The bar is not met on this run.** \`modelVersion\` does not move. The named next step is ` +
-          `feature enrichment — the Understat/vaastav groups OpenFPL uses that the archive lacks ` +
-          `(I/C/T split, xGChain, xGBuildup, key passes, team Deep and PPDA) — and the negative ` +
-          `result stands in this report rather than being rerun until it passes.`,
+      : `**The bar is not met on this run.** \`modelVersion\` does not move, and the negative ` +
+          `result stands in this report rather than being rerun until it passes. The I/C/T split ` +
+          `is already in the feature set (plan 023); the remaining OpenFPL groups are blocked at ` +
+          `the source — vaastav's understat player files stop before the test season, and ` +
+          `understat.com now serves a JS shell with no embedded data (probed 2026-08-27). The ` +
+          `candidates left are model-shaped, not feature-shaped: a distribution-aware objective, ` +
+          `or v4 as a residual on the incumbent's decomposition — both recorded in B-037.`,
   );
   return { orderingMet, highReturnMet, lowReturnHeld, met, lines };
 }
