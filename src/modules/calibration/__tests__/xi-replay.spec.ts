@@ -3,7 +3,7 @@ import { Rules } from '../../optimizer/rules';
 import { LpSolution } from '../../optimizer/ilp';
 import { PredictionRow } from '../harness';
 import { predictionRow } from './prediction-row';
-import { fixturesForRound, replaySeason, ReplayOptions } from '../xi-replay';
+import { replaySeason, ReplayOptions } from '../xi-replay';
 
 /**
  * B-025 — the replay harness.
@@ -34,7 +34,7 @@ const RULES = new Rules(
 const OPTIONS: ReplayOptions = {
   label: 'test',
   benchWeight: 0.7,
-  collisionLambda: 1,
+  concentrationLambda: 1,
 };
 
 const row = (over: Partial<PredictionRow>): PredictionRow =>
@@ -234,65 +234,73 @@ describe('an unreadable solve stops the replay', () => {
   });
 });
 
-describe('collisions are priced from the round’s own fixtures', () => {
+describe('the concentration is counted from the squad itself (B-029)', () => {
   /**
-   * Club 1 (the keeper and two defenders) away at club 4 (two midfielders and a forward): our
-   * defenders and our attackers are on opposite sides of one match, which is precisely B-011's case.
+   * Three of our defenders play for club 1, and the fifteen starts all three. That is three pairs
+   * held and three started — the shape the charge exists for. No fixture lookup is involved: two of a
+   * club's defence are concentrated in every week they both play, which is why B-029's context is
+   * built from the squad and B-011's had to be built per fixture.
    */
   const squad = fifteen(1, (i) => {
-    if (i >= 9 && i <= 11) return { teamCode: 4, opponentTeamCode: 1, wasHome: true };
-    if (i >= 2 && i <= 4) return { teamCode: 1, opponentTeamCode: 4, wasHome: false };
-    // The keepers move off club 1 so it holds exactly the three defenders — a club cap of 3 is a
-    // rule the fake solver cannot enforce, and a fixture built on an illegal squad proves nothing.
-    if (i <= 1) return { teamCode: 7, opponentTeamCode: 91, wasHome: true };
+    if (i >= 2 && i <= 4) return { teamCode: 1 };
+    // The keepers go to two DIFFERENT clubs. Left on one they would be a same-club defensive pair
+    // themselves — correctly, since two keepers of a club share the same clean sheet — and this test
+    // is about the three defenders.
+    if (i === 0) return { teamCode: 7 };
+    if (i === 1) return { teamCode: 8 };
     return {};
   });
   const byCode = byCodeOf(squad);
 
-  it('recovers each fixture once from the rows that played in it', () => {
-    const fixtures = fixturesForRound(byCode);
-    const meeting = fixtures.filter(
-      (f) => f.homeTeamId === '4' && f.awayTeamId === '1',
-    );
-    expect(meeting).toHaveLength(1);
-    // The away side contributes no second copy of the same match.
-    expect(fixtures.some((f) => f.homeTeamId === '1' && f.awayTeamId === '4')).toBe(
-      false,
-    );
-  });
+  const startedEleven = [
+    squad[0],
+    squad[2],
+    squad[3],
+    squad[4],
+    squad[7],
+    squad[8],
+    squad[9],
+    squad[10],
+    squad[11],
+    squad[12],
+    squad[13],
+  ];
 
-  it('counts pairs the squad owns, and separately the ones it started', () => {
-    const started = [
-      squad[0],
-      squad[2],
-      squad[3],
-      squad[4],
-      squad[7],
-      squad[8],
-      squad[9],
-      squad[10],
-      squad[11],
-      squad[12],
-      squad[13],
-    ];
+  it('counts pairs the squad holds, and separately the ones it started', () => {
     const result = replaySeason(
       '2025-26',
       new Map([[1, byCode]]),
       squad,
       'model',
       RULES,
-      () => solutionOf(squad, started, squad[9]),
+      () => solutionOf(squad, startedEleven, squad[9]),
       OPTIONS,
     );
     const scored = result.rounds[0];
-    // Three of ours defend for club 1; three attack for club 4, and the two clubs meet.
-    expect(scored.ownedPairs).toBe(9);
-    // All six start, so every owned pair is also a started one.
-    expect(scored.startedPairs).toBe(9);
-    // The captain is one of the attackers, so his exposure is his three defensive counterparts.
-    expect(scored.captainConflicts).toBe(3);
+    // Three defenders of one club: three pairs, and all three start.
+    expect(scored.heldPairs).toBe(3);
+    expect(scored.startedPairs).toBe(3);
     expect(result.roundsOwningAPair).toBe(1);
     expect(result.roundsStartingAPair).toBe(1);
+  });
+
+  it('drops the started count when one of them is benched, and keeps the held count', () => {
+    // The distinction the whole rule turns on. Benching one of the three leaves three pairs held and
+    // only one started — a squad still paying for a defence it does not field.
+    const withOneBenched = startedEleven.map((p) =>
+      p.playerCode === squad[4].playerCode ? squad[5] : p,
+    );
+    const result = replaySeason(
+      '2025-26',
+      new Map([[1, byCode]]),
+      squad,
+      'model',
+      RULES,
+      () => solutionOf(squad, withOneBenched, squad[9]),
+      OPTIONS,
+    );
+    expect(result.rounds[0].heldPairs).toBe(3);
+    expect(result.rounds[0].startedPairs).toBe(1);
   });
 });
 

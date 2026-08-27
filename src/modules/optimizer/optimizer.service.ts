@@ -5,17 +5,21 @@ import { OptimizerRepository } from './optimizer.repository';
 import {
   buildLp,
   pickBestXi,
-  buildConflictPairs,
+  defencePairs,
   Candidate,
-  Collisions,
-  ConflictPair,
-  NO_COLLISIONS,
+  Concentration,
+  DefencePair,
+  NO_CONCENTRATION,
   pairsWithin,
   readSolution,
   SolvedSquad,
 } from './ilp';
 import { POSITIONS, Rules } from './rules';
-import { MIN_APPEARANCES, COLLISION_LAMBDA, BENCH_WEIGHT } from './policy';
+import {
+  MIN_APPEARANCES,
+  DEFENCE_CONCENTRATION_LAMBDA,
+  BENCH_WEIGHT,
+} from './policy';
 
 export const OPTIMIZER_VERSION = 'v1-ilp';
 const HORIZON = 5;
@@ -86,24 +90,16 @@ export interface RecommendationReasoning {
     /** what the guard IS, in the payload rather than only in the component that renders it */
     statement: string;
   };
-  fixtureCollisions: {
-    /** what a held pair costs the objective — the policy constant, unscaled (B-026) */
+  defenceConcentration: {
+    /** horizon EP charged per same-club defensive pair the eleven STARTS */
     lambda: number;
-    pairsConsidered: number;
-    /** horizon EP charged in total: the pairs HELD, plus what the armband added */
+    /** pairs the fifteen holds, started or not */
+    pairsHeld: number;
+    /** horizon EP charged, which is for the started ones only */
     penaltyEp: number;
-    /** of that total, what the armband added by doubling one side of a held pair (B-027) */
-    armbandEp: number;
-    taken: {
-      fixture: string;
-      attacker: string;
-      defender: string;
-      lambda: number;
-      /** whether the eleven started both sides; holding is what is charged, starting is not */
-      bothStarted: boolean;
-      /** whether our captain is one side of this pair, which charges it a second time */
-      captained: boolean;
-    }[];
+    started: { club: string; players: string[]; lambda: number }[];
+    /** held but not both started — carries no charge, and a user should still see it */
+    benched: { club: string; players: string[] }[];
     statement: string;
   };
 }
@@ -125,13 +121,14 @@ const FLOOR_STATEMENT =
   'estimated from almost nothing. The optimizer is a maximiser, so it hunts exactly the players ' +
   'whose estimate is most inflated by noise. This is a refusal to bet on them, not a claim that ' +
   'they are bad.';
-const COLLISION_STATEMENT =
-  'Owning one of our attackers against one of our defenders in the same match bets on both ' +
-  'outcomes at once, so the squad is charged for every such pair it HOLDS — benching one side does ' +
-  'not avoid it, and the armband is charged again for doubling the stake on one of them. This penalty was measured over 103 archived gameweeks and did NOT improve ' +
-  'realised points (+0.59 +/- 0.92 per gameweek, per-season signs that flip, downside worse). It ' +
-  'is on as a policy choice — a squad that bets against itself is not one we want to recommend — ' +
-  'and not because it scores more.';
+const CONCENTRATION_STATEMENT =
+  "Two of one club's defence starting together share a single clean sheet. Measured over three " +
+  'archived seasons their points move together (+5.58 covariance) — the most concentrated position ' +
+  'a squad can take. The charge applies to STARTING both, not to owning both: a benched player ' +
+  'carries no exposure. This is a POLICY choice, not a measured gain — what was measured is that ' +
+  'the correlation exists and which way it points, never that a narrower squad scores more. It ' +
+  'replaced a rule that charged for owning both sides of one fixture, which the same measurement ' +
+  "showed to be a hedge (-0.195 correlation, cutting a pair's variance by a fifth).";
 
 /**
  * Everything a solve reasons over, built once: every player as a candidate carrying horizon EP and
@@ -147,29 +144,26 @@ export interface Universe {
   gameweekIds: number[];
   modelVersion: string;
   /**
-   * The collision context of the first horizon gameweek, built over EVERY candidate — not just the
-   * pool. `insights` scores squads the optimizer did not choose, and a pair involving a player the
-   * pool pruned is still a pair that squad is holding. Carried on the universe for the reason the
-   * universe exists at all: two sides arranged under different objectives report a gap that is
-   * partly an artefact of the two builds disagreeing.
+   * The concentration context, built over EVERY candidate — not just the pool. `insights` scores
+   * squads the optimizer did not choose, and a pair involving a player the pool pruned is still a
+   * pair that squad is holding. Carried on the universe for the reason the universe exists at all:
+   * two sides arranged under different objectives report a gap that is partly an artefact of the two
+   * builds disagreeing.
    */
-  collisions: Collisions;
+  concentration: Concentration;
 }
 
 /**
- * A conflicting pair the squad holds, and what became of it on the pitch.
+ * A pair of our defensive players from one club that the squad holds, and whether both took the field.
  *
- * **`bothStarted` is the vocabulary the payload did not have.** Before B-025 the only things a
- * recommendation could say about a pair were "charged" and "absent", so the squad that owned both
- * Brighton defenders and started neither reported `taken: []` — a user told there was no conflict in
- * a squad holding both sides of one. Holding is now the charged event and starting is a separate
- * fact, and both are said.
+ * Both facts are reported because only one of them is charged (B-029): starting two of a club's
+ * defence is the concentrated position, and holding one on the bench is not. A payload that reported
+ * only the charged pairs would tell a user nothing about the £5.0m defender sitting behind the two
+ * who play.
  */
 export interface HeldPair {
-  pair: ConflictPair;
+  pair: DefencePair;
   bothStarted: boolean;
-  /** whether OUR captain is one side of this pair — the exposure that counts twice (B-027) */
-  captained: boolean;
 }
 
 /**
@@ -184,18 +178,16 @@ export interface HeldPair {
 export function arrangeSquad(
   inSquad: Candidate[],
   rules: Rules,
-  collisions: Collisions = NO_COLLISIONS,
+  concentration: Concentration = NO_CONCENTRATION,
   /** The squad LP's bench weight, so an arrangement and a solve optimise one expression (B-023). */
   benchWeight = BENCH_WEIGHT,
 ): {
   squad: SquadPlayer[];
   formation: string;
-  /** the conflicting pairs the FIFTEEN holds, and what became of each on the pitch */
-  heldCollisions: HeldPair[];
-  /** horizon EP charged for HOLDING them */
-  heldPenalty: number;
-  /** horizon EP charged on top because the armband doubles one side of one (B-027) */
-  armbandPenalty: number;
+  /** the same-club defensive pairs the FIFTEEN holds, and whether the XI started both */
+  heldPairs: HeldPair[];
+  /** horizon EP charged, which is for the STARTED ones only */
+  concentrationPenalty: number;
 } {
   // The captain comes back from the enumeration rather than being picked afterwards, so that the XI
   // and the armband are one decision here exactly as they are one decision in the LP.
@@ -203,26 +195,20 @@ export function arrangeSquad(
     inSquad,
     rules,
     benchWeight,
-    collisions,
+    concentration,
   );
 
-  // What the pairs cost is a fact about the fifteen (B-025), so it is computed here from what is
-  // held — not returned by the XI enumeration, which charges only the armband.
   const held = new Set(inSquad.map((c) => c.key));
-  const heldCollisions: HeldPair[] = pairsWithin(held, collisions.pairs).map(
+  const heldPairs: HeldPair[] = pairsWithin(held, concentration.pairs).map(
     (pair) => ({
       pair,
-      bothStarted:
-        starters.has(pair.attacker.key) && starters.has(pair.defender.key),
-      captained:
-        pair.attacker.key === captainKey || pair.defender.key === captainKey,
+      bothStarted: starters.has(pair.a.key) && starters.has(pair.b.key),
     }),
   );
-  const heldPenalty = collisions.lambda * heldCollisions.length;
-  // The armband's own charge, counted over pairs the squad HOLDS rather than pairs it started:
-  // benching the other side is not an answer to having bought him (B-027).
-  const armbandPenalty =
-    collisions.lambda * heldCollisions.filter((h) => h.captained).length;
+  // Only the started ones are charged — the charge keys off `y`, and a benched player carries no
+  // variance. That is the difference from B-011, where benching answered nothing.
+  const concentrationPenalty =
+    concentration.lambda * heldPairs.filter((h) => h.bothStarted).length;
 
   const bench = inSquad.filter((c) => !starters.has(c.key));
   const benchGk = bench.filter((c) => c.position === 'GKP');
@@ -253,7 +239,7 @@ export function arrangeSquad(
     };
   });
 
-  return { squad, formation, heldCollisions, heldPenalty, armbandPenalty };
+  return { squad, formation, heldPairs, concentrationPenalty };
 }
 
 /**
@@ -328,15 +314,15 @@ export class OptimizerService {
       appearances: appearances.get(p.id) ?? 0,
     }));
 
-    // Only the FIRST horizon gameweek. A collision three gameweeks out is answered by a transfer,
-    // not by refusing to own the player (B-008).
-    const fixtures = await this.repo.fixturesFor(nextGw);
-    const collisions: Collisions = {
-      pairs: buildConflictPairs(candidates, fixtures),
-      lambda: COLLISION_LAMBDA,
+    // No fixture lookup any more: a defensive concentration is a property of the SQUAD, not of a
+    // gameweek. B-011's collisions had to be built per fixture and only for the first horizon
+    // gameweek; two of a club's defence start together in every week they both play (B-029).
+    const concentration: Concentration = {
+      pairs: defencePairs(candidates),
+      lambda: DEFENCE_CONCENTRATION_LAMBDA,
     };
 
-    return { candidates, rules, gameweekIds, modelVersion, collisions };
+    return { candidates, rules, gameweekIds, modelVersion, concentration };
   }
 
   async run(
@@ -355,7 +341,7 @@ export class OptimizerService {
   ): Promise<OptimizeSummary> {
     const started = Date.now();
     opts = { explain: opts.persist !== false, ...opts };
-    const { candidates, rules, gameweekIds, modelVersion, collisions } =
+    const { candidates, rules, gameweekIds, modelVersion, concentration } =
       await this.buildUniverse(opts);
     const gwIds = gameweekIds;
     const nextGw = gwIds[0];
@@ -368,7 +354,7 @@ export class OptimizerService {
     const solve = (from: Candidate[]): SolvedSquad =>
       readSolution(
         from,
-        highs.solve(buildLp(from, rules, collisions, BENCH_WEIGHT)),
+        highs.solve(buildLp(from, rules, concentration, BENCH_WEIGHT)),
         rules,
       );
 
@@ -398,11 +384,10 @@ export class OptimizerService {
 
     // best legal XI, captain, vice and bench order — the same arrangement `insights` applies to a
     // squad the optimizer did not choose.
-    const { squad, formation, heldCollisions, heldPenalty, armbandPenalty } =
-      arrangeSquad(
+    const { squad, formation, heldPairs, concentrationPenalty } = arrangeSquad(
       inSquad,
       rules,
-      collisions,
+      concentration,
     );
 
     // The LP already chose an XI and an armband. `arrangeSquad` chooses them again, by exact
@@ -435,23 +420,24 @@ export class OptimizerService {
         wouldHaveMadeTheSquad,
         statement: FLOOR_STATEMENT,
       },
-      fixtureCollisions: {
-        // The constant itself. Between B-025 and B-026 this was `benchWeight × λ` and the payload
-        // carried both numbers, because a panel printing 1.0 beside a penalty computed at 0.7 shows
-        // arithmetic that does not add up on screen. They are the same number again.
-        lambda: COLLISION_LAMBDA,
-        pairsConsidered: collisions.pairs.length,
-        penaltyEp: round2(heldPenalty + armbandPenalty),
-        armbandEp: round2(armbandPenalty),
-        taken: heldCollisions.map(({ pair, bothStarted, captained }) => ({
-          fixture: pair.fixture,
-          attacker: pair.attacker.webName,
-          defender: pair.defender.webName,
-          lambda: COLLISION_LAMBDA,
-          bothStarted,
-          captained,
-        })),
-        statement: COLLISION_STATEMENT,
+      defenceConcentration: {
+        lambda: DEFENCE_CONCENTRATION_LAMBDA,
+        pairsHeld: heldPairs.length,
+        penaltyEp: round2(concentrationPenalty),
+        started: heldPairs
+          .filter((h) => h.bothStarted)
+          .map(({ pair }) => ({
+            club: pair.club,
+            players: [pair.a.webName, pair.b.webName],
+            lambda: DEFENCE_CONCENTRATION_LAMBDA,
+          })),
+        benched: heldPairs
+          .filter((h) => !h.bothStarted)
+          .map(({ pair }) => ({
+            club: pair.club,
+            players: [pair.a.webName, pair.b.webName],
+          })),
+        statement: CONCENTRATION_STATEMENT,
       },
     };
 
@@ -473,7 +459,7 @@ export class OptimizerService {
               poolSize: pool.length,
               projectionModel: modelVersion,
               minAppearances: MIN_APPEARANCES,
-              collisionLambda: COLLISION_LAMBDA,
+              defenceConcentrationLambda: DEFENCE_CONCENTRATION_LAMBDA,
               // Recorded even though the collision charge no longer reads it: it scales the whole
               // objective, and a run whose stored inputs cannot reconstruct the program is a run
               // nobody can argue with later.

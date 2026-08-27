@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   });
   try {
     const report = await app.get(XiReplayService).run(label, FITTED_PARAMS, {
-      collisionLambda: numeric('lambda', lambda),
+      concentrationLambda: numeric('lambda', lambda),
       benchWeight: numeric('bench-weight', bench),
     });
     const r = report.result;

@@ -86,10 +86,10 @@ export class InsightsService {
 
     const mine = this.candidatesFor(squad, universe);
     // The user's squad is arranged under the SAME objective the recommendation was solved under, so
-    // the two XIs and the two captains mean the same thing. Since B-025 the collision penalty is
-    // charged on ownership and the eleven is chosen on points, so the context is passed for what it
-    // still decides here — which pairs this squad HOLDS, and what they cost it.
-    const arranged = arrangeSquad(mine, universe.rules, universe.collisions);
+    // the two XIs and the two captains mean the same thing. Since B-029 the only penalty is the
+    // defensive-concentration charge, which keys off the eleven — so passing the context here is what
+    // makes a user's XI chosen the way the recommendation's was.
+    const arranged = arrangeSquad(mine, universe.rules, universe.concentration);
 
     // A fresh optimal solve, unpersisted: this runs on every advice request purely to measure a
     // gap, and filling optimizer_runs with those would bury the solves a human asked for.
@@ -128,8 +128,9 @@ export class InsightsService {
     // as a bug. Three things let a user squad out-score the recommendation on raw EP:
     //
     //   1. the appearance floor (B-010) — a squad may hold players the optimizer refuses to bet on;
-    //   2. the collision penalty (B-011/B-025) — the optimizer maximises `EP - charged x pairs HELD`,
-    //      not `EP`, where `charged` is `benchWeight x lambda`;
+    //   2. the defensive-concentration penalty (B-029) — the optimizer maximises
+    //      `EP - lambda x same-club defensive pairs STARTED`, not `EP`. It is charged on the XI, so
+    //      it does not enter this squad-level comparison at all;
     //   3. pool pruning, which predates both and was always a (much smaller) hole in the old claim.
     //
     // What is still an invariant, and what is logged: over a squad the optimizer *could* have chosen
@@ -139,11 +140,8 @@ export class InsightsService {
     const eligibleForTheSolve = mine.every(
       (c) => c.appearances >= MIN_APPEARANCES,
     );
-    const minePenalised = penalisedSquadEp(mine, universe.collisions);
-    const optimalPenalised = penalisedSquadEp(
-      optimalCandidates,
-      universe.collisions,
-    );
+    const minePenalised = penalisedSquadEp(mine);
+    const optimalPenalised = penalisedSquadEp(optimalCandidates);
     if (eligibleForTheSolve && minePenalised > optimalPenalised + 1e-6) {
       this.log.error(
         `a legal squad beat the optimum on penalised horizon EP ` +

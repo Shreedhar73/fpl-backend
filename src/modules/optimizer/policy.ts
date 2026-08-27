@@ -31,66 +31,49 @@
 export const MIN_APPEARANCES = 11;
 
 /**
- * Horizon points charged per conflicting (attacker, defender) pair the squad HOLDS (B-011, restored
- * to ownership by B-025) — one of our attackers against one of our defenders in the same fixture of
- * the first horizon gameweek.
+ * Horizon points charged per pair of our own defensive players who START for the same club (B-029).
  *
- * **A policy choice, and measured NOT to be an improvement** (`reports/guards-009.md`, 2026-08-27).
- * The two picks bet on opposite outcomes of one match, so owning both buys correlation the linear
- * objective cannot see. The lambda sweep over 103 archived gameweeks was supposed to earn this
- * number and did not: the pooled gain at lambda 1 is +0.59 +/- 0.92 realised points per gameweek —
- * inside its own noise — the per-season sign flips (-2.41 in 2023-24, +2.34 in 2024-25), and the
- * downside the rule was argued for as insurance got WORSE, worst decile 32.0 to 30.0. The sweep also
- * showed the knob is close to binary: every value from 0.5 to 4 lands within 0.13 points of the
- * others, so there is no interior optimum to tune toward.
+ * **What this replaced, and why that one went.** B-011 charged a squad for owning one of our attackers
+ * against one of our defensive players in the same match — "a squad that bets against itself". B-028
+ * measured that over 101,103 pairs and three archived seasons and it did not survive:
  *
- * It stays on at 1.0 because a squad that bets on a clean sheet and against it at the same time is
- * not one we want to defend to a user — not because it scores more points. Anyone raising or
- * lowering this is making a policy argument, not a measured one, and should say so.
+ *  - the effect is real. Correlation −0.195 ± 0.003, stable per season, and a defensive player takes
+ *    1.48 points in matches where the attacker facing him returned against 3.04 where he blanked;
+ *  - but it is a HEDGE. `Var(A + D) = Var(A) + Var(D) + 2·Cov(A, D)`, the covariance is negative, and
+ *    holding both sides cut the pair's variance by 19.5%. Expectation is linear, so no correlation can
+ *    make the objective wrong in the mean. The rule priced insurance, which is why its own lambda
+ *    sweep found +0.59 ± 0.92 realised points over 103 gameweeks and no benefit;
+ *  - and it missed the bigger term. Two defensive players of one club covary **+5.58** against −4.15
+ *    for both collision terms together. Given a squad already holding two defenders of a club, adding
+ *    the attacker who faces them costs 0.65 points² of variance against 8.96 for an uncorrelated
+ *    attacker — he was the safest addition available and B-011 charged extra for him.
  *
- * A penalty rather than an exclusion, by maintainer decision 2026-08-26: the solver may still take
- * the pair when it is worth more than this.
+ * So the charge points at the concentration instead: two of ours in the same defence, taking the field
+ * together, sharing one clean sheet.
  *
- * **It is charged against `x`, and B-025 put it back there after B-023 moved it to `y`.** Charging
- * the XI let the solver satisfy the rule by BENCHING one side while still paying for both — measured
- * on the live GW2 solve, 3.30 horizon points given up in the eleven while £9.6m sat on two players it
- * refused to start, and measured again over an archived season by `pnpm replay:xi`: a conflicting
- * pair owned in all 38 rounds and both sides started in 8, at a cost of 78.56 projected points.
- * B-011's own sentence is about *holding* both sides, so that is where the charge belongs. Once a
- * pair is owned the eleven is chosen on points alone, which means a squad that pays for the pair
- * also starts it if the projections say so — that is the intended behaviour, not a regression.
+ * **Keyed to the XI, and the contrast with B-011 is the whole lesson.** B-011's charge belonged on
+ * ownership because the bet was *buying* both sides — benching one changed nothing about having paid
+ * for him, which is exactly how B-023's version got dodged. Concentration is not that: a benched
+ * player scores nothing and carries no variance, so benching genuinely removes the exposure and is a
+ * legitimate answer to this charge. Charge what you want to refuse, and key it to the decision you
+ * want to change.
+ *
+ * **1.0 is a POLICY number and nothing here has measured it.** B-028 established that the covariance
+ * exists and which way it points. It did not establish that a lower-variance squad scores more, and it
+ * cannot: that depends on whether the objective is expected points or expected rank, and this project
+ * optimises expected points. Anyone moving this number is making a policy argument, should say so, and
+ * now has `pnpm replay:xi` — a harness that can actually see which eleven the solver picked — to
+ * measure it on.
  */
-export const COLLISION_LAMBDA = 1.0;
+export const DEFENCE_CONCENTRATION_LAMBDA = 1.0;
 
 /**
- * **Charged raw, and NOT scaled by the bench weight (B-026).**
+ * Defensive = DEF + GKP. A keeper and his defenders share ONE clean sheet, exactly, which is what
+ * makes them the concentrated holding B-029 charges for.
  *
- * B-025 shipped it scaled — `benchWeight × λ` = 0.7 — reasoning that B-023 changed what a squad place
- * is worth, so the constant had to be re-scaled to keep the weight B-011 measured. Half of that is
- * right and it is the half that does not matter. After B-023 a player's coefficients depend on
- * whether he starts: a BENCHED owned player carries `benchWeight · ep`, so a raw λ is 1/benchWeight
- * = 1.43x the measured strength for him — but a STARTER carries
- * `benchWeight · ep + (1 − benchWeight) · ep = ep`, exactly the pre-B-023 weight, so a raw λ was
- * already right for him and the scaling UNDER-charged him by 30%. A colliding pair is usually two
- * startable players.
- *
- * Neither is measurable: the sweep put every λ from 0.5 to 4 within 0.13 realised points. The reason
- * to stop scaling is not the arithmetic but the coupling — two knobs that move together need a
- * harness that can see both, and the one that can see the XI at all (`pnpm replay:xi`) is one season
- * old. A constant that means what its comment says is worth more than a scaled one that means it for
- * a player nobody starts.
- *
- * `transfer-lp.ts` therefore charges the same number for the first time since B-023, which is a
- * coincidence rather than a rule: its coefficient on `x` is the full `ep`. If the XI and captain
- * families ever land there (B-024), that stays true and nothing needs to change with them.
+ * `ATTACKING_POSITIONS` used to sit beside this, for B-011's attacker-against-defender pairing. It
+ * went with the rule (B-029) rather than being left inert for a future reader to wire back up.
  */
-
-/**
- * Attacker = FWD + MID, defensive = DEF + GKP (maintainer decision 2026-08-26). FWD-only would have
- * missed the measured case — Palmer, the captain colliding with two of our own Brighton defenders,
- * is a MID.
- */
-export const ATTACKING_POSITIONS = ['FWD', 'MID'] as const;
 export const DEFENSIVE_POSITIONS = ['DEF', 'GKP'] as const;
 
 /**

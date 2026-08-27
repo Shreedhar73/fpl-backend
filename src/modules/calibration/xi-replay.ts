@@ -1,12 +1,11 @@
 import { PositionCode } from '../fpl-sync/mappers';
-import { FixtureLite } from '../optimizer/optimizer.repository';
 import {
-  buildConflictPairs,
   buildLp,
   Candidate,
-  Collisions,
+  Concentration,
+  defencePairs,
   LpSolution,
-  NO_COLLISIONS,
+  NO_CONCENTRATION,
   pairsWithin,
   pickBestXi,
   readSolution,
@@ -51,8 +50,8 @@ import {
  *    the armband, under this objective, given this round's projections and this round's fixtures".
  *    Costs are the PURCHASE prices, which is what keeps the budget row satisfiable in every later
  *    round — the squad is held, not re-bought.
- *  - **Observables, not a named charge.** The rounds carry pairs owned, pairs started, the captain's
- *    exposure and the projected points forgone in the XI. What the objective *charges* for those is
+ *  - **Observables, not a named charge.** The rounds carry pairs held, pairs started and the
+ *    projected points forgone in the XI. What the objective *charges* for those is
  *    the thing under test and changes between arms; a harness that recomputed the charge would have
  *    to be edited alongside the change it is meant to judge, and would then agree with it by
  *    construction.
@@ -70,7 +69,8 @@ export interface ReplayOptions {
   /** what this arm is called in the report */
   label: string;
   benchWeight: number;
-  collisionLambda: number;
+  /** the defensive-concentration charge (B-029); 0 for an unpenalised arm */
+  concentrationLambda: number;
 }
 
 /**
@@ -100,12 +100,10 @@ export interface ReplayRound {
   captainPoints: number;
   bestFieldedPoints: number;
   substitutions: number;
-  /** conflicting pairs both of whose sides the squad OWNS this round */
-  ownedPairs: number;
-  /** of those, the ones the LP also started on both sides */
+  /** same-club defensive pairs the squad HOLDS this round */
+  heldPairs: number;
+  /** of those, the ones the LP also started on both sides — the charged ones */
   startedPairs: number;
-  /** pairs where the captain is one side and the other side started — the doubled exposure */
-  captainConflicts: number;
   /** projected points the LP's XI and armband give up against the best the fifteen could field */
   epForgone: number;
   /** the XI half of `epForgone`, worst swap first; empty with a non-zero total means the armband */
@@ -118,48 +116,19 @@ export interface ReplayResult {
   /** the knobs this arm was solved with — a report that names the constants instead would lie about
    * any run that overrode them */
   benchWeight: number;
-  collisionLambda: number;
+  concentrationLambda: number;
   rounds: ReplayRound[];
   totalPoints: number;
   totalCeiling: number;
   /** share of the achievable XI points the LP's own selections took */
   xiEfficiency: number | null;
-  /** rounds in which the squad owned at least one conflicting pair */
+  /** rounds in which the squad held at least one same-club defensive pair */
   roundsOwningAPair: number;
-  /** rounds in which the LP started both sides of one */
+  /** rounds in which the LP started both members of one — the charged case */
   roundsStartingAPair: number;
   /** projected points forgone over the season, and the rounds it happened in */
   totalEpForgone: number;
   roundsForgoingEp: number;
-}
-
-/**
- * The round's fixtures, reconstructed from the rows themselves.
- *
- * There is no archive fixtures table — `import-archive` stores per-player rows and nothing else — so
- * the fixture list is recovered from the home side of every row that has one. Deduplicated by the
- * ordered pair, because a fixture contributes one row per player who featured in it, and a double
- * gameweek legitimately contributes the same club twice against different opponents.
- *
- * Team *codes* stand in for the short names a live fixture carries: the archive has no club names,
- * and a label is for a human reading a report, not for a join.
- */
-export function fixturesForRound(byCode: Map<number, PredictionRow>): FixtureLite[] {
-  const seen = new Set<string>();
-  const out: FixtureLite[] = [];
-  for (const row of byCode.values()) {
-    if (row.teamCode === null || !row.wasHome) continue;
-    const key = `${row.teamCode}v${row.opponentTeamCode}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      homeTeamId: String(row.teamCode),
-      awayTeamId: String(row.opponentTeamCode),
-      homeTeamShortName: `T${row.teamCode}`,
-      awayTeamShortName: `T${row.opponentTeamCode}`,
-    });
-  }
-  return out;
 }
 
 /** What the predictor says about a held player this round — his row, or what was last said of him. */
@@ -301,14 +270,14 @@ export function replaySeason(
     if (slots.every((s) => s.row === null)) continue;
 
     const candidates = heldCandidates(slots, predictor);
-    const collisions: Collisions = {
-      pairs: buildConflictPairs(candidates, fixturesForRound(byCode)),
-      lambda: options.collisionLambda,
+    const concentration: Concentration = {
+      pairs: defencePairs(candidates),
+      lambda: options.concentrationLambda,
     };
 
     const solved = readSolution(
       candidates,
-      solve(buildLp(candidates, rules, collisions, options.benchWeight)),
+      solve(buildLp(candidates, rules, concentration, options.benchWeight)),
       rules,
     );
 
@@ -352,13 +321,8 @@ export function replaySeason(
     );
 
     const ownedKeys = new Set(candidates.map((c) => c.key));
-    const ownedPairs = pairsWithin(ownedKeys, collisions.pairs);
-    const startedPairs = pairsWithin(solved.xi, collisions.pairs);
-    const captainConflicts = startedPairs.filter(
-      (p) =>
-        p.attacker.key === solved.captainKey ||
-        p.defender.key === solved.captainKey,
-    ).length;
+    const heldPairs = pairsWithin(ownedKeys, concentration.pairs);
+    const startedPairs = pairsWithin(solved.xi, concentration.pairs);
 
     const forgone = epForgone(
       candidates,
@@ -386,9 +350,8 @@ export function replaySeason(
       captainPoints: captain?.actual ?? 0,
       bestFieldedPoints: Math.max(...scored.fielded.map((m) => m.actual)),
       substitutions: scored.substitutions.length,
-      ownedPairs: ownedPairs.length,
+      heldPairs: heldPairs.length,
       startedPairs: startedPairs.length,
-      captainConflicts,
       epForgone: forgone.total,
       forgone: forgone.swaps,
     });
@@ -402,12 +365,12 @@ export function replaySeason(
     label: options.label,
     predictor,
     benchWeight: options.benchWeight,
-    collisionLambda: options.collisionLambda,
+    concentrationLambda: options.concentrationLambda,
     rounds,
     totalPoints,
     totalCeiling,
     xiEfficiency: totalCeiling > 0 ? totalPoints / totalCeiling : null,
-    roundsOwningAPair: rounds.filter((r) => r.ownedPairs > 0).length,
+    roundsOwningAPair: rounds.filter((r) => r.heldPairs > 0).length,
     roundsStartingAPair: rounds.filter((r) => r.startedPairs > 0).length,
     totalEpForgone,
     // A tenth of a point is below what any projection resolves; counting rounds at that level would

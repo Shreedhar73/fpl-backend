@@ -1,14 +1,13 @@
 import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
 import {
-  buildConflictPairs,
   buildLp,
   Candidate,
-  Collisions,
-  NO_COLLISIONS,
+  Concentration,
+  defencePairs,
+  NO_CONCENTRATION,
   readSolution,
 } from '../optimizer/ilp';
-import { FixtureLite } from '../optimizer/optimizer.repository';
 import { Rules } from '../optimizer/rules';
 import { BENCH_WEIGHT } from '../optimizer/policy';
 import { Predictor, PredictionRow } from './harness';
@@ -226,19 +225,17 @@ export async function openingSquad(
   /** What a bench place is worth. Passed in so a sweep can vary it without touching this file. */
   benchWeight = BENCH_WEIGHT,
   /**
-   * The collision context for the opening round (B-011/B-025), as the round's FIXTURES and a lambda
-   * rather than as ready-made pairs.
+   * The defensive-concentration lambda (B-029), or null for an unpenalised solve.
    *
-   * Pairs name candidates, and the candidates are built inside this function — handing in pairs built
-   * against a caller's own copies would make the LP's `z` rows depend on two lists agreeing about
-   * keys, which is a coupling nobody would notice breaking. Fixtures have no such identity.
+   * A lambda rather than ready-made pairs: the pairs name candidates and the candidates are built
+   * inside this function, so handing them in would make the LP's `d` rows depend on two lists
+   * agreeing about keys — a coupling nobody would notice breaking.
    *
    * Defaults to none, which is what the decision report and the bench sweep have always solved
-   * without. The replay harness passes the real ones, because the penalty it exists to measure is
-   * charged on OWNERSHIP — so a harness that chose its opening fifteen without it would be measuring
-   * an objective the product does not serve.
+   * without. The replay harness passes the real value, because a harness that chose its opening
+   * fifteen under a different objective would be measuring something the product does not serve.
    */
-  conflicts: { fixtures: FixtureLite[]; lambda: number } | null = null,
+  concentrationLambda: number | null = null,
 ): Promise<PredictionRow[]> {
   const candidates: Candidate[] = rows
     .filter((r) => r.teamCode !== null)
@@ -263,15 +260,13 @@ export async function openingSquad(
   // `readSolution` checks the status and the shape. A solver that returns anything but Optimal still
   // returns a `Columns` object, and reading it produces a squad of whatever happened to be there —
   // usually nothing, which then surfaces hundreds of lines later as "no legal XI from this squad".
-  const collisions: Collisions = conflicts
-    ? {
-        pairs: buildConflictPairs(candidates, conflicts.fixtures),
-        lambda: conflicts.lambda,
-      }
-    : NO_COLLISIONS;
+  const concentration: Concentration =
+    concentrationLambda === null
+      ? NO_CONCENTRATION
+      : { pairs: defencePairs(candidates), lambda: concentrationLambda };
   const solved = readSolution(
     candidates,
-    highs.solve(buildLp(candidates, rules, collisions, benchWeight)),
+    highs.solve(buildLp(candidates, rules, concentration, benchWeight)),
     rules,
   );
   const chosen = new Set(solved.squad.map((c) => c.key));

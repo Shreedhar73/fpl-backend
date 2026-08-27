@@ -174,9 +174,13 @@ export class TransfersService {
       bank: squad.bank,
       freeTransfers: state.freeTransfers,
       hitCost: HIT_COST,
-      // The SAME collision guard the recommendation is solved under. A plan judged by a different
-      // objective from the recommendation it is compared against is not comparable to it.
-      collisions: universe.collisions,
+      // **No guard is passed, and the comment that used to sit here claimed one was.** It said this
+      // solved under "the SAME collision guard the recommendation is solved under", which stopped
+      // being true when B-023 moved that guard and was never corrected. B-029 retired the rule
+      // outright and replaced it with a charge on the starting eleven — and this program has no
+      // eleven. So the planner optimises raw horizon EP less the hit while the recommendation also
+      // prices the bench, the armband and the defensive concentration. That divergence is B-024's,
+      // it is real, and it is wider than it was.
       maxTransfers: MAX_TRANSFERS,
     });
     const solution = highs.solve(lp);

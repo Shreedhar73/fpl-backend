@@ -1,5 +1,5 @@
 import type { Candidate } from '../../optimizer/ilp';
-import { NO_COLLISIONS } from '../../optimizer/ilp';
+import { NO_CONCENTRATION } from '../../optimizer/ilp';
 import { arrangeSquad, type Universe } from '../../optimizer/optimizer.service';
 import { Rules } from '../../optimizer/rules';
 import { InsightsService } from '../insights.service';
@@ -70,7 +70,7 @@ function universeOf(...groups: Candidate[][]): Universe {
     rules: RULES,
     gameweekIds: [2, 3, 4, 5, 6],
     modelVersion: 'test-model',
-    collisions: NO_COLLISIONS,
+    concentration: NO_CONCENTRATION,
   };
 }
 

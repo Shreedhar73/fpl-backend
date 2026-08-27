@@ -253,3 +253,41 @@ Read that −16 for what it is: **five captain decisions**. A captaincy swing of
 ordinary variance, the arms differ nowhere else, and n = 5 supports no verdict in either direction.
 What the season replay does establish is that the change is confined to what it was aimed at — it
 touched no squad and no eleven.
+
+## Update, 2026-08-27 — B-029 retires the collision penalty and prices the defence instead
+
+B-028 measured B-011 over 101,103 pairs and it did not survive: the collision is real (correlation
+−0.195) but it is a **hedge**, cutting a pair's variance by 19.5%, while two of one club's defence
+covary **+5.58** and were charged nothing. So the collision rows left the objective and a charge on
+**starting** two defensive players of the same club replaced them.
+
+**The recommendation changes again, and further than any previous step.**
+
+| | before B-029 | after |
+|---|---|---|
+| captain | Saka | **Palmer** (nothing charges the armband now) |
+| Brighton defenders | Wieffer and De Cuyper both start | **Wieffer starts, De Cuyper benched** |
+| midfield | Palmer, Saka, B.Fernandes, Mbeumo, Gomez | Palmer, Saka, Mbeumo, **Foden, Gakpo** |
+| forwards | Isak, Richarlison, Nketiah | Isak, **João Pedro**, Richarlison |
+| squad cost | £99.6m | £99.7m |
+| raw horizon EP | 253.68 | **254.54** |
+| charged | 2.00 holding + 2.00 armband | **0.00** — one pair held, not started |
+
+The rule does what it was built to do: it refuses to *field* both Brighton defenders. It does not
+refuse to own them — De Cuyper sits on the bench at £4.6m, which is the honest cost of keying a charge
+to the eleven rather than to the squad.
+
+**The season replay does not flatter it, and that is reported rather than buried.**
+
+| arm | realised | pairs held | both started | projected points forgone in the XI |
+|---|---:|---:|---:|---:|
+| no penalty at all (λ = 0) | 1673 | 33 rounds | 31 rounds | 0.00 |
+| collision on ownership (B-025/B-026) | 1713 | 30 rounds | 27 rounds | 0.00 |
+| **defence concentration (B-029)** | **1682** | 38 rounds | 8 rounds | **71.34** |
+
+One squad, one season, and the arms hold different fifteens — none of these differences is a result.
+What is not noise is the middle column: the new rule gives up **71.34 projected points** in the eleven
+over a season to avoid starting a concentrated defence, which is a real price for a policy whose
+benefit remains unmeasured. B-028 established the covariance exists and which way it points; it did
+not establish that a narrower squad scores more, and it cannot — that depends on optimising rank
+rather than points, which this project does not do.
