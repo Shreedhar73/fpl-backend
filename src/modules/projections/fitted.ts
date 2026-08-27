@@ -309,3 +309,103 @@ export const FITTED_PARAMS: FittedParams = {
   }
 };
 
+
+/**
+ * The availability candidate (plan 024, B-015) — the full minutes refit with deadline-time flags as
+ * a fitted input, from the Wayback archive of `bootstrap-static` captures.
+ *
+ * NOT the serving model. Serving stays pinned to `FITTED_PARAMS`; these ride `pnpm project` under
+ * their own version (`v3-avail-…`), scored weekly beside the incumbent by `pnpm score:gameweek`,
+ * and adoption is a D-numbered call against the pre-committed bar in plan 024.
+ *
+ * What moved and why it should have:
+ *
+ * - `startIntercept` −0.188 → +0.283: the base curves are now fitted EXCLUDING rows a rule already
+ *   decides (u/n/s, effective 0%), so they answer "P(start | not ruled out)" — a higher intercept is
+ *   the population changing, not a contradiction.
+ * - `availability.startInj` −2.70 with interaction −0.34: a 75% doubt costs ~0.68 start-logit, and
+ *   costs a nailed starter more than a fringe one.
+ * - `availability.startUnknown` −0.39 on 2,026 unknown rows (the Wayback-dark 2024-25 GW8–10): the
+ *   unknown population really does start less, which is exactly why unknown must never default to fit.
+ * - `sixtyGivenStartFlagged` 0.925 vs 0.934 global (n=332): a flagged player who starts anyway is
+ *   nearly a normal starter — the doubt is about whether he plays, not how long.
+ */
+export const AVAILABILITY_CANDIDATE_PARAMS: FittedParams = {
+  "strength": {
+    "homeAdvantage": 1.1186408380003192,
+    "confidenceMatches": 64,
+    "leagueGoalsPerTeamMatch": 1.5486291739894333,
+    "goalsWeight": 0.5,
+    "decayHalfLife": 6
+  },
+  "minutes": {
+    "startIntercept": 0.28333945570574204,
+    "startSlope": 0.4759093585027032,
+    "subAppearanceRate": 0.15435726210350584,
+    "subIntercept": 0.9838312990192988,
+    "subSlope": 1.2696915951918024,
+    "sixtyGivenStart": 0.9339351334078926,
+    "sixtyGivenSub": 0.013411204845338524,
+    "minutesGivenStart": 82.83320019172392,
+    "minutesGivenSub": 18.151633138654553,
+    "gkp": {
+      "startIntercept": -0.039863485257263825,
+      "startSlope": 0.5656804586773112,
+      "subIntercept": -1.1918864772747522,
+      "subSlope": 1.311291115267632,
+      "n": {
+        "start": 3711,
+        "sub": 2599
+      }
+    },
+    "availability": {
+      "startInj": -2.699156183864384,
+      "startInjX": -0.33553083469134565,
+      "startUnknown": -0.3896037181756922,
+      "subInj": -1.291664062643681,
+      "subUnknown": -0.46557321183438605,
+      "sixtyGivenStartFlagged": 0.9246987951807228,
+      "minutesGivenStartFlagged": 82.36144578313252,
+      "n": {
+        "startFlagged": 1762,
+        "subFlagged": 1430,
+        "unknown": 2026,
+        "flaggedStarts": 332
+      }
+    }
+  },
+  "saves": {
+    "elasticity": 0.75
+  },
+  "attack": {
+    "xgFixtureElasticity": 0.5,
+    "xaFixtureElasticity": 2,
+    "goalsPerXg": 0.9890259541292121,
+    "assistsPerXa": 1.3951956123013414
+  },
+  "defcon": {
+    "dispersion": 1.5,
+    "ratePer90ToMatch": 1.1
+  },
+  "bonus": {
+    "bonusPerBps": 0.04173248388494878,
+    "bpsIntercept": -0.2839231900427406,
+    "maxBonus": 3
+  },
+  "provenance": {
+    "fittedOn": [
+      "2023-24",
+      "2024-25"
+    ],
+    "rows": 56133,
+    "date": "2026-08-27-avail",
+    "objective": "frequencies measured directly; minutes curves refit jointly with availability terms (fitLogisticK); shape parameters by RMSE on held-out 2024-25 rounds 20+",
+    "heldOut": "2025-26 (whole season), live 2026/27 (untouched)",
+    "notes": [
+      "defensive contribution is fitted on 2025-26 rounds 1-19 — the category exists in no earlier season, so that term alone is not held out",
+      "availability IS fitted here (plan 024): deadline-time flags from Wayback captures of bootstrap-static, joined within a 72h staleness bound; 2024-25 GW8-10 have no capture in bound and trained as unknown",
+      "base minutes curves are conditional on not-ruled-out — u/n/s and effective-0% rows are excluded from the fit and zeroed by rule at prediction",
+      "NOT SERVED: candidate rows ride pnpm project under v3-avail; the adoption call is plan 024's bar, one TEST reading"
+    ]
+  }
+};

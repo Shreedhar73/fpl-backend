@@ -10,12 +10,26 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from '../app.module';
 import { CalibrationService } from '../modules/calibration/calibration.service';
-import { FITTED_PARAMS, UNFITTED_PARAMS } from '../modules/projections/fitted';
+import {
+  AVAILABILITY_CANDIDATE_PARAMS,
+  FITTED_PARAMS,
+  UNFITTED_PARAMS,
+} from '../modules/projections/fitted';
 
 async function main(): Promise<void> {
   const log = new Logger('calibrate');
-  const which = process.argv[2] === 'unfitted' ? 'unfitted' : 'fitted';
-  const params = which === 'unfitted' ? UNFITTED_PARAMS : FITTED_PARAMS;
+  const which =
+    process.argv[2] === 'unfitted'
+      ? 'unfitted'
+      : process.argv[2] === 'avail'
+        ? 'avail'
+        : 'fitted';
+  const params =
+    which === 'unfitted'
+      ? UNFITTED_PARAMS
+      : which === 'avail'
+        ? AVAILABILITY_CANDIDATE_PARAMS
+        : FITTED_PARAMS;
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
