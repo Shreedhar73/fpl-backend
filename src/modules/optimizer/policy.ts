@@ -59,3 +59,55 @@ export const COLLISION_LAMBDA = 1.0;
  */
 export const ATTACKING_POSITIONS = ['FWD', 'MID'] as const;
 export const DEFENSIVE_POSITIONS = ['DEF', 'GKP'] as const;
+
+/**
+ * What a bench place is worth, as a fraction of a starting place (B-023).
+ *
+ * **1.0, and it was measured rather than assumed — including the part that says the discount does
+ * not work.** `fpl-optimizer` estimates ~0.1, B-023 proposed shipping that, and the entry's own first
+ * trap warned that doing so unmeasured would trade one arbitrary weight for another. It would have.
+ *
+ * `pnpm optimize:bench-sweep` walks a full archived season per weight through the same simulator
+ * `pnpm decision-quality` uses. The `no-transfer` column is the one that isolates the opening squad,
+ * and it is not flat:
+ *
+ * | weight | 0 | 0.1 | 0.2 | 0.35 | 0.5 | 0.7 | 0.85 | 1.0 |
+ * |---|---:|---:|---:|---:|---:|---:|---:|---:|
+ * | no-transfer | 1457 | 1457 | 1329 | 1299 | 1299 | **1635** | **1635** | **1635** |
+ * | greedy-1ft | 1881 | 1881 | 1893 | 1867 | 1867 | 1881 | 1881 | 1881 |
+ *
+ * Every value at or below 0.5 costs **~180 points of season**, and 0.7 through 1.0 cannot be told
+ * apart. So the season evidence rules out the low end and says nothing inside the top plateau.
+ *
+ * **0.7 rather than 1.0, and the tie is broken by the objective being well posed rather than by
+ * taste.** The XI coefficient is `1 − benchWeight`. At exactly 1.0 it is **zero**, and the starting
+ * eleven stops being determined by anything but the collision penalty — the solver becomes free to
+ * bench a 17.2 defender for a 15.2 one, because within a chosen fifteen it no longer cares who
+ * plays. Confirmed on the live GW2 solve at 1.0: Wieffer (17.22) and De Cuyper (16.34) were benched
+ * behind Canvot (15.23) and Ballard (15.20), which is not a recommendation anybody should read.
+ *
+ * The season sweep could not see that, because the simulator re-chooses its lineup every round from
+ * realised availability and never reads the LP's XI. A measurement that does not look at the thing
+ * you are about to serve is not a licence to ship it.
+ *
+ * **What 0.7 does NOT fix, stated so nobody reads it as a fix.** On the live GW2 solve the collision
+ * rule now expresses itself by BENCHING the two Brighton defenders behind cheaper ones rather than
+ * by moving the armband off Palmer — Wieffer 17.22 and De Cuyper 16.34 sit, Ballard 15.20 and
+ * Lacroix 15.06 start. That is B-011 working, not failing: benching the colliding pair costs
+ * `(1 − 0.7) × 3.30 = 0.99` of objective and saves 4 penalty points, because the captain's exposure
+ * counts twice. It is worth knowing that the same swap is still worth it at 0.1, so this is the
+ * collision rule's arithmetic and not an artefact of the bench weight.
+ *
+ * **Why a heavily discounted bench loses points, which is the interesting half.** A bench bought as
+ * fodder cannot cover a blank. An auto-substitution only fires for a player who did not play, and if
+ * the substitute did not play either the manager keeps the zero. Over a season held without
+ * transfers, that costs more than the money saved buys. The `greedy-1ft` row is flat because
+ * transfers repair a weak bench over time — so the effect is real and it is largest exactly where a
+ * manager has fewest moves.
+ *
+ * **This does NOT put the objective back where it was.** `ilp.ts` still emits the XI and captain
+ * variables the spec asks for, and the captain's double — absent from the objective entirely before
+ * B-023 — is in it. At weight 1.0 the bench term simply contributes nothing, which is the measured
+ * answer rather than the original oversight.
+ */
+export const BENCH_WEIGHT = 0.7;

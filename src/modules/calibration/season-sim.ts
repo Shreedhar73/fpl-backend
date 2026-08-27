@@ -2,6 +2,7 @@ import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
 import { buildLp, Candidate } from '../optimizer/ilp';
 import { Rules } from '../optimizer/rules';
+import { BENCH_WEIGHT } from '../optimizer/policy';
 import { Predictor, PredictionRow } from './harness';
 import { chooseLineup, playingTeams, slotFor } from './xi-decision';
 import { scoreLineup } from './squad-scoring';
@@ -30,6 +31,20 @@ export interface OwnedPlayer {
   playerCode: number;
   /** what we paid, in tenths — the sell-price rule needs the purchase price, never the market price */
   purchasePrice: number;
+  /**
+   * The position we own this player in.
+   *
+   * **Carried on the squad, not looked up in the round's market.** A transfer is position-locked, and
+   * the policy used to read the outgoing player's position off `market.get(code)?.position` — which
+   * is `undefined` for a player with no row that round, i.e. one who blanked. The check was written
+   * `outPosition !== undefined && row.position !== outPosition`, so it disengaged **exactly** when
+   * the data was thin, and a keeper could be sold for a midfielder.
+   *
+   * That went unnoticed until B-023 gave the bench genuine fodder — players who often have no row at
+   * all. Over 38 rounds the squad drifted to 0 GKP / 7 DEF / 6 MID / 2 FWD, and the season died with
+   * "no legal XI" hundreds of rounds from the cause.
+   */
+  position: PositionCode;
 }
 
 export interface SquadState {
@@ -150,8 +165,6 @@ export const GREEDY_ONE_FT: SimPolicy = {
     let best: { out: number; in: number; gain: number } | null = null;
 
     for (const owned of state.owned) {
-      const outRow = market.get(owned.playerCode);
-      const outPosition = outRow?.position;
       const outPrice = prices.get(owned.playerCode);
       if (outPrice === undefined) continue;
       const proceeds = sellValue(owned.purchasePrice, outPrice);
@@ -162,7 +175,11 @@ export const GREEDY_ONE_FT: SimPolicy = {
         if (ownedCodes.has(code)) continue;
         // Like for like: FPL transfers are position-locked, and a squad that swapped a defender for
         // a midfielder would fail the quota check the moment it was validated.
-        if (outPosition !== undefined && row.position !== outPosition) continue;
+        //
+        // Read off the SQUAD, never off this round's market. The market has no row for a player who
+        // blanked, and the previous `outPosition !== undefined &&` guard turned the rule off exactly
+        // then — which is the round it matters most.
+        if (row.position !== owned.position) continue;
         if (row.teamCode === null) continue;
         const cost = prices.get(code);
         if (cost === undefined) continue;
@@ -198,6 +215,8 @@ export async function openingSquad(
    * signal knowable at that point and is the charter's own naive baseline.
    */
   fallback: Predictor | null,
+  /** What a bench place is worth. Passed in so a sweep can vary it without touching this file. */
+  benchWeight = BENCH_WEIGHT,
 ): Promise<PredictionRow[]> {
   const candidates: Candidate[] = rows
     .filter((r) => r.teamCode !== null)
@@ -215,12 +234,32 @@ export async function openingSquad(
       appearances: r.appearances,
     }));
   const highs = await highsLoader();
-  const solution = highs.solve(buildLp(candidates, rules));
+  // The SAME objective the served optimizer solves (B-023): the XI, the armband and a discounted
+  // bench. A simulator that picked its opening fifteen under a different objective from the product
+  // would be measuring a squad nobody would ever be recommended.
+  const solution = highs.solve(
+    buildLp(candidates, rules, undefined, benchWeight),
+  );
+  // **Check the status.** A solver that returns anything but Optimal still returns a `Columns`
+  // object, and reading it produces a squad of whatever happened to be there — usually nothing. The
+  // failure then surfaces hundreds of lines later as "no legal XI from this squad", which is a true
+  // statement about an empty squad and tells you nothing about why.
+  if (solution.Status !== 'Optimal') {
+    throw new Error(
+      `the opening-squad solve returned ${solution.Status} over ${candidates.length} candidates`,
+    );
+  }
   const chosen = new Set<string>();
   for (const [key, col] of Object.entries(solution.Columns)) {
     if ((col as { Primal: number }).Primal > 0.5) chosen.add(key);
   }
-  return rows.filter((r) => chosen.has(`p_${r.playerCode}`));
+  const squad = rows.filter((r) => chosen.has(`p_${r.playerCode}`));
+  if (squad.length !== rules.squadSize()) {
+    throw new Error(
+      `the opening-squad solve returned ${squad.length} players, expected ${rules.squadSize()}`,
+    );
+  }
+  return squad;
 }
 
 export interface SimOptions {
@@ -260,6 +299,7 @@ export function simulateSeason(
     owned: opening.map((r) => ({
       playerCode: r.playerCode,
       purchasePrice: r.value,
+      position: r.position as PositionCode,
     })),
     bank: rules.budget() - opening.reduce((s, r) => s + r.value, 0),
     // GW1 is unlimited transfers and the squad is chosen there, so the bank opens at one.
@@ -290,7 +330,22 @@ export function simulateSeason(
         if (idx < 0 || price === undefined || outPrice === undefined) continue;
         state.bank +=
           sellValue(state.owned[idx].purchasePrice, outPrice) - price;
-        state.owned[idx] = { playerCode: move.in, purchasePrice: price };
+        const incoming = market.get(move.in);
+        if (!incoming) continue;
+        // The incoming player's position REPLACES the outgoing one's, and the policy is required to
+        // have matched them. Asserted rather than trusted: a policy that returns a mismatched pair
+        // would otherwise corrupt the squad shape silently, which is how this bug lived.
+        if (incoming.position !== state.owned[idx].position) {
+          throw new Error(
+            `transfer policy "${policy.label}" returned a position change: ` +
+              `${state.owned[idx].position} out, ${incoming.position} in`,
+          );
+        }
+        state.owned[idx] = {
+          playerCode: move.in,
+          purchasePrice: price,
+          position: incoming.position,
+        };
       }
       state.freeTransfers = Math.max(0, state.freeTransfers - moves.length);
     }

@@ -5,6 +5,7 @@ import { Scoring } from '../projections/scoring';
 import { FittedParams } from '../projections/fitted';
 import { scoringForSeason } from '../archive/archive-scoring';
 import { CalibrationRepository } from './calibration.repository';
+import { BENCH_WEIGHT } from '../optimizer/policy';
 import {
   commonRows,
   PREDICTORS,
@@ -80,7 +81,20 @@ export class DecisionService {
 
   constructor(private readonly repo: CalibrationRepository) {}
 
-  async evaluate(label: string, params: FittedParams): Promise<DecisionReport> {
+  async evaluate(
+    label: string,
+    params: FittedParams,
+    /**
+     * What a bench place is worth when each predictor picks its opening fifteen (B-023).
+     *
+     * A parameter rather than a constant read here, so `pnpm optimize:bench-sweep` can vary it
+     * without touching this file — and so the sweep measures the same simulator the report does
+     * rather than a copy of it written to flatter the answer.
+     */
+    benchWeight = BENCH_WEIGHT,
+    /** Skip the report file; a sweep runs this dozens of times and wants the numbers, not the prose. */
+    options: { write?: boolean } = {},
+  ): Promise<DecisionReport> {
     const before = await this.repo.projectionCount();
     const beforeRuns = await this.repo.optimizerRunCount();
     const scoringFor = await this.scoringResolver();
@@ -153,6 +167,7 @@ export class DecisionService {
           p,
           rules,
           p === 'form' ? 'priorSeason' : null,
+          benchWeight,
         );
         seasons.push(
           simulateSeason(byRound, opening, p, rules, policy, SIM_OPTIONS),
@@ -172,16 +187,19 @@ export class DecisionService {
       });
     }
 
-    const path = await this.writeReport(
-      label,
-      result.rows,
-      population,
-      squads,
-      decisions,
-      roundsBy,
-      squadRound,
-      seasons,
-    );
+    const path =
+      options.write === false
+        ? ''
+        : await this.writeReport(
+            label,
+            result.rows,
+            population,
+            squads,
+            decisions,
+            roundsBy,
+            squadRound,
+            seasons,
+          );
 
     const after = await this.repo.projectionCount();
     if (after !== before) {
@@ -212,7 +230,9 @@ export class DecisionService {
         cache.set(season, Scoring.from(table.scoring));
         continue;
       }
-      this.log.warn(`${season}: no reconstructed scoring table — using the live config`);
+      this.log.warn(
+        `${season}: no reconstructed scoring table — using the live config`,
+      );
       live ??= Scoring.from(await this.repo.liveScoring());
       cache.set(season, live);
     }
@@ -297,7 +317,9 @@ export class DecisionService {
       w();
       w(
         `| Predictor | rounds | Spearman | ` +
-          DEFAULT_KS.map((k) => `points captured @${k} | precision @${k} `).join('| ') +
+          DEFAULT_KS.map(
+            (k) => `points captured @${k} | precision @${k} `,
+          ).join('| ') +
           `|`,
       );
       w(`|---|---:|---:|` + DEFAULT_KS.map(() => `---:|---:|`).join(''));
@@ -324,7 +346,13 @@ export class DecisionService {
       const capturedWins = DEFAULT_KS.filter((k) => {
         const a = m.meanPointsCaptured.get(k);
         const b = f.meanPointsCaptured.get(k);
-        return a !== null && a !== undefined && b !== null && b !== undefined && a > b;
+        return (
+          a !== null &&
+          a !== undefined &&
+          b !== null &&
+          b !== undefined &&
+          a > b
+        );
       });
       const rhoWin =
         m.meanSpearman !== null &&
@@ -353,7 +381,9 @@ export class DecisionService {
             `the season simulation lands (Phases 3–4), and not before.`,
         );
       } else if (rhoWin && capturedWins.length === DEFAULT_KS.length) {
-        w(`**Beats \`form\` on rank correlation and on points captured at every k.**`);
+        w(
+          `**Beats \`form\` on rank correlation and on points captured at every k.**`,
+        );
       } else if (capturedWins.length === 0) {
         w(
           `**Does not beat \`form\` on points captured at any k.** Recorded as it stands. The ` +
@@ -407,7 +437,9 @@ export class DecisionService {
         `37 rounds rather than 38.`,
     );
     w();
-    w(`| Squad | Predictor | rounds | points | XI efficiency | captain regret |`);
+    w(
+      `| Squad | Predictor | rounds | points | XI efficiency | captain regret |`,
+    );
     w(`|---|---|---:|---:|---:|---:|`);
     for (const d of decisions) {
       w(
@@ -433,7 +465,9 @@ export class DecisionService {
         `a crude bar and is meant to be.`,
     );
     w();
-    w(`| Squad | comparison | rounds | mean difference | ± s.e. | clears noise |`);
+    w(
+      `| Squad | comparison | rounds | mean difference | ± s.e. | clears noise |`,
+    );
     w(`|---|---|---:|---:|---:|---|`);
     for (const squad of squads) {
       for (const against of ['form', 'priorSeason'] as Predictor[]) {
@@ -460,7 +494,10 @@ export class DecisionService {
             roundsBy.get(`${sq.label}|form`) ?? [],
           ),
         }))
-        .filter((x) => x.d !== null) as { squad: string; d: NonNullable<ReturnType<typeof pairedDifference>> }[];
+        .filter((x) => x.d !== null) as {
+        squad: string;
+        d: NonNullable<ReturnType<typeof pairedDifference>>;
+      }[];
       const cleared = pairs.filter((x) => x.d.clearsNoise);
       const positive = pairs.filter((x) => x.d.meanDifference > 0);
       w();
@@ -522,7 +559,9 @@ export class DecisionService {
         `baseline handed a better opening squad than it could have chosen is not a baseline.`,
     );
     w();
-    w(`| Policy | Squad picked by | rounds | **points** | transfers | hits | final team value |`);
+    w(
+      `| Policy | Squad picked by | rounds | **points** | transfers | hits | final team value |`,
+    );
     w(`|---|---|---:|---:|---:|---:|---:|`);
     for (const r of seasons) {
       w(
@@ -533,7 +572,9 @@ export class DecisionService {
     w();
     w(`### Is the difference bigger than the noise?`);
     w();
-    w(`| Policy | comparison | rounds | mean difference | ± s.e. | clears noise |`);
+    w(
+      `| Policy | comparison | rounds | mean difference | ± s.e. | clears noise |`,
+    );
     w(`|---|---|---:|---:|---:|---|`);
     for (const policy of ['no-transfer', 'greedy-1ft']) {
       const forPolicy = seasons.filter((s2) => s2.policy === policy);
@@ -668,7 +709,10 @@ export class DecisionService {
 
     const dir = 'reports';
     await mkdir(dir, { recursive: true });
-    const path = join(dir, `decision-quality${label === 'fitted' ? '' : `-${label}`}.md`);
+    const path = join(
+      dir,
+      `decision-quality${label === 'fitted' ? '' : `-${label}`}.md`,
+    );
     await writeFile(path, lines.join('\n'), 'utf8');
     return path;
   }

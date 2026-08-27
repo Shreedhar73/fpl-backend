@@ -1,6 +1,7 @@
 import highsLoader from 'highs';
 import { PositionCode } from '../fpl-sync/mappers';
 import { buildLp, Candidate } from '../optimizer/ilp';
+import { BENCH_WEIGHT } from '../optimizer/policy';
 import { Rules } from '../optimizer/rules';
 import { PredictionRow } from './harness';
 
@@ -58,7 +59,9 @@ async function solveSquad(
   rules: Rules,
 ): Promise<Set<string>> {
   const highs = await highsLoader();
-  const solution = highs.solve(buildLp(candidates, rules));
+  const solution = highs.solve(
+    buildLp(candidates, rules, undefined, BENCH_WEIGHT),
+  );
   const chosen = new Set<string>();
   for (const [key, col] of Object.entries(solution.Columns)) {
     if ((col as { Primal: number }).Primal > 0.5) chosen.add(key);

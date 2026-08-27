@@ -12,7 +12,7 @@ import {
   NO_COLLISIONS,
 } from './ilp';
 import { POSITIONS, Rules } from './rules';
-import { MIN_APPEARANCES, COLLISION_LAMBDA } from './policy';
+import { MIN_APPEARANCES, COLLISION_LAMBDA, BENCH_WEIGHT } from './policy';
 
 export const OPTIMIZER_VERSION = 'v1-ilp';
 const HORIZON = 5;
@@ -158,6 +158,8 @@ export function arrangeSquad(
   inSquad: Candidate[],
   rules: Rules,
   collisions: Collisions = NO_COLLISIONS,
+  /** The squad LP's bench weight, so an arrangement and a solve optimise one expression (B-023). */
+  benchWeight = BENCH_WEIGHT,
 ): {
   squad: SquadPlayer[];
   formation: string;
@@ -173,7 +175,7 @@ export function arrangeSquad(
     viceKey,
     penaltyPoints,
     collisions: xiCollisions,
-  } = pickBestXi(inSquad, rules, collisions);
+  } = pickBestXi(inSquad, rules, collisions, benchWeight);
 
   const bench = inSquad.filter((c) => !starters.has(c.key));
   const benchGk = bench.filter((c) => c.position === 'GKP');
@@ -316,8 +318,10 @@ export class OptimizerService {
     const highs = await highsLoader();
     const solve = (
       from: Candidate[],
-    ): { squad: Candidate[]; objective: number } => {
-      const solution = highs.solve(buildLp(from, rules, collisions));
+    ): { squad: Candidate[]; objective: number; xi: Set<string> } => {
+      const solution = highs.solve(
+        buildLp(from, rules, collisions, BENCH_WEIGHT),
+      );
       if (solution.Status !== 'Optimal') {
         throw new Error(
           `optimiser did not find an optimal squad (status: ${solution.Status})`,
@@ -326,10 +330,16 @@ export class OptimizerService {
       return {
         squad: from.filter((c) => (solution.Columns[c.key]?.Primal ?? 0) > 0.5),
         objective: solution.ObjectiveValue,
+        // The XI the SOLVER chose, so it can be compared against the enumeration below.
+        xi: new Set(
+          from
+            .filter((c) => (solution.Columns[`y_${c.key}`]?.Primal ?? 0) > 0.5)
+            .map((c) => c.key),
+        ),
       };
     };
 
-    const { squad: inSquad, objective: objectiveValue } = solve(pool);
+    const { squad: inSquad, objective: objectiveValue, xi: lpXi } = solve(pool);
     if (inSquad.length !== rules.squadSize()) {
       throw new Error(
         `solver returned ${inSquad.length} players, expected ${rules.squadSize()}`,
@@ -365,6 +375,23 @@ export class OptimizerService {
       rules,
       collisions,
     );
+
+    // The LP already chose an XI and an armband. `arrangeSquad` chooses them again, by exact
+    // enumeration over the same expression, and the two must agree — that is what makes the second
+    // one a verification rather than a competing optimisation. A disagreement means the LP's rows
+    // and the enumeration's scoring have drifted apart, which neither would report on its own.
+    const chosenXi = new Set(
+      squad.filter((p) => p.role !== 'bench').map((p) => `p_${p.playerId}`),
+    );
+    if (
+      lpXi.size === chosenXi.size &&
+      ![...lpXi].every((k) => chosenXi.has(k))
+    ) {
+      this.log.warn(
+        'the solver and the XI enumeration disagree about who starts — they optimise the same ' +
+          'expression, so this means a constraint row and the enumeration have drifted apart',
+      );
+    }
 
     const totalCost = inSquad.reduce((s, c) => s + c.cost, 0);
     const durationMs = Date.now() - started;

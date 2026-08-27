@@ -157,12 +157,19 @@ describe('buildLp — the collision penalty is in the objective, not a post-hoc 
 
   it('emits one z row per pair and carries -LAMBDA in the objective', () => {
     const lp = buildLp(squad(), rules, collisions(1.5));
-    expect(lp).toMatch(/conf_0: p_a1 \+ p_d1 - z_0 <= 1/);
+    // On the XI variables, not the squad ones (B-023). Two of our players colliding where one of
+    // them is benched is not the bet B-011 is about — the rule is about betting both ways ON THE
+    // PITCH, and a `y` row says exactly that where a `x` row said something looser.
+    expect(lp).toMatch(/conf_0: y_p_a1 \+ y_p_d1 - z_0 <= 1/);
     expect(lp).toMatch(/- 1\.5000 z_0/);
+    // And the captain's side of the same collision, which is what doubles his exposure.
+    expect(lp).toMatch(/capconf_a_0: k_p_a1 \+ y_p_d1 - w_0 <= 1/);
+    expect(lp).toMatch(/- 1\.5000 w_0/);
     // z is continuous — the -lambda objective pins it to its lower bound, so it must NOT be declared
     // binary. A z in the Binary section is a needless integer variable.
     const binarySection = lp.slice(lp.indexOf('Binary'));
     expect(binarySection).not.toMatch(/z_0/);
+    expect(binarySection).not.toMatch(/w_0/);
   });
 
   it('emits no z row at LAMBDA = 0 (the sabotage: the collision tests below go red, these stay green)', () => {

@@ -147,10 +147,45 @@ function signedExpr(terms: { coef: number; name: string }[]): string {
     .join('\n  ');
 }
 
+/**
+ * The squad program (B-023).
+ *
+ * **What this used to be, and why it was wrong.** `buildLp` emitted one variable family — `x_p`, in
+ * the fifteen — at coefficient `ep_p`, and maximised `Σ EP_p × x_p`. That is a quantity FPL never
+ * pays out. A bench player scores only through an auto-substitution, and the captain's double, which
+ * is the single largest lever in a gameweek, appeared in the objective nowhere. Both omissions push
+ * the same way, away from premiums: a bench place valued at par means bench fodder is never fodder,
+ * so the money that would buy the marginal premium goes into a fourth £5.0m defender; and a captain
+ * worth nothing at selection time means the one slot that pays twice is bought at single price.
+ * Measured on the live GW2 solve before this changed, the four bench players carried 22.8% of the
+ * objective and 20% of the budget.
+ *
+ * **The program, as `fpl-optimizer` specifies it:**
+ *
+ * ```
+ *   maximise  Σ EP_p (y_p + c_p)  +  benchWeight · Σ EP_p (x_p − y_p)  −  λ (Σ z + Σ w)
+ *   s.t.      Σ x = 15,  squad quotas on x,  budget,  ≤ 3 per club
+ *             y_p ≤ x_p,  Σ y = 11,  formation min/max on y
+ *             c_p ≤ y_p,  Σ c = 1
+ *             z_ij ≥ y_i + y_j − 1                    a collision inside the XI
+ *             w_ij ≥ c_i + y_j − 1                    the same collision, captain's side doubled
+ * ```
+ *
+ * Collected per variable, the coefficients are `benchWeight · ep` on `x`, `(1 − benchWeight) · ep`
+ * on `y`, and `ep` on `c`. Selecting a player into the XI therefore *reduces* his bench value, which
+ * is right: a player you start cannot auto-sub in.
+ *
+ * **The collision penalty moved from the squad to the XI, and it is more correct there.** B-011's
+ * rule is about betting on both outcomes of one match *on the pitch*; two of our players colliding
+ * where one of them is benched is not that bet. `w` reproduces exactly what `pickBestXi` charges — the
+ * captain's collisions counted twice — so the two now optimise the same expression rather than two
+ * that happen to agree.
+ */
 export function buildLp(
   candidates: Candidate[],
   rules: Rules,
   collisions: Collisions = NO_COLLISIONS,
+  benchWeight = 0,
 ): string {
   const clubs = [...new Set(candidates.map((c) => c.teamId))];
   const inPos = (pos: PositionCode) =>
@@ -170,13 +205,22 @@ export function buildLp(
           (p) => inLp.has(p.attacker.key) && inLp.has(p.defender.key),
         );
 
+  const xi = (c: Candidate) => `y_${c.key}`;
+  const cap = (c: Candidate) => `k_${c.key}`;
+
   const lines: string[] = [];
   lines.push('Maximize');
   lines.push(
     ' obj: ' +
       signedExpr([
-        ...candidates.map((c) => ({ coef: c.ep, name: c.key })),
+        ...candidates.map((c) => ({ coef: benchWeight * c.ep, name: c.key })),
+        ...candidates.map((c) => ({
+          coef: (1 - benchWeight) * c.ep,
+          name: xi(c),
+        })),
+        ...candidates.map((c) => ({ coef: c.ep, name: cap(c) })),
         ...pairs.map((_, i) => ({ coef: -collisions.lambda, name: `z_${i}` })),
+        ...pairs.map((_, i) => ({ coef: -collisions.lambda, name: `w_${i}` })),
       ]),
   );
 
@@ -197,18 +241,60 @@ export function buildLp(
       ` club_${teamId}: ${expr(inClub(teamId).map((c) => c.key))} <= ${rules.clubLimit()}`,
     );
   }
-  // z >= x_i + x_j - 1, written so the solver reads it as a linear row. `z` stays CONTINUOUS and out
-  // of the Binary section: the `-lambda*z` objective pushes it to its lower bound, so it lands on 0
-  // unless both players are taken, and the LP relaxation of a binary is not needed.
+
+  // --- The XI and the armband.
+  lines.push(` xi: ${expr(candidates.map((c) => xi(c)))} = ${rules.xiSize()}`);
+  lines.push(` captain: ${expr(candidates.map((c) => cap(c)))} = 1`);
+  for (const pos of POSITIONS) {
+    const inThis = inPos(pos).map((c) => xi(c));
+    if (inThis.length === 0) continue;
+    lines.push(` play_min_${pos}: ${expr(inThis)} >= ${rules.minPlay(pos)}`);
+    lines.push(` play_max_${pos}: ${expr(inThis)} <= ${rules.maxPlay(pos)}`);
+  }
+  for (const c of candidates) {
+    // You cannot start a player you do not own, or captain one you do not start.
+    lines.push(` own_${c.key}: ${xi(c)} - ${c.key} <= 0`);
+    lines.push(` armband_${c.key}: ${cap(c)} - ${xi(c)} <= 0`);
+  }
+
+  // z and w stay CONTINUOUS and out of the Binary section: the `-lambda` objective pushes each to its
+  // lower bound, so it lands on 0 unless its row forces it up, and the LP relaxation of a binary is
+  // not needed.
   pairs.forEach((p, i) => {
     lines.push(
-      ` conf_${i}: ${p.attacker.key} + ${p.defender.key} - z_${i} <= 1`,
+      ` conf_${i}: ${xi(p.attacker)} + ${xi(p.defender)} - z_${i} <= 1`,
+    );
+    // The captain doubles the stake on the correlated outcome, not only the reward. Two rows, one
+    // per side, because either endpoint of the pair may be the one wearing the armband.
+    lines.push(
+      ` capconf_a_${i}: ${cap(p.attacker)} + ${xi(p.defender)} - w_${i} <= 1`,
+    );
+    lines.push(
+      ` capconf_d_${i}: ${cap(p.defender)} + ${xi(p.attacker)} - w_${i} <= 1`,
     );
   });
 
+  // Only when there is something to bound. An empty `Bounds` header followed straight by `Binary` is
+  // not a section, it is a header the parser has to guess at — and a guess in an LP file becomes a
+  // different program, silently.
+  if (pairs.length > 0) {
+    lines.push('Bounds');
+    for (let i = 0; i < pairs.length; i++) {
+      lines.push(` z_${i} >= 0`);
+      lines.push(` w_${i} >= 0`);
+    }
+  }
+
   lines.push('Binary');
   // Binary section lists variable names only — no '+' operators.
-  lines.push('  ' + candidates.map((c) => c.key).join('\n  '));
+  lines.push(
+    '  ' +
+      [
+        ...candidates.map((c) => c.key),
+        ...candidates.map((c) => xi(c)),
+        ...candidates.map((c) => cap(c)),
+      ].join('\n  '),
+  );
   lines.push('End');
   return lines.join('\n');
 }
@@ -266,6 +352,17 @@ export function pickBestXi(
   squad: Candidate[],
   rules: Rules,
   collisions: Collisions = NO_COLLISIONS,
+  /**
+   * The same bench weight the squad LP uses (B-023).
+   *
+   * It matters here even though the fifteen is already fixed. `Σ EP·x` is then a constant, but the
+   * `− benchWeight · Σ EP·y` half of the bench term is not: starting a player REMOVES his bench
+   * value, because a player you start cannot auto-sub in. Scoring the XI without it would make this
+   * function maximise a different expression from the solve that chose the fifteen, and the two
+   * would disagree on which XI is best — which is precisely what this function's comment says it
+   * exists to prevent.
+   */
+  benchWeight = 0,
 ): XiResult {
   const byPos = (pos: PositionCode) =>
     squad.filter((c) => c.position === pos).sort((a, b) => b.ep - a.ep);
@@ -305,7 +402,9 @@ export function pickBestXi(
     const penaltyPoints =
       collisions.lambda * (inXi.length + conflictsOf(captain.c.key));
     const rawEp = baseEp + captain.c.ep;
-    const score = rawEp - penaltyPoints;
+    // The LP's expression exactly: (1 − w)·Σ EP·y + EP·captain − λ(z + w). The constant w·Σ EP·x is
+    // dropped because the fifteen is fixed here and a constant cannot change an argmax.
+    const score = (1 - benchWeight) * baseEp + captain.c.ep - penaltyPoints;
 
     if (!best || score > best.score) {
       best = {

@@ -1,5 +1,6 @@
 import highsLoader from 'highs';
 import { Rules } from '../rules';
+import { BENCH_WEIGHT } from '../policy';
 import { buildLp, pickBestXi, Candidate } from '../ilp';
 
 /**
@@ -143,7 +144,7 @@ describe('HiGHS solve — optimal under the constraints', () => {
   it('returns 15 legal players within budget, and beats greedy-by-EP under the budget coupling', async () => {
     const highs = await highsLoader();
     const cands = universe();
-    const sol = highs.solve(buildLp(cands, rules));
+    const sol = highs.solve(buildLp(cands, rules, undefined, BENCH_WEIGHT));
     expect(sol.Status).toBe('Optimal');
 
     const chosen = cands.filter(
@@ -173,9 +174,28 @@ describe('HiGHS solve — optimal under the constraints', () => {
 
     // greedy-by-EP (top per quota, ignoring budget) is infeasible here — the two 40-pt mids plus the
     // 42-pt fwd blow the budget — so the ILP's feasible objective is the meaningful one.
-    const ilpObjective = chosen.reduce((s, c) => s + c.ep, 0);
-    expect(ilpObjective).toBeGreaterThan(0);
-    expect(sol.ObjectiveValue).toBeCloseTo(ilpObjective, 2);
+    //
+    // **The objective is no longer `Σ EP × x` (B-023.)** It is the program the spec asks for, and
+    // recomputing it here from the solver's own y and k columns is what keeps this test a check on
+    // the LP rather than a restatement of it: if the emitted rows and the intended objective ever
+    // drift apart, these two numbers stop matching.
+    const primal = (name: string) =>
+      ((sol.Columns[name] as { Primal?: number })?.Primal ?? 0) > 0.5;
+    const startingXi = chosen.filter((c) => primal(`y_${c.key}`));
+    const captain = chosen.filter((c) => primal(`k_${c.key}`));
+    expect(startingXi).toHaveLength(11);
+    expect(captain).toHaveLength(1);
+    // The captain has to be one of the starters, which is the `armband_` row doing its job.
+    expect(startingXi.map((c) => c.key)).toContain(captain[0].key);
+
+    const expected =
+      startingXi.reduce((s, c) => s + c.ep, 0) +
+      captain[0].ep +
+      BENCH_WEIGHT *
+        chosen
+          .filter((c) => !primal(`y_${c.key}`))
+          .reduce((s, c) => s + c.ep, 0);
+    expect(sol.ObjectiveValue).toBeCloseTo(expected, 2);
   });
 
   it('spends less when the budget is cut (break-on-purpose on the config)', async () => {

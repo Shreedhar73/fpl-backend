@@ -121,10 +121,22 @@ export function chooseLineup(
   const fwd = byPos('FWD');
 
   let best: { picked: typeof scored; total: number } | null = null;
-  for (let d = rules.minPlay('DEF'); d <= Math.min(rules.maxPlay('DEF'), def.length); d++) {
-    for (let m = rules.minPlay('MID'); m <= Math.min(rules.maxPlay('MID'), mid.length); m++) {
+  for (
+    let d = rules.minPlay('DEF');
+    d <= Math.min(rules.maxPlay('DEF'), def.length);
+    d++
+  ) {
+    for (
+      let m = rules.minPlay('MID');
+      m <= Math.min(rules.maxPlay('MID'), mid.length);
+      m++
+    ) {
       const f = rules.xiSize() - 1 - d - m;
-      if (f < rules.minPlay('FWD') || f > Math.min(rules.maxPlay('FWD'), fwd.length)) continue;
+      if (
+        f < rules.minPlay('FWD') ||
+        f > Math.min(rules.maxPlay('FWD'), fwd.length)
+      )
+        continue;
       if (gk.length < 1) continue;
       const picked = [
         ...gk.slice(0, 1),
@@ -136,7 +148,17 @@ export function chooseLineup(
       if (!best || total > best.total) best = { picked, total };
     }
   }
-  if (!best) throw new Error('no legal XI from this squad');
+  if (!best) {
+    // Say WHICH shape failed. "No legal XI" is true of an empty squad, a squad of ten, and a squad
+    // with two goalkeepers and no defenders, and the three have nothing to do with each other.
+    const shape = `${gk.length} GKP / ${def.length} DEF / ${mid.length} MID / ${fwd.length} FWD`;
+    throw new Error(
+      `no legal XI from this squad — it holds ${scored.length} players (${shape}), and the rules ` +
+        `need 1 GKP plus ${rules.minPlay('DEF')}-${rules.maxPlay('DEF')} DEF, ` +
+        `${rules.minPlay('MID')}-${rules.maxPlay('MID')} MID, ` +
+        `${rules.minPlay('FWD')}-${rules.maxPlay('FWD')} FWD in an XI of ${rules.xiSize()}`,
+    );
+  }
 
   const starters = best.picked;
   const startingCodes = new Set(starters.map((s) => s.member.playerCode));
@@ -177,10 +199,22 @@ function ceilingFor(members: SquadMember[], rules: Rules): number {
   const mid = byPos('MID');
   const fwd = byPos('FWD');
   let best = 0;
-  for (let d = rules.minPlay('DEF'); d <= Math.min(rules.maxPlay('DEF'), def.length); d++) {
-    for (let m = rules.minPlay('MID'); m <= Math.min(rules.maxPlay('MID'), mid.length); m++) {
+  for (
+    let d = rules.minPlay('DEF');
+    d <= Math.min(rules.maxPlay('DEF'), def.length);
+    d++
+  ) {
+    for (
+      let m = rules.minPlay('MID');
+      m <= Math.min(rules.maxPlay('MID'), mid.length);
+      m++
+    ) {
       const f = rules.xiSize() - 1 - d - m;
-      if (f < rules.minPlay('FWD') || f > Math.min(rules.maxPlay('FWD'), fwd.length)) continue;
+      if (
+        f < rules.minPlay('FWD') ||
+        f > Math.min(rules.maxPlay('FWD'), fwd.length)
+      )
+        continue;
       if (gk.length < 1) continue;
       const xi = [
         gk[0],
@@ -212,7 +246,8 @@ function ceilingFor(members: SquadMember[], rules: Rules): number {
  */
 export function playingTeams(byCode: Map<number, PredictionRow>): Set<number> {
   const teams = new Set<number>();
-  for (const r of byCode.values()) if (r.teamCode !== null) teams.add(r.teamCode);
+  for (const r of byCode.values())
+    if (r.teamCode !== null) teams.add(r.teamCode);
   return teams;
 }
 
@@ -248,7 +283,9 @@ export function decideOverSeason(
 
   const lastSeen = new Map<number, { points: number; pPlay: number }>();
 
-  for (const [round, byCode] of [...rowsByRound.entries()].sort((a, b) => a[0] - b[0])) {
+  for (const [round, byCode] of [...rowsByRound.entries()].sort(
+    (a, b) => a[0] - b[0],
+  )) {
     const playing = playingTeams(byCode);
     const present = squad.members.map((base) =>
       slotFor(base, byCode, playing, lastSeen),
@@ -258,7 +295,9 @@ export function decideOverSeason(
 
     const lineup = chooseLineup(present, predictor, rules);
     const scored = scoreLineup(lineup, rules);
-    const allMembers = present.map((p) => (p.row ? member(p.row) : blank(p.base)));
+    const allMembers = present.map((p) =>
+      p.row ? member(p.row) : blank(p.base),
+    );
     const bestFielded = Math.max(...scored.fielded.map((m) => m.actual));
     const captain = scored.fielded.find((m) => m.playerCode === scored.doubled);
 
