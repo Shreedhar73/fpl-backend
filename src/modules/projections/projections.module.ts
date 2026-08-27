@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
+import { CandidateService } from './candidate.service';
 import { ProjectionsService } from './projections.service';
 import { ProjectionsRepository } from './projections.repository';
 import { ForecastService } from './forecast.service';
@@ -17,10 +18,12 @@ import { ForecastRepository } from './forecast.repository';
   imports: [PrismaModule],
   providers: [
     ProjectionsService,
+    CandidateService,
     ProjectionsRepository,
     ForecastService,
     ForecastRepository,
   ],
-  exports: [ProjectionsService, ProjectionsRepository, ForecastRepository],
+  exports: [ProjectionsService,
+    CandidateService, ProjectionsRepository, ForecastRepository],
 })
 export class ProjectionsModule {}

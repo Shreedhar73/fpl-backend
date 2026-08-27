@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProjectionsRepository, ProjectionRow } from './projections.repository';
 import { ForecastService, PlayerForecast } from './forecast.service';
+import { CandidateService } from './candidate.service';
 import { FITTED_PARAMS } from './fitted';
 
 /**
@@ -69,6 +70,7 @@ export class ProjectionsService {
   constructor(
     private readonly repo: ProjectionsRepository,
     private readonly forecast: ForecastService,
+    private readonly candidate: CandidateService,
   ) {}
 
   async run(horizon = HORIZON): Promise<ProjectionSummary> {
@@ -112,6 +114,20 @@ export class ProjectionsService {
     }
 
     const rowsWritten = await this.repo.writeProjections(rows);
+
+    // The candidate rides the same weekly run (B-037): its rows land under its own version, are
+    // scored by `pnpm score:gameweek` beside these, and are never served — the optimizer's version
+    // is pinned to MODEL_VERSION. A candidate that only produces numbers when someone remembers to
+    // run a second command produces no prospective evidence at all.
+    try {
+      await this.candidate.run(gameweekIds);
+    } catch (err) {
+      // The incumbent's projections must not be hostage to the candidate's: log and continue.
+      this.log.warn(
+        `candidate projections failed (incumbent rows are written): ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
     const next = results[0];
 
     this.log.log(
