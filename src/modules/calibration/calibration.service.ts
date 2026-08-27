@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Scoring } from '../projections/scoring';
-import { FittedParams, FITTED_PARAMS, UNFITTED_PARAMS } from '../projections/fitted';
+import {
+  FittedParams,
+  FITTED_PARAMS,
+  UNFITTED_PARAMS,
+} from '../projections/fitted';
 import { scoringForSeason } from '../archive/archive-scoring';
 import { CalibrationRepository } from './calibration.repository';
 import { HistoryRow } from '../projections/features';
@@ -108,7 +112,13 @@ export class CalibrationService {
       `fitting on ${train.length} rows, validating on ${validate.length}; ` +
         `defcon only: ${defconTrain.length} fit / ${defconValidate.length} validate`,
     );
-    return fitParams({ train, defconTrain, validate, defconValidate, scoringFor });
+    return fitParams({
+      train,
+      defconTrain,
+      validate,
+      defconValidate,
+      scoringFor,
+    });
   }
 
   /**
@@ -175,7 +185,14 @@ export class CalibrationService {
    * season under another season's rules is a silent error, and the defensive-contribution category
    * makes it a large one.
    */
-  private async scoringResolver(): Promise<(season: string) => Scoring> {
+  /**
+   * The scoring table to use per season, cached.
+   *
+   * Public because `ComponentCalibrationService` scores the same seasons and must use the SAME
+   * tables — a second copy of this resolver is a second answer to "what were the rules that year",
+   * and the two reports would disagree without either being wrong on its own terms.
+   */
+  async scoringResolver(): Promise<(season: string) => Scoring> {
     const cache = new Map<string, Scoring>();
     let live: Scoring | null = null;
 
@@ -216,7 +233,11 @@ export class CalibrationService {
     const modelVsPrior = errorStats(observationsFor(vsPrior, 'model'));
     // `form` and the model on the rows that ALSO carry a prior-season baseline — i.e. players with
     // 450+ minutes last season. Same comparison, different population, and the contrast is the point.
-    const established = commonRows(result.rows, ['model', 'form', 'priorSeason']);
+    const established = commonRows(result.rows, [
+      'model',
+      'form',
+      'priorSeason',
+    ]);
     const prior = errorStats(observationsFor(vsPrior, 'priorSeason'));
 
     // The same three on every row each predictor could reach, which is what B-007 reported and what

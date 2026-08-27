@@ -1,9 +1,12 @@
 import { Scoring } from '../projections/scoring';
 import { FittedParams } from '../projections/fitted';
 import {
+  FixtureExpectations,
+  FixtureProbabilities,
   minutesDistribution,
   projectFixtureV2,
 } from '../projections/model-v2';
+import { DEFCON_THRESHOLD } from '../projections/points';
 import { HistoryRow, walkRounds } from '../projections/features';
 import { Observation } from './metrics';
 
@@ -73,6 +76,44 @@ export interface PredictionRow {
    * of a past season would be told how often each player *would go on to* feature.
    */
   appearances: number;
+  /**
+   * What the model believed term by term, and what actually happened to each of those terms.
+   *
+   * Carried on the row rather than recomputed later, because the only place the probabilities exist
+   * is inside the projection call — recomputing them elsewhere is a second implementation of the
+   * model that can drift from the one being measured, which is the failure mode B-013 is about.
+   *
+   * The aggregate `predicted.model` is a sum over these. A report that scores only the sum cannot
+   * tell a wrongly shaped component from a wrong overall level.
+   */
+  probabilities: FixtureProbabilities;
+  expected: FixtureExpectations;
+  realised: RealisedOutcomes;
+}
+
+/**
+ * The realised counterpart of every probability and expectation the model emits.
+ *
+ * `defcon` and `defconActions` are `null` in seasons where the defensive-contribution category did
+ * not exist. Null rather than 0: a season with no category is not a season where nobody reached the
+ * threshold, and scoring those rows as misses would convict the term of an error the data cannot
+ * support.
+ */
+export interface RealisedOutcomes {
+  started: number;
+  played: number;
+  sixtyPlus: number;
+  cleanSheet: number;
+  defcon: number | null;
+  bonusAtLeastOne: number;
+  goals: number;
+  assists: number;
+  saves: number;
+  conceded: number;
+  bonus: number;
+  bps: number;
+  defconActions: number | null;
+  minutes: number;
 }
 
 export interface RunOptions {
@@ -161,6 +202,9 @@ export function runBacktest(
         },
         pPlay: minutes.pPlay,
         appearances: features.appearancesSample,
+        probabilities: projection.probabilities,
+        expected: projection.expected,
+        realised: realisedOutcomes(row),
       });
     }
   }
@@ -220,4 +264,38 @@ export function observationsFor(
     });
   }
   return out;
+}
+
+/**
+ * Read a history row as the outcomes the model's own terms are about.
+ *
+ * Every field here is the definitional counterpart of a probability or an expectation in
+ * `FixtureProbabilities` / `FixtureExpectations`, and the mapping is the load-bearing part: FPL
+ * credits a clean sheet only to a player who was on for 60 minutes, so `cleanSheets > 0` is the
+ * right counterpart of `pSixtyPlus × P(shut-out)` and NOT of the shut-out alone. Getting that pairing
+ * wrong produces a reliability curve that is confidently about nothing.
+ */
+export function realisedOutcomes(row: HistoryRow): RealisedOutcomes {
+  const threshold = DEFCON_THRESHOLD[row.position];
+  return {
+    started: row.starts > 0 ? 1 : 0,
+    played: row.minutes > 0 ? 1 : 0,
+    sixtyPlus: row.minutes >= 60 ? 1 : 0,
+    cleanSheet: row.cleanSheets > 0 ? 1 : 0,
+    defcon:
+      row.defensiveContribution === null || threshold <= 0
+        ? null
+        : row.defensiveContribution >= threshold
+          ? 1
+          : 0,
+    bonusAtLeastOne: row.bonus >= 1 ? 1 : 0,
+    goals: row.goalsScored,
+    assists: row.assists,
+    saves: row.saves,
+    conceded: row.goalsConceded,
+    bonus: row.bonus,
+    bps: row.bps,
+    defconActions: row.defensiveContribution,
+    minutes: row.minutes,
+  };
 }
