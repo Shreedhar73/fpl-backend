@@ -172,11 +172,12 @@ function signedExpr(terms: { coef: number; name: string }[]): string {
  * **The program, as `fpl-optimizer` specifies it:**
  *
  * ```
- *   maximise  Σ EP_p (y_p + c_p)  +  benchWeight · Σ EP_p (x_p − y_p)  −  λ · Σ z
+ *   maximise  Σ EP_p (y_p + c_p)  +  benchWeight · Σ EP_p (x_p − y_p)  −  λ (Σ z + Σ w)
  *   s.t.      Σ x = 15,  squad quotas on x,  budget,  ≤ 3 per club
  *             y_p ≤ x_p,  Σ y = 11,  formation min/max on y
  *             c_p ≤ y_p,  Σ c = 1
  *             z_ij ≥ x_i + x_j − 1                    a collision the squad HOLDS
+ *             w_ij ≥ c_i + x_j − 1                    the same collision, the armband on one side
  * ```
  *
  * Collected per variable, the coefficients are `benchWeight · ep` on `x`, `(1 − benchWeight) · ep`
@@ -189,8 +190,16 @@ function signedExpr(terms: { coef: number; name: string }[]): string {
  * points given up in the eleven while £9.6m sat on two players it would not start, and measured over
  * an archived season by `pnpm replay:xi`, a pair owned in all 38 rounds and both sides started in 8.
  * B-011's sentence is about *holding* both sides, and holding is what `x` says. So there is one
- * conflict row per held pair and none on the XI or the armband — a charge the eleven cannot dodge,
- * and an eleven chosen on points once the fifteen is bought.
+ * conflict row per held pair and **none on the XI** — a charge the eleven cannot dodge, and an eleven
+ * chosen on points once the fifteen is bought.
+ *
+ * **The armband is charged too, and it is keyed to `x` rather than `y` (B-027).** B-011 always had
+ * two exposures in it: owning both sides, and doubling one of them with the captaincy. B-023's `w`
+ * rows priced the second one against the *started* side, which is exactly what made them dodgeable by
+ * benching — so B-025 deleted them along with the XI charge, and the live GW2 recommendation
+ * immediately captained a Chelsea midfielder into two Brighton defenders it owned and started, paying
+ * nothing for the double. The row is back, reading `c_i + x_j`: our captain against a player we OWN.
+ * Benching the other side does not answer it, because owning him was the bet.
  *
  * `λ` is the policy constant, unscaled. It was briefly charged at `benchWeight × λ` (B-025) on the
  * argument that B-023 had changed what a squad place is worth; B-026 undid that, because the scaling
@@ -245,6 +254,7 @@ export function buildLp(
         })),
         ...candidates.map((c) => ({ coef: c.ep, name: cap(c) })),
         ...pairs.map((_, i) => ({ coef: -collisions.lambda, name: `z_${i}` })),
+        ...pairs.map((_, i) => ({ coef: -collisions.lambda, name: `w_${i}` })),
       ]),
   );
 
@@ -281,14 +291,22 @@ export function buildLp(
     lines.push(` armband_${c.key}: ${cap(c)} - ${xi(c)} <= 0`);
   }
 
-  // One row per HELD pair, on the squad variables. There is deliberately no row on `y` and none on
-  // `c`: an XI charge is one the solver can answer by benching, which is what B-025 removed.
+  // One row per HELD pair, on the squad variables, and one more for the armband. There is
+  // deliberately no row on `y`: an XI charge is one the solver answers by benching, which is what
+  // B-025 removed. The armband rows read `c + x`, not `c + y`, for the same reason (B-027).
   //
-  // z stays CONTINUOUS and out of the Binary section: the `-lambda` objective pushes it to its lower
-  // bound, so it lands on 0 unless its row forces it up, and the LP relaxation of a binary is not
-  // needed.
+  // z and w stay CONTINUOUS and out of the Binary section: the `-lambda` objective pushes each to its
+  // lower bound, so it lands on 0 unless its row forces it up, and the LP relaxation of a binary is
+  // not needed.
   pairs.forEach((p, i) => {
     lines.push(` conf_${i}: ${p.attacker.key} + ${p.defender.key} - z_${i} <= 1`);
+    // Two rows, one per side, because either endpoint of the pair may be the one wearing it.
+    lines.push(
+      ` capconf_a_${i}: ${cap(p.attacker)} + ${p.defender.key} - w_${i} <= 1`,
+    );
+    lines.push(
+      ` capconf_d_${i}: ${cap(p.defender)} + ${p.attacker.key} - w_${i} <= 1`,
+    );
   });
 
   // Only when there is something to bound. An empty `Bounds` header followed straight by `Binary` is
@@ -296,7 +314,10 @@ export function buildLp(
   // different program, silently.
   if (pairs.length > 0) {
     lines.push('Bounds');
-    for (let i = 0; i < pairs.length; i++) lines.push(` z_${i} >= 0`);
+    for (let i = 0; i < pairs.length; i++) {
+      lines.push(` z_${i} >= 0`);
+      lines.push(` w_${i} >= 0`);
+    }
   }
 
   lines.push('Binary');
@@ -364,11 +385,12 @@ function combinations<T>(items: T[], k: number): T[][] {
  * implementation the served solve is checked against in `optimizer.service`. A greedy version would
  * be a check that agrees with the LP for a weaker reason.
  *
- * **Nothing here is charged for a collision.** This function reproduces the LP's XI-and-armband
- * choice, and since B-025 the LP charges pairs against `x`, which is fixed by the time a fifteen is
- * in hand. Charging them here as well would make the enumeration optimise an expression the solve
- * does not, and the two would disagree about who starts — which is precisely the drift the
- * verification in `optimizer.service` exists to catch.
+ * **The XI is not charged for a collision; the ARMBAND is.** The ownership charge is fixed by the
+ * time a fifteen is in hand, so it cannot change an argmax here and is dropped as the constant it is.
+ * The captain's is not constant: `w_ij ≥ c_i + x_j − 1` charges λ for every held pair the captain is
+ * one side of (B-027), so which player wears it changes the objective. Scoring that here is what
+ * keeps this enumeration and the LP optimising one expression — the two are compared on every solve,
+ * and a disagreement is reported as drift.
  */
 export function pickBestXi(
   squad: Candidate[],
@@ -383,6 +405,14 @@ export function pickBestXi(
    * would disagree on which XI is best — which is precisely what this function exists to prevent.
    */
   benchWeight = BENCH_WEIGHT,
+  /**
+   * The collision context, for the ARMBAND only (B-027).
+   *
+   * Not for the XI: the ownership charge is a constant over a fixed fifteen. The captain's is not,
+   * because `w` keys off `c`, and a function that ignored it would hand the armband to the highest
+   * projection while the LP handed it to someone else.
+   */
+  collisions: Collisions = NO_COLLISIONS,
 ): XiResult {
   const byPos = (pos: PositionCode) =>
     squad.filter((c) => c.position === pos).sort((a, b) => b.ep - a.ep);
@@ -391,26 +421,41 @@ export function pickBestXi(
   const mid = byPos('MID');
   const fwd = byPos('FWD');
 
+  // Held pairs, counted per player: this is the `x` side of `w_ij ≥ c_i + x_j − 1`, so it is about
+  // who the squad OWNS and not about who is picked below.
+  const held = new Set(squad.map((c) => c.key));
+  const heldPairs = pairsWithin(held, collisions.pairs);
+  const armbandCharge = (key: string) =>
+    collisions.lambda *
+    heldPairs.filter((p) => p.attacker.key === key || p.defender.key === key)
+      .length;
+
   let best: (XiResult & { score: number }) | null = null;
 
   const consider = (chosen: Candidate[], formation: string) => {
     const baseEp = chosen.reduce((s, c) => s + c.ep, 0);
-    const scored = [...chosen].sort((a, b) => b.ep - a.ep);
+    // What the armband is worth on this player, net of doubling his exposure to a collision the
+    // squad already holds.
+    const scored = chosen
+      .map((c) => ({ c, gain: c.ep - armbandCharge(c.key) }))
+      .sort((a, b) => b.gain - a.gain);
     const captain = scored[0];
     const vice = scored[1];
     if (!captain) return;
 
-    // The LP's expression exactly: (1 − w)·Σ EP·y + EP·captain. The constant w·Σ EP·x is dropped
-    // because the fifteen is fixed here and a constant cannot change an argmax.
-    const score = (1 - benchWeight) * baseEp + captain.ep;
+    // The LP's expression exactly: (1 − w)·Σ EP·y + EP·captain − λ·Σ w. The constants — w·Σ EP·x and
+    // the ownership charge λ·Σ z — are dropped because the fifteen is fixed here and a constant
+    // cannot change an argmax.
+    const score =
+      (1 - benchWeight) * baseEp + captain.c.ep - armbandCharge(captain.c.key);
 
     if (!best || score > best.score) {
       best = {
         starters: new Set(chosen.map((c) => c.key)),
         formation,
-        captainKey: captain.key,
-        viceKey: vice?.key,
-        rawEp: baseEp + captain.ep,
+        captainKey: captain.c.key,
+        viceKey: vice?.c.key,
+        rawEp: baseEp + captain.c.ep,
         score,
       };
     }

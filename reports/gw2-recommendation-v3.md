@@ -218,3 +218,38 @@ decision in this squad-season flips at all.
 
 So this change buys no points and was not expected to. What it buys is a constant that means what its
 comment says, and one fewer pair of knobs that have to be swept together.
+
+## Update, 2026-08-27 — B-027 charges the armband, and it moves to Saka
+
+B-025 removed the captain's collision charge along with the XI's, because both keyed off `y` and both
+were therefore answerable by benching. That was one deletion too many. The live recommendation
+immediately captained **Palmer (CHE) into two Brighton defenders it owned and started** and paid
+nothing for the double — the worst version of the bet B-011 exists to price, and a configuration that
+was impossible before B-023.
+
+The row is back as `w_ij ≥ c_i + x_j − 1`: our captain against a player we **own**, not one we start.
+Benching the other side is not an answer to having bought him.
+
+**The recommendation of record moves the armband and nothing else.**
+
+| | before B-027 | after |
+|---|---|---|
+| captain | **Palmer 22.01** | **Saka 21.15** |
+| vice | Saka | Palmer |
+| the fifteen | unchanged | unchanged |
+| the eleven | unchanged | unchanged |
+| charged | 2.00, all of it for holding | 2.00 holding + **2.00 armband** |
+| raw horizon EP | 253.68 | 253.68 |
+
+Cost: **0.86 horizon EP**, the gap between the two captains. λ was left at 1.0 rather than raised —
+refusing to *own* the pair needs λ = 3 and costs 3.17 EP, on a knob whose own 103-gameweek sweep found
++0.59 ± 0.92 and no benefit.
+
+**Over an archived season** (`pnpm replay:xi`, B-027 arm beside the B-026 one): the fifteen is
+identical, the eleven is identical in all 38 rounds, and **only the armband moves — in 5 of them**.
+Projected cost 1.82 points; realised 1697 against 1713.
+
+Read that −16 for what it is: **five captain decisions**. A captaincy swing of a few points a round is
+ordinary variance, the arms differ nowhere else, and n = 5 supports no verdict in either direction.
+What the season replay does establish is that the change is confined to what it was aimed at — it
+touched no squad and no eleven.

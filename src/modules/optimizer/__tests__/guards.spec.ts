@@ -165,12 +165,17 @@ describe('buildLp — the collision penalty is in the objective, not a post-hoc 
     // 1.5 flat. The charge does NOT scale with the bench weight (B-026) — passing 0.7 above is what
     // makes that assertion mean something rather than merely being satisfied by the default.
     expect(lp).toMatch(/- 1\.5000 z_0/);
-    // No row on the armband. A captain charge is one more thing a bench can dodge.
-    expect(lp).not.toMatch(/capconf/);
-    expect(lp).not.toMatch(/w_0/);
-    // z is continuous — the -lambda objective pins it to its lower bound, so it must NOT be declared
-    // binary. A z in the Binary section is a needless integer variable.
+    // The armband IS charged, and keyed to ownership rather than to starting (B-027): our captain
+    // against a player we OWN. `c + y` was B-023's version and benching answered it, which is the
+    // whole reason the penalty moved to `x`.
+    expect(lp).toMatch(/capconf_a_0: k_p_a1 \+ p_d1 - w_0 <= 1/);
+    expect(lp).toMatch(/capconf_d_0: k_p_d1 \+ p_a1 - w_0 <= 1/);
+    expect(lp).not.toMatch(/capconf_a_0: k_p_a1 \+ y_/);
+    expect(lp).toMatch(/- 1\.5000 w_0/);
+    // z and w are continuous — the -lambda objective pins each to its lower bound, so neither may be
+    // declared binary. A z in the Binary section is a needless integer variable.
     expect(lp.slice(lp.indexOf('Binary'))).not.toMatch(/z_0/);
+    expect(lp.slice(lp.indexOf('Binary'))).not.toMatch(/w_0/);
   });
 
   it('charges the same lambda at every bench weight — the two knobs are uncoupled (B-026)', () => {
@@ -375,9 +380,63 @@ describe('the eleven is chosen on points, and the pair is charged anyway (B-025)
     expect(b.heldCollisions.length).toBe(a.heldCollisions.length);
   });
 
+  it('moves the armband off a captain who doubles a collision the squad owns (B-027)', () => {
+    // `star` projects 12 against midfielders on 7, so nothing but the armband charge can move it. He
+    // faces three defenders we own: captaining him costs 3 x lambda on top of what the squad already
+    // pays for holding them.
+    const withoutCharge = pickBestXi(squad(), rules, 0.7, NO_COLLISIONS);
+    expect(withoutCharge.captainKey).toBe('p_star');
+
+    const charged = pickBestXi(squad(), rules, 0.7, collisions(2));
+    expect(charged.starters.has('p_star')).toBe(true); // still worth starting
+    expect(charged.captainKey).not.toBe('p_star'); // not worth doubling
+    expect(charged.viceKey).toBeDefined();
+  });
+
+  it('charges the armband even when the other side is BENCHED — the B-025 regression', () => {
+    // This is the assertion the whole entry exists for. B-023 keyed the captain charge off `y`, so
+    // benching the other side answered it; B-025 deleted the row rather than re-keying it, and the
+    // live recommendation then captained a Chelsea midfielder into two Brighton defenders it owned
+    // and started, paying nothing. The charge now keys off `x`: owning him was the bet.
+    const held = squad().map((c) =>
+      c.playerId === 'dA'
+        ? mk('dA', 'DEF', 'BHA', 0.1) // owned, far too weak to start
+        : c,
+    );
+    const pairs = buildConflictPairs(held, [
+      {
+        homeTeamId: 'BHA',
+        awayTeamId: 'CHE',
+        homeTeamShortName: 'BHA',
+        awayTeamShortName: 'CHE',
+      },
+    ]);
+    const arranged = arrangeSquad(held, rules, { pairs, lambda: 1 });
+
+    const benchedSide = arranged.squad.find((p) => p.playerId === 'dA');
+    expect(benchedSide?.role).toBe('bench');
+
+    const withDa = arranged.heldCollisions.filter(
+      (h) => h.pair.defender.playerId === 'dA',
+    );
+    expect(withDa.length).toBe(1);
+    expect(withDa[0].bothStarted).toBe(false);
+    // Held and benched, and still charged twice over: once for owning it, once for the armband.
+    expect(withDa[0].captained).toBe(true);
+    expect(arranged.armbandPenalty).toBeGreaterThan(0);
+  });
+
+  it('adds the armband charge on top of the ownership charge, never instead of it', () => {
+    const arranged = arrangeSquad(squad(), rules, collisions(1));
+    const captainedPairs = arranged.heldCollisions.filter((h) => h.captained);
+    expect(arranged.heldPenalty).toBeCloseTo(arranged.heldCollisions.length, 6);
+    expect(arranged.armbandPenalty).toBeCloseTo(captainedPairs.length, 6);
+  });
+
   it('reports nothing at lambda 0 — the sabotage the two tests above go red under', () => {
     const arranged = arrangeSquad(squad(), rules, collisions(0));
     expect(arranged.heldPenalty).toBe(0);
+    expect(arranged.armbandPenalty).toBe(0);
     // The pairs are still built; it is the price that is zero. A payload reporting an empty list
     // here is reporting "nothing was charged", not "no conflict exists".
     expect(collisions(0).pairs.length).toBeGreaterThan(0);
@@ -586,6 +645,7 @@ describe('the reasoning payload can actually be rendered (B-018)', () => {
       defender: p.defender.webName,
       lambda: 1,
       bothStarted: true,
+      captained: false,
     }));
     for (const e of entries) {
       for (const value of Object.values(e)) {
