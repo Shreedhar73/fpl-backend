@@ -28,6 +28,7 @@ import {
   pairedDifference,
   RoundDecision,
 } from './xi-decision';
+import { detectableAt, simulatedSeasonVerdict } from './sim-verdict';
 import {
   GREEDY_ONE_FT,
   NO_TRANSFER,
@@ -344,12 +345,20 @@ export class DecisionService {
       w();
     }
 
+    // Hoisted out of the block below so the season verdict reads the SAME two summaries this
+    // section prints. Recomputing them there would let the two halves of one verdict disagree.
+    const modelOrdering = summariseOrdering(
+      orderingByRound(population, 'model', ORDERING_VIEWS[0]),
+    );
+    const formOrdering = summariseOrdering(
+      orderingByRound(population, 'form', ORDERING_VIEWS[0]),
+    );
+
     w(`## What the ordering says`);
     w();
     {
-      const whole = ORDERING_VIEWS[0];
-      const m = summariseOrdering(orderingByRound(population, 'model', whole));
-      const f = summariseOrdering(orderingByRound(population, 'form', whole));
+      const m = modelOrdering;
+      const f = formOrdering;
       const capturedWins = DEFAULT_KS.filter((k) => {
         const a = m.meanPointsCaptured.get(k);
         const b = f.meanPointsCaptured.get(k);
@@ -549,8 +558,10 @@ export class DecisionService {
       `**Both policies are deliberately weak, and the totals below are floors rather than ` +
         `estimates.** \`no-transfer\` holds the opening squad for the whole season. \`greedy-1ft\` ` +
         `takes at most one free transfer a round, on this round's projection, and **never takes a ` +
-        `hit** — so the −4 path is exercised by a unit test and never by a walked season. Choosing ` +
-        `transfers well is B-008, which plugs into this same simulator rather than bringing its own.`,
+        `hit** — so the −4 path is exercised by a unit test and never by a walked season. The real ` +
+        `planner shipped with B-008 and has still never walked a season: wiring it in as a third ` +
+        `policy is B-032, and until that lands every total below measures a policy the product does ` +
+        `not use.`,
     );
     w();
     w(
@@ -580,40 +591,74 @@ export class DecisionService {
     w(`### Is the difference bigger than the noise?`);
     w();
     w(
-      `| Policy | comparison | rounds | mean difference | ± s.e. | clears noise |`,
+      `Every row is **paired by round** — both arms faced the same fixtures, blanks and hauls, so ` +
+        `the round-to-round variance that dominates a season total cancels. "Clears noise" is ` +
+        `|mean| > 2 standard errors, a crude bar and meant to be.`,
     );
-    w(`|---|---|---:|---:|---:|---|`);
+    w();
+    w(
+      `**The last column is what the comparison could have detected at all** — 2 × s.e. × rounds, ` +
+        `in points of season. A season difference smaller than that number is not a result, ` +
+        `whichever way it points. It is printed beside every row rather than left to be worked out, ` +
+        `because every argument in this project's register turns on season totals and none of them ` +
+        `carried this number (B-030).`,
+    );
+    w();
+    w(
+      `**The template comparison is in this table now.** It used to be printed as a bare season ` +
+        `difference with no standard error, directly under a paragraph calling it the headline ` +
+        `finding — the one comparison in the report exempt from the report's own noise test.`,
+    );
+    w();
+    w(
+      `| Policy | comparison | rounds | mean difference | ± s.e. | clears noise | detectable at |`,
+    );
+    w(`|---|---|---:|---:|---:|---|---:|`);
+
+    const simPaired = new Map<
+      string,
+      NonNullable<ReturnType<typeof pairedDifference>>
+    >();
+    const asDecisions = (rows: SeasonResult['rounds']): RoundDecision[] =>
+      rows.map((r) => ({
+        season: TEST_SEASON,
+        round: r.round,
+        points: r.points,
+        ceiling: 0,
+        captainPoints: 0,
+        bestFieldedPoints: 0,
+        substitutions: 0,
+      }));
     for (const policy of ['no-transfer', 'greedy-1ft']) {
       const forPolicy = seasons.filter((s2) => s2.policy === policy);
-      const model = forPolicy.find((s2) => s2.predictor === 'model');
-      for (const against of ['form', 'priorSeason'] as Predictor[]) {
-        const other = forPolicy.find((s2) => s2.predictor === against);
-        if (!model || !other) continue;
+      // The model's OWN fifteen, never a fixed squad the model merely arranged — `squadLabel` is
+      // what separates them and both rows carry `predictor: 'model'`.
+      const model = forPolicy.find(
+        (s2) => s2.predictor === 'model' && !s2.squadLabel,
+      );
+      if (!model) continue;
+      const against: { label: string; row: SeasonResult | undefined }[] = [
+        ...(['form', 'priorSeason'] as Predictor[]).map((p) => ({
+          label: p as string,
+          row: forPolicy.find((s2) => s2.predictor === p && !s2.squadLabel),
+        })),
+        ...forPolicy
+          .filter((s2) => s2.squadLabel)
+          .map((s2) => ({ label: s2.squadLabel as string, row: s2 })),
+      ];
+      for (const a of against) {
+        if (!a.row) continue;
         const d = pairedDifference(
-          model.rounds.map((r) => ({
-            season: TEST_SEASON,
-            round: r.round,
-            points: r.points,
-            ceiling: 0,
-            captainPoints: 0,
-            bestFieldedPoints: 0,
-            substitutions: 0,
-          })),
-          other.rounds.map((r) => ({
-            season: TEST_SEASON,
-            round: r.round,
-            points: r.points,
-            ceiling: 0,
-            captainPoints: 0,
-            bestFieldedPoints: 0,
-            substitutions: 0,
-          })),
+          asDecisions(model.rounds),
+          asDecisions(a.row.rounds),
         );
         if (!d) continue;
+        simPaired.set(`${policy}|${a.label}`, d);
         w(
-          `| ${policy} | model − ${against} | ${d.rounds} | ` +
+          `| ${policy} | model − ${a.label} | ${d.rounds} | ` +
             `${d.meanDifference >= 0 ? '+' : ''}${d.meanDifference.toFixed(2)} | ` +
-            `${d.standardError.toFixed(2)} | ${d.clearsNoise ? '**yes**' : 'no'} |`,
+            `${d.standardError.toFixed(2)} | ${d.clearsNoise ? '**yes**' : 'no'} | ` +
+            `${detectableAt(d).toFixed(0)} pts |`,
         );
       }
     }
@@ -628,66 +673,33 @@ export class DecisionService {
             x.predictor === predictor &&
             Boolean(x.squadLabel) === template,
         );
-      const holdModel = get('no-transfer', 'model');
-      const holdForm = get('no-transfer', 'form');
-      const greedyModel = get('greedy-1ft', 'model');
-      const greedyForm = get('greedy-1ft', 'form');
       const greedyTemplate = get('greedy-1ft', 'model', true);
-
-      if (holdModel && holdForm) {
-        w(
-          `**Held all season, the model's opening fifteen is worth ${holdModel.totalPoints} points ` +
-            `against ${holdForm.totalPoints}** — a gap of ` +
-            `${holdModel.totalPoints - holdForm.totalPoints} over the season, which clears the noise ` +
-            `floor comfortably. This is the ordering advantage from the section above, showing up ` +
-            `exactly where Phase 2 predicted it would: **in which fifteen you own, not in how you ` +
-            `arrange a fifteen you already have.** Note what the \`form\` row actually is — form ` +
-            `cannot pick an opening squad, so that squad was chosen by last season's points per 90.`,
-        );
+      const paragraphs = simulatedSeasonVerdict({
+        holdModelPoints: get('no-transfer', 'model')?.totalPoints ?? null,
+        holdFormPoints: get('no-transfer', 'form')?.totalPoints ?? null,
+        greedyModelPoints: get('greedy-1ft', 'model')?.totalPoints ?? null,
+        greedyFormPoints: get('greedy-1ft', 'form')?.totalPoints ?? null,
+        templatePoints: greedyTemplate?.totalPoints ?? null,
+        holdVsForm: simPaired.get('no-transfer|form') ?? null,
+        greedyVsForm: simPaired.get('greedy-1ft|form') ?? null,
+        vsTemplate: greedyTemplate?.squadLabel
+          ? (simPaired.get(`greedy-1ft|${greedyTemplate.squadLabel}`) ?? null)
+          : null,
+        // The SAME summaries the ordering section printed, not a recomputation — the two halves of
+        // one verdict must not be able to disagree with each other.
+        capturedWins: DEFAULT_KS.filter((k) => {
+          const a = modelOrdering.meanPointsCaptured.get(k);
+          const b = formOrdering.meanPointsCaptured.get(k);
+          return a != null && b != null && a > b;
+        }),
+        ks: [...DEFAULT_KS],
+        objectiveAbEntry: 'B-031',
+        componentEntry: 'B-013',
+      });
+      for (const p of paragraphs) {
+        w(p);
         w();
       }
-      if (greedyModel && greedyForm) {
-        const gap = greedyModel.totalPoints - greedyForm.totalPoints;
-        w(
-          `**Give both a transfer a week and most of that gap closes.** \`form\` goes from ` +
-            `${holdForm?.totalPoints ?? '—'} to ${greedyForm.totalPoints}; the model goes from ` +
-            `${holdModel?.totalPoints ?? '—'} to ${greedyModel.totalPoints}, a remaining gap of ` +
-            `**${gap}** which does **not** clear the noise floor. A weekly transfer is a powerful ` +
-            `error-correction mechanism, and it corrects a weak opening squad faster than it ` +
-            `improves a strong one. **A model that is better only before the first deadline is worth ` +
-            `much less than the season totals first suggest.**`,
-        );
-        w();
-      }
-      if (greedyTemplate && greedyModel) {
-        const diff = greedyTemplate.totalPoints - greedyModel.totalPoints;
-        if (diff > 0) {
-          w(
-            `**And the most uncomfortable number in this report: the crowd's opening fifteen, run ` +
-              `under the same policy and the same projections, scores ${greedyTemplate.totalPoints} ` +
-              `against the model's ${greedyModel.totalPoints} — ${diff} points better.** The only ` +
-              `difference between those two runs is the opening squad, so this says our squad solve ` +
-              `is worse than simply owning what everyone else owned. It is a proxy for the FPL ` +
-              `average rather than the average itself, and it is not a flattering one. **Recorded as ` +
-              `the headline finding it is**, not buried under the rows above.`,
-          );
-          w();
-        }
-      }
-      w(
-        `**The bar B-012 set was: beat \`form\` on ordering AND on simulated season points, or say ` +
-          `plainly that we did not.** Ordering: yes, on points-captured at every k. Season points: ` +
-          `**only when neither side may transfer.** Once both can, the difference does not clear the ` +
-          `noise floor. \`modelVersion\` does not move on this, and the serving version is not ` +
-          `deleted — B-007 (D-020) established both rules and neither is met here.`,
-      );
-      w();
-      w(
-        `The next question is not "is the model better" but "why is a squad built from its own ` +
-          `projections worse than the crowd's", and B-013 (which component is wrong) and B-014 (team ` +
-          `strength carries no signal, and both fixture elasticities fitted to 0) are where it gets ` +
-          `answered.`,
-      );
     }
     w();
     w(`### The baseline that does not exist`);
@@ -705,8 +717,9 @@ export class DecisionService {
     w(`## Still to come in this report`);
     w();
     w(
-      `Nothing — B-012's phases are complete. What is **not** measured here, and is named rather ` +
-        `than implied: a transfer policy worth the name (B-008), chips, uncertainty on any ` +
+      `B-012's phases are complete. What is **not** measured here, and is named rather than ` +
+        `implied: the transfer planner the product actually ships (B-032 wires it in as a policy), ` +
+        `the squad objective against the one it replaced (B-031), chips, uncertainty on any ` +
         `projection (B-017), and the per-component calibration that would say *which* term drives ` +
         `what is measured here (B-013).`,
     );
