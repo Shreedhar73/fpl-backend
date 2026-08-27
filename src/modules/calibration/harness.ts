@@ -182,7 +182,13 @@ export interface RunOptions {
    * computed from the SAME walk-ordered feature stream the CSV export emits — one time cut, not a
    * reimplementation. Absent, `predicted.v4` is null and every v4 comparison drops out pairwise.
    */
-  v4?: ReadonlyMap<string, { predict(f: ReadonlyMap<string, number | null>): number }>;
+  v4?: ReadonlyMap<
+    string,
+    {
+      predict(f: ReadonlyMap<string, number | null>): number;
+      readonly residual: boolean;
+    }
+  >;
 }
 
 export interface RunResult {
@@ -214,7 +220,7 @@ export function runBacktest(
   // The v4 features come from the same exporter the training CSVs come from — a second walk over
   // the same rows, indexed by the row's natural key. Two walks, ONE implementation of the cut.
   const v4Features = options.v4
-    ? indexExportedFeatures(rows, params)
+    ? indexExportedFeatures(rows, params, scoringFor)
     : null;
 
   // One projection path for the round being scored and for every round in its horizon. Two would be
@@ -413,23 +419,40 @@ const exportKey = (r: {
 function indexExportedFeatures(
   rows: HistoryRow[],
   params: FittedParams,
-): Map<string, { position: string; features: Map<string, number | null> }> {
+  scoringFor: (season: string) => Scoring,
+): Map<
+  string,
+  { position: string; v3ep: number; features: Map<string, number | null> }
+> {
   const out = new Map<
     string,
-    { position: string; features: Map<string, number | null> }
+    { position: string; v3ep: number; features: Map<string, number | null> }
   >();
-  for (const r of exportFeatures(rows, params)) {
-    out.set(exportKey(r), { position: r.position, features: r.features });
+  for (const r of exportFeatures(rows, params, scoringFor)) {
+    out.set(exportKey(r), {
+      position: r.position,
+      v3ep: r.v3ep,
+      features: r.features,
+    });
   }
   return out;
 }
 
 function v4Predict(
   scorers:
-    | ReadonlyMap<string, { predict(f: ReadonlyMap<string, number | null>): number }>
+    | ReadonlyMap<
+        string,
+        {
+          predict(f: ReadonlyMap<string, number | null>): number;
+          readonly residual: boolean;
+        }
+      >
     | undefined,
   features:
-    | Map<string, { position: string; features: Map<string, number | null> }>
+    | Map<
+        string,
+        { position: string; v3ep: number; features: Map<string, number | null> }
+      >
     | null,
   row: HistoryRow,
 ): number | null {
@@ -438,5 +461,8 @@ function v4Predict(
   if (!entry) return null;
   const scorer = scorers.get(entry.position);
   if (!scorer) return null;
-  return scorer.predict(entry.features);
+  // A residual model predicts the CORRECTION to the incumbent, not the points (B-037 increment 2).
+  // The base is added here, from the same exported row the trees read — one number, one source.
+  const raw = scorer.predict(entry.features);
+  return scorer.residual ? entry.v3ep + raw : raw;
 }

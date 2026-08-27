@@ -1,5 +1,8 @@
 import { FittedParams } from '../projections/fitted';
 import { HistoryRow, walkRounds } from '../projections/features';
+import { minutesDistribution } from '../projections/model-v2';
+import { projectFixtureV2 } from '../projections/model-v2';
+import { Scoring } from '../projections/scoring';
 
 /**
  * B-034 — the leak-safe feature matrix the v4 gradient-boosted candidate trains on.
@@ -122,12 +125,21 @@ export interface ExportedRow {
   position: string;
   /** the target */
   totalPoints: number;
+  /**
+   * The incumbent's own expected points for this row, from the same deadline-time features (B-037
+   * increment 2). Doubles as a feature and as the base of the residual target: the fit trains on
+   * `totalPoints − v3ep` and the final prediction is `v3ep + correction`, so the decomposed model
+   * keeps pricing what it prices exactly — the 2-point appearance band — and the trees learn only
+   * what it gets wrong.
+   */
+  v3ep: number;
   /** feature name → value; null = missing */
   features: Map<string, number | null>;
 }
 
 export function featureNames(): string[] {
   const names: string[] = [
+    'v3ep',
     'value',
     'wasHome',
     'laggedStartRate',
@@ -160,6 +172,8 @@ export function featureNames(): string[] {
 export function exportFeatures(
   rows: HistoryRow[],
   params: FittedParams,
+  /** per-season scoring, for the incumbent's EP — the same resolver every calibration run uses */
+  scoringFor: (season: string) => Scoring,
   evaluate: (row: HistoryRow) => boolean = () => true,
 ): ExportedRow[] {
   const out: ExportedRow[] = [];
@@ -186,7 +200,26 @@ export function exportFeatures(
       if (features.matchesSample === 0) continue;
       if (row.teamCode === null || row.opponentTeamCode === null) continue;
 
+      // The incumbent's projection for this row — identical construction to `runBacktest`'s, from
+      // the same context, so the residual base IS the number the reports score as `model`.
+      const v3ep = projectFixtureV2(
+        row.position,
+        minutesDistribution(
+          {
+            startRate: features.laggedStartRate,
+            subRate: features.laggedSubRate,
+          },
+          1,
+          params,
+        ),
+        features.rates,
+        goalRates,
+        scoringFor(row.season),
+        params,
+      ).ep;
+
       const f = new Map<string, number | null>();
+      f.set('v3ep', v3ep);
       f.set('value', row.value);
       f.set('wasHome', row.wasHome ? 1 : 0);
       f.set('laggedStartRate', features.laggedStartRate);
@@ -223,6 +256,7 @@ export function exportFeatures(
         playerCode: row.playerCode,
         position: row.position,
         totalPoints: row.totalPoints,
+        v3ep,
         features: f,
       });
     }
@@ -309,6 +343,7 @@ export function toCsv(rows: ExportedRow[]): string {
     'playerCode',
     'position',
     'totalPoints',
+    'v3epBase',
     ...names,
   ].join(',');
   const lines = rows.map((r) =>
@@ -319,6 +354,7 @@ export function toCsv(rows: ExportedRow[]): string {
       r.playerCode,
       r.position,
       r.totalPoints,
+      r.v3ep,
       ...names.map((n) => {
         const v = r.features.get(n);
         return v === null || v === undefined ? '' : String(v);

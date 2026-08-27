@@ -34,6 +34,13 @@ export interface V4Tree {
 
 export interface V4Model {
   position: string;
+  /**
+   * 'points' — the trees predict total points directly (the first v4).
+   * 'residual' — the trees predict the correction to the incumbent's EP, and the caller adds the
+   * base (B-037 increment 2). The scorer itself stays a pure tree walk either way; parity is on the
+   * raw tree output, and the assembly is the harness's, tested there.
+   */
+  target?: 'points' | 'residual';
   features: string[];
   hyperparameters: { best_iteration: number };
   provenance: { date: string; seed: number };
@@ -85,6 +92,8 @@ export class V4Scorer {
   private readonly trees: V4Tree[];
   private readonly base: number;
   readonly features: string[];
+  /** true when the model's output is a correction to the incumbent, not points */
+  readonly residual: boolean;
 
   constructor(model: V4Model) {
     const all = model.model.learner.gradient_booster.model.trees;
@@ -97,6 +106,7 @@ export class V4Scorer {
     const raw = model.model.learner.learner_model_param.base_score;
     this.base = Number(raw.replace(/^\[|\]$/g, ''));
     this.features = model.features;
+    this.residual = model.target === 'residual';
     if (!Number.isFinite(this.base)) {
       throw new Error(`v4 ${model.position}: base_score is not a number`);
     }

@@ -1,4 +1,10 @@
-"""B-035 - fit one XGBoost per position on the B-034 export.
+"""B-035/B-037 - fit one XGBoost per position on the B-034 export.
+
+Two targets. 'points' trains on totalPoints directly (the first v4). 'residual' trains on
+totalPoints - v3ep, the correction to the incumbent (B-037 increment 2): the decomposed model keeps
+pricing what it prices exactly - the 2-4 point appearance band the RMSE fit under-served - and the
+trees learn only what it gets wrong. The emitted JSON carries `target`; the TS harness adds the base
+back for residual models. Select with --target, default residual.
 
 Split discipline is v3's, reused not reinvented (calibration.service.ts):
   TRAIN     2023-24  +  2024-25 rounds < 20
@@ -30,12 +36,20 @@ VALIDATE_FROM_ROUND = 20  # calibration.service.ts VALIDATE_FROM_ROUND
 TEST_SEASON = "2025-26"
 
 # Modest grid, deliberately: 3 seasons is not OpenFPL's 4, and a big K-Best search over-fits a
-# half-season validation set. 12 candidates per position.
+# half-season validation set. 24 candidates per position. gamma and the higher min_child_weight
+# exist for the residual target: an unregularised tree happily "corrects" the 0-2 point band where
+# the incumbent is already exact, which is pure added variance - measured as a 7.2% Blanks
+# degradation on the first residual fit. Selection stays on VALIDATE.
+# The union grid, fixed here as final for this cycle: 36 candidates, selected on VALIDATE only.
+# Three architectures had already been read against TEST (direct, residual, regularised residual),
+# which is the edge of what a holdout survives - so the grid is frozen as the union of everything
+# tried, the selection rule is val RMSE and nothing else, and the next TEST reading is the last.
 GRID = [
-    {"max_depth": d, "learning_rate": lr, "min_child_weight": mcw}
+    {"max_depth": d, "learning_rate": lr, "min_child_weight": mcw, "gamma": g}
     for d in (3, 4, 5)
     for lr in (0.03, 0.06)
-    for mcw in (5, 20)
+    for mcw in (5, 20, 100)
+    for g in (0.0, 2.0)
 ]
 FIXED = {
     "n_estimators": 2000,
@@ -69,10 +83,11 @@ def split(df: pd.DataFrame):
 
 
 def feature_columns(df: pd.DataFrame) -> list[str]:
-    return [c for c in df.columns if c not in ("season", "round", "fixture", "playerCode", "position", "totalPoints")]
+    # v3epBase is the residual base (identity), v3ep the feature copy the trees may read.
+    return [c for c in df.columns if c not in ("season", "round", "fixture", "playerCode", "position", "totalPoints", "v3epBase")]
 
 
-def main() -> None:
+def main(target: str = "residual") -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     manifest = json.loads((DATASETS / "manifest.json").read_text())
     provenance = {
@@ -98,8 +113,9 @@ def main() -> None:
         df = load(position)
         cols = feature_columns(df)
         train, val, test = split(df)
-        Xtr, ytr = train[cols], train["totalPoints"]
-        Xva, yva = val[cols], val["totalPoints"]
+        label = (lambda part: part["totalPoints"] - part["v3epBase"]) if target == "residual" else (lambda part: part["totalPoints"])
+        Xtr, ytr = train[cols], label(train)
+        Xva, yva = val[cols], label(val)
 
         best, best_rmse, best_params = None, float("inf"), None
         for params in GRID:
@@ -114,6 +130,7 @@ def main() -> None:
         dump = json.loads(booster.save_raw("json").decode())
         out = {
             "position": position,
+            "target": target,
             "provenance": provenance,
             "hyperparameters": {**best_params, "best_iteration": int(best.best_iteration)},
             "validationRmse": best_rmse,
@@ -153,4 +170,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--target", choices=["points", "residual"], default="residual")
+    main(ap.parse_args().target)
