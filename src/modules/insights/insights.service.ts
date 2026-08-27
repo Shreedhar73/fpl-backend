@@ -36,9 +36,18 @@ import { round2, squadDifference, squadHorizonEp, xiNextGwEp } from './advice';
 export class InsightsService {
   private readonly log = new Logger(InsightsService.name);
 
+  /**
+   * What this payload deliberately does not answer.
+   *
+   * Transfers and chips came off this list when B-008 shipped — they are answered, at
+   * `GET /insights/transfers/{managerId}`, and a list that still refused them would have the app
+   * telling a user it cannot do something it does on the next screen. What replaced them is the
+   * limit that is now true and was always the more important one.
+   */
   private static readonly NOT_ADVISED_ON = [
-    'Transfers — needs sell value, which no public FPL endpoint exposes, and a hit calculation (B-008).',
-    'Chip timing — a chip is unspendable once spent, so it is a season-level decision, not a weekly one (B-008).',
+    'Uncertainty — every number here is a mean with no dispersion attached, so a 6.0 from a nailed starter and a 6.0 from a rotation risk read identically (B-017).',
+    'Whether a chip is worth playing — the transfer endpoint names the gameweek the calendar argues for and stops. A chip is unspendable once used, and no model here can price the week you would then never get to use it in.',
+    'Availability beyond what FPL publishes — the injury and doubt multiplier is a hand-drawn scalar, not a fitted term, because the archive carries no per-gameweek status (B-015).',
   ];
 
   constructor(

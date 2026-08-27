@@ -5,7 +5,9 @@ import {
   Bootstrap,
   ElementSummary,
   RawEntry,
+  RawEntryHistory,
   RawEntryPicks,
+  RawEntryTransfer,
   RawFixture,
 } from './fpl.types';
 
@@ -90,6 +92,29 @@ export class FplApiClient {
   ): Promise<RawEntryPicks> {
     return this.get<RawEntryPicks>(
       `entry/${managerId}/event/${gameweek}/picks/`,
+      1,
+      this.onDemand,
+    );
+  }
+
+  /**
+   * The transfer log and the season history — the two reads B-008 needs and nothing else does.
+   *
+   * On-demand like the other `entry/` calls: they sit on a user request path, so one attempt and a
+   * short timeout. `transfers/` returning `[]` is the normal state of a manager who has not
+   * transferred, and callers must not read an empty array as a failure.
+   */
+  async getEntryTransfers(managerId: number): Promise<RawEntryTransfer[]> {
+    return this.get<RawEntryTransfer[]>(
+      `entry/${managerId}/transfers/`,
+      1,
+      this.onDemand,
+    );
+  }
+
+  async getEntryHistory(managerId: number): Promise<RawEntryHistory> {
+    return this.get<RawEntryHistory>(
+      `entry/${managerId}/history/`,
       1,
       this.onDemand,
     );

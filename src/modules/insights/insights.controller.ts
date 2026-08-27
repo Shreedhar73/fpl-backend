@@ -17,7 +17,9 @@ import { markDataAsOf, type DataAsOfRequest } from '../../common/data-as-of';
 import { ErrorCode } from '../../common/error-codes';
 import { AdviceRequestDto } from './dto/advice-request.dto';
 import { AdviceDto } from './dto/advice.dto';
+import { TransferPlanDto } from './dto/transfer-plan.dto';
 import { InsightsService } from './insights.service';
+import { TransfersService } from '../transfers/transfers.service';
 
 /**
  * Route order is load-bearing here too: `advice/recommended` is declared before
@@ -28,7 +30,10 @@ import { InsightsService } from './insights.service';
 @ApiTags('insights')
 @Controller('insights')
 export class InsightsController {
-  constructor(private readonly insights: InsightsService) {}
+  constructor(
+    private readonly insights: InsightsService,
+    private readonly transfers: TransfersService,
+  ) {}
 
   @Post('advice')
   @HttpCode(200)
@@ -77,8 +82,8 @@ export class InsightsController {
     summary: 'Advice for a previously imported squad.',
     description:
       "Captain, vice, bench order and the gap against the best legal 15, with the model's " +
-      'per-term reasoning on every player. Does NOT recommend transfers or chips — see ' +
-      '`notAdvisedOn` in the response, and B-008.',
+      'per-term reasoning on every player, and `reasoning` for what the optimizer refused. ' +
+      'Transfers and chips are a separate call: GET /insights/transfers/{managerId}.',
   })
   @ApiParam({ name: 'managerId', type: Number, example: 1 })
   @ApiEnvelopeResponse(AdviceDto, { description: 'The advice.' })
@@ -94,5 +99,37 @@ export class InsightsController {
     const advice = await this.insights.adviseManager(managerId);
     markDataAsOf(req, advice.gameweekId);
     return advice;
+  }
+
+  /**
+   * The transfer plan (B-008).
+   *
+   * A separate route rather than a field on the advice, and deliberately so: it makes two upstream
+   * on-demand calls (`entry/{id}/transfers/` and `entry/{id}/history/`) and a second ILP solve, and
+   * folding that into every advice request would make the page that does not need it pay for the one
+   * that does.
+   */
+  @Get('transfers/:managerId')
+  @ApiOperation({
+    summary: 'What to do with the squad this manager already has.',
+    description:
+      'Transfers with the −4 hit inside the objective, priced at reconstructed SELL values rather ' +
+      'than market prices, plus chip WINDOWS — a chip is unspendable once used, so the model names ' +
+      'the gameweek the calendar argues for and never commits one.',
+  })
+  @ApiParam({ name: 'managerId', type: Number, example: 1 })
+  @ApiEnvelopeResponse(TransferPlanDto, { description: 'The plan.' })
+  @ApiEnvelopeError(
+    404,
+    ErrorCode.SQUAD_NOT_IMPORTED,
+    'Import the squad first: POST /api/squad/import.',
+  )
+  async transferPlan(
+    @Param('managerId', ParseIntPipe) managerId: number,
+    @Req() req: DataAsOfRequest,
+  ): Promise<TransferPlanDto> {
+    const plan = await this.transfers.plan(managerId);
+    markDataAsOf(req, plan.gameweekId);
+    return plan;
   }
 }

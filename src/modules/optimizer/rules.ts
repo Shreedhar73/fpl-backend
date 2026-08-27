@@ -11,6 +11,10 @@ interface RawRules {
   squad_squadplay: number;
   squad_total_spend: number; // tenths
   squad_team_limit: number;
+  /** how many free transfers may be BANKED beyond the one granted each gameweek */
+  max_extra_free_transfers?: number;
+  /** the fraction of a price RISE the seller keeps — 0.5 today, and it has not always been */
+  transfers_sell_on_fee?: number;
 }
 
 interface RawPosition {
@@ -46,6 +50,19 @@ export class Rules {
   }
   clubLimit(): number {
     return this.rules.squad_team_limit;
+  }
+  /**
+   * The most free transfers that can be held at once — one granted per gameweek plus the bank.
+   *
+   * `max_extra_free_transfers` is 4 today, so the cap is 5. Read rather than assumed: it was 1 and
+   * then 2 in living memory (`fpl-domain-rules`), and a rule that has changed will change again.
+   */
+  freeTransferCap(): number {
+    return (this.rules.max_extra_free_transfers ?? 4) + 1;
+  }
+  /** The share of a price rise the seller keeps. 0.5 today — the sell-on fee. */
+  sellOnFee(): number {
+    return this.rules.transfers_sell_on_fee ?? 0.5;
   }
   squadSelect(pos: PositionCode): number {
     return this.pos(pos).squadSelect;
