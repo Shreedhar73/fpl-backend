@@ -110,9 +110,14 @@ describe('the shipped transfer planner as a season policy (B-032)', () => {
   });
 
   it('holds when nothing on the market is better', () => {
-    const rows = market(1);
+    // The owned fifteen is strictly ahead. Giving every player the SAME horizon instead would leave
+    // the program degenerate — every legal fifteen optimal — and the solver would return an
+    // arbitrary one of them, which is a statement about ties and not about the planner.
+    const OWNED = new Set([0, 1, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 24, 25, 26]);
+    const better = (i: number) => ({ horizonEp: OWNED.has(i) ? 3 : 2 });
+    const rows = market(1, better);
     const result = simulateSeason(
-      asRounds(rows, market(2)),
+      asRounds(rows, market(2, better)),
       opening(rows),
       'model',
       RULES,

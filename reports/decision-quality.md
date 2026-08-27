@@ -124,7 +124,8 @@ Each predictor picks its **own** opening fifteen and walks the season under the 
 | greedy-1ft | form | 37 | **1761** | 37 | 0 | £97.5m |
 | greedy-1ft | priorSeason | 37 | **1037** | 4 | 0 | £97.8m |
 | greedy-1ft | template (crowd proxy) | 37 | **1928** | 37 | 0 | £97.8m |
-| planner | model | 37 | **1846** | 47 | 40 | £98.8m |
+| planner | model | 37 | **1814** | 48 | 44 | £97.4m |
+| planner (pre-B-024 objective) | model | 37 | **1846** | 47 | 40 | £98.8m |
 
 ### Is the difference bigger than the noise?
 
@@ -142,7 +143,9 @@ Every row is **paired by round** — both arms faced the same fixtures, blanks a
 | greedy-1ft | model − form | 37 | +3.24 | 2.60 | no | 192 pts |
 | greedy-1ft | model − priorSeason | 37 | +22.81 | 2.86 | **yes** | 212 pts |
 | greedy-1ft | model − template (crowd proxy) | 37 | -1.27 | 2.11 | no | 156 pts |
-| planner | planner − greedy-1ft, same opening fifteen | 37 | -0.95 | 1.51 | no | 112 pts |
+| planner | planner − greedy-1ft, same opening fifteen | 37 | -1.81 | 2.26 | no | 167 pts |
+| planner (pre-B-024 objective) | pre-B-024 planner − greedy-1ft, same opening fifteen | 37 | -0.95 | 1.51 | no | 112 pts |
+| planner | **B-024 − the objective it replaced**, same opening fifteen | 37 | -0.86 | 1.54 | no | 114 pts |
 
 ### What the simulated season says
 
@@ -154,9 +157,11 @@ Every row is **paired by round** — both arms faced the same fixtures, blanks a
 
 So the next question is not "why is our squad worse" — it is **whether it is worse at all**, and this instrument cannot say. More archived seasons buy √n: three would take a 156-point floor to roughly 90, still not enough. Power for a difference this size comes from **pairing arms that hold the same players**, which is what **B-031** does.
 
-**The transfer planner the product actually ships has now walked a season, for the first time.** It scores 1846 against `greedy-1ft`'s 1881 from **the same opening fifteen** — 35 behind, against a noise floor of 112 points, which it does not clear. It made 47 transfers and paid 40 points in hits, so the −4 path is exercised by a walked season rather than by a unit test alone.
+**The transfer planner the product actually ships has now walked a season, for the first time.** It scores 1814 against `greedy-1ft`'s 1881 from **the same opening fifteen** — 67 behind, against a noise floor of 167 points, which it does not clear. It made 48 transfers and paid 44 points in hits, so the −4 path is exercised by a walked season rather than by a unit test alone.
 
-**Read that against what it paid.** The planner is 35 points behind a policy that takes one free transfer a week on this round's number and never takes a hit, having spent 40 points on hits to get there. Both arms started from the identical fifteen and saw the identical predictions, so nothing but the policy separates them. The planner optimises a five-round discounted horizon and the baseline optimises this week; on this season, looking further ahead and paying for the privilege did not pay.
+**Read that against what it paid.** The planner is 67 points behind a policy that takes one free transfer a week on this round's number and never takes a hit, having spent 44 points on hits to get there. Both arms started from the identical fifteen and saw the identical predictions, so nothing but the policy separates them. The planner optimises a five-round discounted horizon and the baseline optimises this week; on this season, looking further ahead and paying for the privilege did not pay.
+
+**B-024 — the planner and the recommendation now optimise one objective — costs 32 points of season against the objective it replaced, at a floor of 114.** That does not clear the floor: on points this change is neither better nor worse, and the report will not pretend otherwise. What it does change is checkable rather than measurable — the plan and the recommendation agree about who starts and who takes the armband, which they need not have before and which nothing checked. The two arms start from the identical fifteen, so nothing but the planner's objective separates them.
 
 **The bar B-012 set was: beat `form` on ordering AND on simulated season points, or say plainly that we did not.** Ordering: yes, on points captured at every k. Season points, once both sides may transfer: no — the difference does not clear the noise floor.
 

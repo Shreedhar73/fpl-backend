@@ -475,12 +475,32 @@ export function simulateSeason(
 /** One name for the arm, shared by the policy and by every report that pairs against it. */
 export const PLANNER_LABEL = 'planner';
 
+/** The same planner solved under the objective B-024 replaced, so the change can be paired. */
+export const PLANNER_PRE_B024_LABEL = 'planner (pre-B-024 objective)';
+
 export function plannerPolicy(
   solve: (lp: string) => LpSolution,
-  options: { hitCost: number; maxTransfers: number },
+  options: {
+    hitCost: number;
+    maxTransfers: number;
+    /** What a bench place is worth. Defaults to the served weight, as `buildTransferLp` does. */
+    benchWeight?: number;
+    /**
+     * The defensive-concentration lambda (B-029), or null for none.
+     *
+     * A lambda rather than ready-made pairs: the pairs name candidates and the candidates are built
+     * inside `decide`, so handing them in would make the `d` rows depend on two lists agreeing about
+     * keys — a coupling nobody would notice breaking.
+     */
+    concentrationLambda?: number | null;
+    /** Which objective the plan is solved under. Harness-only; see `SquadObjective`. */
+    objective?: SquadObjective;
+    /** Distinguishes two planner arms in one report. Defaults to `PLANNER_LABEL`. */
+    label?: string;
+  },
 ): SimPolicy {
   return {
-    label: PLANNER_LABEL,
+    label: options.label ?? PLANNER_LABEL,
     decide(state, market, prices, predictor, rules) {
       const byCode = new Map<number, PredictionRow>();
       for (const [code, row] of market) byCode.set(code, row);
@@ -551,6 +571,15 @@ export function plannerPolicy(
           freeTransfers: state.freeTransfers,
           hitCost: options.hitCost,
           maxTransfers: options.maxTransfers,
+          benchWeight: options.benchWeight,
+          objective: options.objective,
+          concentration:
+            options.concentrationLambda == null
+              ? undefined
+              : {
+                  pairs: defencePairs([...owned, ...buyable]),
+                  lambda: options.concentrationLambda,
+                },
         }),
       );
       if (solution.Status !== 'Optimal') {

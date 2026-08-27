@@ -50,6 +50,9 @@ export interface SimVerdictInput {
   plannerTransfers: number | null;
   /** paired against `greedy-1ft` on the SAME opening fifteen, so it isolates the policy */
   plannerVsGreedy: PairedStat | null;
+  /** the same planner under the objective B-024 replaced, and the pairing between the two */
+  plannerPreB024Points: number | null;
+  b024VsPre: PairedStat | null;
   holdVsForm: PairedStat | null;
   greedyVsForm: PairedStat | null;
   vsTemplate: PairedStat | null;
@@ -81,6 +84,8 @@ export function simulatedSeasonVerdict(input: SimVerdictInput): string[] {
     plannerHitCost,
     plannerTransfers,
     plannerVsGreedy,
+    plannerPreB024Points,
+    b024VsPre,
   } = input;
 
   if (holdModelPoints !== null && holdFormPoints !== null) {
@@ -196,6 +201,25 @@ export function simulatedSeasonVerdict(input: SimVerdictInput): string[] {
           `on this season, looking further ahead and paying for the privilege did not pay.`,
       );
     }
+  }
+
+  if (
+    plannerPoints !== null &&
+    plannerPreB024Points !== null &&
+    b024VsPre !== null
+  ) {
+    const diff = plannerPoints - plannerPreB024Points;
+    const floor = fixed(detectableAt(b024VsPre));
+    out.push(
+      `**B-024 — the planner and the recommendation now optimise one objective — costs ` +
+        `${diff >= 0 ? `nothing; it gains ${diff}` : `${-diff}`} points of season against the ` +
+        `objective it replaced, at a floor of ${floor}.**` +
+        `${b024VsPre.clearsNoise ? ' That clears the floor, so it is a real change in points.' : ' That does not clear the floor: on points this change is neither better nor worse, and the report will not pretend otherwise.'}` +
+        ` What it does change is checkable rather than measurable — the plan and the recommendation ` +
+        `agree about who starts and who takes the armband, which they need not have before and ` +
+        `which nothing checked. The two arms start from the identical fifteen, so nothing but the ` +
+        `planner's objective separates them.`,
+    );
   }
 
   const orderingMet = capturedWins.length === ks.length && ks.length > 0;
