@@ -62,6 +62,39 @@ export interface MinutesParams {
     /** rows behind the fit, printed so thin samples read as thin */
     n: { start: number; sub: number };
   };
+  /**
+   * Fitted availability (plan 024, B-015) — absent in params fitted before the Wayback archive of
+   * deadline-time flags existed.
+   *
+   * When present, the minutes model changes REGIME: deterministic statuses (`u`/`n`/`s`, effective
+   * 0%) zero the distribution by rule; the uncertain band enters the start/sub logistics as
+   * `inj = 1 − effective chance` terms fitted jointly with the base curves; and a row whose flags
+   * are unknown gets its own fitted offset rather than a default of fit. The hand-drawn
+   * `availabilityMultiplier()` is not applied in this regime.
+   *
+   * The coefficients are GLOBAL across positions (the flagged sample cannot support per-position
+   * curves); the keeper block above keeps its own base curves and shares these terms.
+   */
+  availability?: {
+    /** added to the start logit per unit of `inj` */
+    startInj: number;
+    /** interaction: `inj × logit(laggedStartRate)` — an injured regular's history overstates him */
+    startInjX: number;
+    /** offset applied when the row's flags are unknown (a Wayback gap), instead of a default */
+    startUnknown: number;
+    subInj: number;
+    subUnknown: number;
+    /** P(60+ | started, flagged) and E[minutes | started, flagged] — measured group constants */
+    sixtyGivenStartFlagged: number;
+    minutesGivenStartFlagged: number;
+    /** rows behind each term, printed so thin samples read as thin */
+    n: {
+      startFlagged: number;
+      subFlagged: number;
+      unknown: number;
+      flaggedStarts: number;
+    };
+  };
 }
 
 export interface SavesParams {

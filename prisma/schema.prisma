@@ -511,6 +511,46 @@ model ArchiveSeasonScoring {
   @@map("archive_season_scoring")
 }
 
+/// WAYBACK AVAILABILITY — deadline-time `status` / `chance_of_playing_next_round` for PAST
+/// seasons, recovered from Wayback Machine captures of `bootstrap-static` (B-015, plan 024,
+/// probed 2026-08-27: near-daily 200s from 2023-08 onward, full per-player status fields).
+///
+/// Same rules as ArchivePlayerGameweek: an external scrape in its OWN table, nothing in the
+/// serving path may read it, joins to ours only through the stable `code`. One row per
+/// (season, round, playerCode), from the LAST capture strictly BEFORE that round's deadline —
+/// a capture after the deadline encodes what the match revealed, which is the leak this table
+/// exists to avoid. `gapHours` is kept because a three-day-old flag is weaker evidence about a
+/// late fitness call than a three-hour-old one, and the fit must be able to tell them apart.
+model ArchiveAvailabilitySnapshot {
+  id     String @id @default(cuid())
+  /// as the archive labels it: "2025-26"
+  season String
+  /// gameweek within that season
+  round  Int
+
+  /// STABLE across seasons — the join key to `Player.code` and `ArchivePlayerGameweek.playerCode`
+  playerCode Int
+
+  /// a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad
+  status                   String
+  /// null means FULLY FIT, not unknown (same convention as PlayerDeadlineSnapshot)
+  chanceOfPlayingNextRound Int?
+  news                     String?
+
+  /// when the Wayback capture was taken — strictly before `deadlineAt`, asserted at ingest
+  snapshotAt DateTime
+  /// that round's deadline, read from a season-end snapshot's `events[]` (historical fact)
+  deadlineAt DateTime
+  /// hours between capture and deadline; rounds with a gap over the plan's bound are excluded
+  gapHours   Decimal  @db.Decimal(7, 2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([season, round, playerCode])
+  @@index([season, round])
+  @@map("archive_availability_snapshot")
+}
+
 /// DEADLINE SNAPSHOT — the only record of what was knowable BEFORE a gameweek.
 ///
 /// `players` is a snapshot table: `status`, `chanceOfPlayingNextRound`, `epNext`, `epThis`, `form`,
@@ -519,9 +559,11 @@ model ArchiveSeasonScoring {
 /// backtested against them is reading the answer, and `ep_next` — the baseline the model is measured
 /// against — cannot be scored for any gameweek that has already gone.
 ///
-/// This table is also the ONLY route to ever fitting the availability half of the minutes model: the
-/// community archive carries no per-gameweek `status` or `chance_of_playing` either (D-016), so
-/// nothing that has not been captured here can be recovered later from anywhere.
+/// For the availability half of the minutes model this table is the PROSPECTIVE record — the live,
+/// hours-accurate capture. The historical record it was once thought to be the only route to
+/// (D-016) turned out recoverable after all: `ArchiveAvailabilitySnapshot` holds deadline-time
+/// flags for past seasons from Wayback captures (B-015, plan 024), at day-level rather than
+/// hour-level accuracy. The community archive still carries neither.
 ///
 /// One row per player per gameweek, upserted, so the last capture before a deadline is the one kept.
 model PlayerDeadlineSnapshot {

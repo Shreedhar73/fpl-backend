@@ -8,6 +8,12 @@ import { RawScoring } from './scoring';
 export const ARCHIVE_SEASONS = ['2023-24', '2024-25', '2025-26'];
 
 /**
+ * Staleness bound on a joined Wayback availability capture (plan 024, pre-committed): a round whose
+ * nearest capture is older than this is treated as having NO flags — unknown, never available.
+ */
+export const AVAILABILITY_MAX_GAP_HOURS = 72;
+
+/**
  * Reads for the forward projection: this season's own rows in the same shape as the archive's, plus
  * the fixtures being projected and the availability that decides whether a player features at all.
  *
@@ -33,6 +39,29 @@ export class ForecastRepository {
   async archiveHistory(
     seasons: string[] = ARCHIVE_SEASONS,
   ): Promise<HistoryRow[]> {
+    // Deadline-time availability flags (plan 024), joined per (season, round, playerCode). Only
+    // captures inside the staleness bound are joined at all — a three-day-old flag is not what was
+    // knowable at the deadline, and the coverage report counts what this excludes. A row with no
+    // joined flags is UNKNOWN, which the fitted model prices explicitly; it is never read as fit.
+    const avail = await this.prisma.archiveAvailabilitySnapshot.findMany({
+      where: {
+        season: { in: seasons },
+        gapHours: { lte: AVAILABILITY_MAX_GAP_HOURS },
+      },
+      select: {
+        season: true,
+        round: true,
+        playerCode: true,
+        status: true,
+        chanceOfPlayingNextRound: true,
+      },
+    });
+    const availByKey = new Map(
+      avail.map((a) => [
+        `${a.season}|${a.round}|${a.playerCode}`,
+        { status: a.status, chance: a.chanceOfPlayingNextRound },
+      ]),
+    );
     const rows = await this.prisma.archivePlayerGameweek.findMany({
       where: { season: { in: seasons } },
       orderBy: [{ season: 'asc' }, { round: 'asc' }],
@@ -68,8 +97,12 @@ export class ForecastRepository {
         value: true,
       },
     });
-    return rows.map((r) => ({
+    return rows.map((r) => {
+      const flags = availByKey.get(`${r.season}|${r.round}|${r.playerCode}`);
+      return {
       ...r,
+      deadlineStatus: flags?.status ?? null,
+      deadlineChance: flags === undefined ? null : flags.chance,
       position: r.position,
       expectedGoals: Number(r.expectedGoals),
       expectedAssists: Number(r.expectedAssists),
@@ -78,7 +111,8 @@ export class ForecastRepository {
       influence: r.influence === null ? null : Number(r.influence),
       creativity: r.creativity === null ? null : Number(r.creativity),
       threat: r.threat === null ? null : Number(r.threat),
-    }));
+      };
+    });
   }
 
   /** The current season's scoring table, which is what an upcoming gameweek is scored under. */

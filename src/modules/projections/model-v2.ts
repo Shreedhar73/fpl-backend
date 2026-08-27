@@ -415,12 +415,81 @@ export interface LaggedMinutes {
 }
 
 /**
+ * What was knowable about a player's availability at the deadline — the raw flags, not a multiplier.
+ *
+ * `known: false` means the historical record has no capture for that round (a Wayback gap, or a
+ * pre-archive season) — which is *unknown*, and must never be read as available. The fitted model
+ * carries an explicit coefficient for unknown rows instead of a default (plan 024).
+ */
+export interface AvailabilityInput {
+  /** a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad */
+  status: string;
+  /** null means FULLY FIT, not unknown (`fpl-api-reference`) */
+  chance: number | null;
+  known: boolean;
+}
+
+/**
+ * The rule-versus-fitted split of an availability flag (plan 024).
+ *
+ * Deterministic statuses are RULES, not features: a player not at the club (`u`), not in the squad
+ * (`n`), suspended for the match (`s`), or at an effective 0% does not play, and feeding those rows
+ * to a logistic re-runs the complete-separation failure the start fit already paid for (the 7.3e8
+ * slope). Everything else is the fitted band, expressed as `inj` = 1 − effective chance — 0 for a
+ * fully fit player, 0.25 for a 75% doubt, up to just under 1.
+ */
+export function availabilitySignal(
+  status: string,
+  chance: number | null,
+): { zero: boolean; inj: number } {
+  if (status === 'u' || status === 'n' || status === 's') {
+    return { zero: true, inj: 1 };
+  }
+  // chance null means FULLY FIT for an available player; for `d` the site convention is that a
+  // doubt with no percentage is a real doubt (the hand rule read it as 50%); a flagged `i` with no
+  // percentage is out.
+  const effective =
+    chance !== null
+      ? Math.max(0, Math.min(100, chance)) / 100
+      : status === 'd'
+        ? 0.5
+        : status === 'i'
+          ? 0
+          : 1;
+  if (effective <= 0) return { zero: true, inj: 1 };
+  return { zero: false, inj: 1 - effective };
+}
+
+/**
+ * The v1 heuristic: injury flags to a scalar, by hand.
+ *
+ * Kept verbatim as the incumbent's availability layer, and as the baseline the fitted availability
+ * terms (plan 024) are measured against. Lives here rather than in the forecast service so the
+ * backtest harness can apply it to historical flags without importing the serving layer.
+ *
+ * `chance === null` means FULLY FIT, not unknown. Reading it as 0 benches every healthy player.
+ */
+export function availabilityMultiplier(
+  status: string,
+  chance: number | null,
+): number {
+  if (['i', 's', 'u', 'n'].includes(status)) return 0;
+  if (chance !== null) return Math.max(0, Math.min(1, chance / 100));
+  return status === 'd' ? 0.5 : 1;
+}
+
+/**
  * Turn a player's lagged minutes record into the minutes distribution the projection needs.
  *
- * `availability` is the injury/doubt multiplier and stays HEURISTIC on purpose: the archive carries no
- * per-gameweek `status` or `chance_of_playing_next_round`, so this half of the model cannot be fitted
- * from history at all. It waits on `player_deadline_snapshot` accumulating live gameweeks (B-007
- * Phase 2). Anything that reports this model as fitted must say which half.
+ * Two availability regimes, decided by the PARAMS rather than the caller:
+ *
+ * - Params without `minutes.availability` (v1 through v3-fitted): `availability` is the hand-drawn
+ *   scalar multiplier, applied to both curves — the original heuristic, unchanged.
+ * - Params with `minutes.availability` (plan 024): the flags themselves are the input. Deterministic
+ *   statuses zero the distribution by RULE; the fitted band enters the two logistics as `inj` terms
+ *   (with an interaction against the lagged start rate — an injured regular's history overstates
+ *   him); a row whose flags are unknown gets the fitted unknown offset, never a default of fit.
+ *   The scalar `availability` argument is IGNORED in this regime — pass the flags in `avail`.
  */
 export function minutesDistribution(
   lagged: LaggedMinutes,
@@ -432,6 +501,8 @@ export function minutesDistribution(
    * every caller had before the split — rather than a break.
    */
   position?: string,
+  /** deadline-time flags — required for params that carry fitted availability, unused otherwise */
+  avail?: AvailabilityInput,
 ): MinutesDistribution {
   const m = params.minutes;
   // A second-choice keeper does not come on; the global sub curve pays him a midfielder's chance of
@@ -446,6 +517,50 @@ export function minutesDistribution(
           subIntercept: m.subIntercept,
           subSlope: m.subSlope,
         };
+  const fitted = m.availability;
+  if (fitted !== undefined) {
+    // Fitted-availability regime (plan 024). The flags are the input; the scalar argument is dead.
+    const a = avail ?? { status: 'a', chance: null, known: false };
+    const sig = a.known ? availabilitySignal(a.status, a.chance) : null;
+    if (sig?.zero) {
+      return {
+        pStart: 0,
+        pSub: 0,
+        pPlay: 0,
+        pSixtyPlus: 0,
+        expectedMinutes: 0,
+      };
+    }
+    const inj = sig?.inj ?? 0;
+    const unknown = a.known ? 0 : 1;
+    const startLogit = logit(lagged.startRate);
+    const pStart = clamp01(
+      logistic(
+        curves.startIntercept +
+          curves.startSlope * startLogit +
+          fitted.startInj * inj +
+          fitted.startInjX * inj * startLogit +
+          fitted.startUnknown * unknown,
+      ),
+    );
+    const pSubRaw = logistic(
+      curves.subIntercept +
+        curves.subSlope * logit(lagged.subRate) +
+        fitted.subInj * inj +
+        fitted.subUnknown * unknown,
+    );
+    const pSub = clamp01((1 - pStart) * pSubRaw);
+    const pPlay = clamp01(pStart + pSub);
+    // A doubtful starter is managed differently once on the pitch — measured over flagged starters
+    // as group constants rather than interpolated, because the sample cannot support a curve.
+    const sixtyStart = inj > 0 ? fitted.sixtyGivenStartFlagged : m.sixtyGivenStart;
+    const minutesStart =
+      inj > 0 ? fitted.minutesGivenStartFlagged : m.minutesGivenStart;
+    const pSixtyPlus = clamp01(pStart * sixtyStart + pSub * m.sixtyGivenSub);
+    const expectedMinutes = pStart * minutesStart + pSub * m.minutesGivenSub;
+    return { pStart, pSub, pPlay, pSixtyPlus, expectedMinutes };
+  }
+
   const rawStart = logistic(
     curves.startIntercept + curves.startSlope * logit(lagged.startRate),
   );

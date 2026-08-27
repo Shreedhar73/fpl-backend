@@ -30,6 +30,7 @@
     "postinstall": "prisma generate",
     "openapi:emit": "nest build && node dist/scripts/emit-openapi.js",
     "import:archive": "nest build && node dist/scripts/import-archive.js",
+    "ingest:availability": "nest build && node dist/scripts/ingest-availability.js",
     "calibrate": "nest build && node dist/scripts/calibrate.js",
     "calibrate:components": "nest build && node dist/scripts/calibrate-components.js",
     "score:gameweek": "nest build && node dist/scripts/score-gameweek.js",
