@@ -403,16 +403,34 @@ describe('free transfers, replayed from the season history', () => {
       ]),
       5,
     );
-    expect(state.freeTransfers).toBe(3);
+    // GW1 holds none — the squad-selection window is unlimited. Its grant lands entering GW2, GW2's
+    // entering GW3. Two clean gameweeks played, two in hand.
+    expect(state.freeTransfers).toBe(2);
     expect(state.complete).toBe(true);
   });
 
-  it('never banks past the cap', () => {
-    const rows = Array.from({ length: 12 }, (_, i) => ({
+  /**
+   * The invariant, stated once for a range rather than pinned at a single point: play through
+   * gameweek `n` spending nothing and you hold `min(n, cap)` entering `n + 1`.
+   *
+   * The bug this replaced (#96) seeded the replay at one and then granted the first gameweek's
+   * transfer again, so every answer was one too high. Three of the four cases here would have caught
+   * it; the cap saturating at 12 rounds is the one that would not, which is why the old suite —
+   * whose unsaturated cases were `n + 1` — passed.
+   */
+  it.each([
+    [1, 1],
+    [2, 2],
+    [4, 4],
+    [12, 5],
+  ])('holds min(n, cap) after %i clean gameweeks', (played, expected) => {
+    const rows = Array.from({ length: played }, (_, i) => ({
       event: i + 1,
       event_transfers: 0,
     }));
-    expect(reconstructEntryState(history(rows), 5).freeTransfers).toBe(5);
+    expect(reconstructEntryState(history(rows), 5).freeTransfers).toBe(
+      expected,
+    );
   });
 
   it('subtracts what was spent', () => {
@@ -423,7 +441,25 @@ describe('free transfers, replayed from the season history', () => {
       ]),
       5,
     );
-    // GW1: 1 held, none spent, +1 = 2. GW2: 2 spent leaves 0, +1 = 1.
+    // GW1: none held, none spent, +1 = 1 entering GW2. GW2: 2 spent against 1 leaves 0 (the second
+    // was a hit), +1 = 1 entering GW3.
+    expect(state.freeTransfers).toBe(1);
+  });
+
+  /**
+   * The discriminating case. Above, `Math.max(0, …)` floors the answer at the same number whether the
+   * replay seeds at zero or one, so that test passes either way. Spending exactly what is held does
+   * not saturate: the old off-by-one reported two here, and a manager acting on it takes a −4 it did
+   * not have to.
+   */
+  it('does not credit a transfer that was spent in full', () => {
+    const state = reconstructEntryState(
+      history([
+        { event: 1, event_transfers: 0 },
+        { event: 2, event_transfers: 1 },
+      ]),
+      5,
+    );
     expect(state.freeTransfers).toBe(1);
   });
 
@@ -443,7 +479,8 @@ describe('free transfers, replayed from the season history', () => {
       ),
       5,
     );
-    expect(state.freeTransfers).toBe(3);
+    // Nine transfers on the wildcard cost nothing, so the two gameweeks played still grant two.
+    expect(state.freeTransfers).toBe(2);
     expect(state.chipsUsed).toEqual(['wildcard']);
   });
 

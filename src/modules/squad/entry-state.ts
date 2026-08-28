@@ -123,10 +123,18 @@ export interface EntryState {
  * is 4, so the bank tops out at 5 available. The cap is passed in rather than assumed, because it has
  * been 1 and 2 in living memory and a rule that has changed will change again (`fpl-domain-rules`).
  *
- * The replay: start the manager's first gameweek with one, and for each gameweek subtract what they
- * spent and grant one more, capped. A wildcard or free hit gameweek is not special-cased — FPL does
- * not charge those transfers against the bank, and `event_transfers` counts them, so a chip gameweek
- * is skipped rather than subtracted.
+ * The replay: **hold none during the first gameweek played** — the squad-selection window is
+ * unlimited, so there is no free transfer to spend there — then for each gameweek subtract what was
+ * spent and grant the next gameweek's one, capped. The grant lands AFTER the spend because that is
+ * the order FPL applies them: a manager who burns their transfer in gameweek *n* still starts *n+1*
+ * with the new one. A wildcard or free hit gameweek is not special-cased — FPL does not charge those
+ * transfers against the bank, and `event_transfers` counts them, so a chip gameweek is skipped
+ * rather than subtracted.
+ *
+ * The invariant this has to keep: a manager who has played through gameweek *n* spending nothing
+ * holds `min(n, cap)` entering *n+1*. Seeding the loop at one instead of zero granted the first
+ * gameweek's transfer twice and made every reconstruction one too high, which prices a −8 plan as a
+ * −4 (#96).
  */
 export function reconstructEntryState(
   history: RawEntryHistory,
@@ -152,7 +160,7 @@ export function reconstructEntryState(
     };
   }
 
-  let free = 1;
+  let free = 0;
   for (const round of rounds) {
     if (!chipEvents.has(round.event)) {
       free = Math.max(0, free - round.event_transfers);
