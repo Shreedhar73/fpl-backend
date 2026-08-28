@@ -104,9 +104,16 @@ export class ForecastRepository {
       deadlineStatus: flags?.status ?? null,
       deadlineChance: flags === undefined ? null : flags.chance,
       position: r.position,
-      expectedGoals: Number(r.expectedGoals),
-      expectedAssists: Number(r.expectedAssists),
-      expectedGoalsConceded: Number(r.expectedGoalsConceded),
+      // `Number(null)` is 0, not null, and TypeScript accepts it because `Number` returns `number`.
+      // Every guard downstream tests for null and would therefore never fire: six seasons of real
+      // goals would be divided by an expected-goals total of zero. Nullable in, nullable out.
+      expectedGoals: r.expectedGoals === null ? null : Number(r.expectedGoals),
+      expectedAssists:
+        r.expectedAssists === null ? null : Number(r.expectedAssists),
+      expectedGoalsConceded:
+        r.expectedGoalsConceded === null
+          ? null
+          : Number(r.expectedGoalsConceded),
       ictIndex: Number(r.ictIndex),
       influence: r.influence === null ? null : Number(r.influence),
       creativity: r.creativity === null ? null : Number(r.creativity),
@@ -190,9 +197,13 @@ export class ForecastRepository {
         bonus: s.bonus,
         bps: s.bps,
         defensiveContribution: s.defensiveContribution,
-        expectedGoals: Number(s.expectedGoals),
-        expectedAssists: Number(s.expectedAssists),
-        expectedGoalsConceded: Number(s.expectedGoalsConceded),
+        expectedGoals: s.expectedGoals === null ? null : Number(s.expectedGoals),
+        expectedAssists:
+          s.expectedAssists === null ? null : Number(s.expectedAssists),
+        expectedGoalsConceded:
+          s.expectedGoalsConceded === null
+            ? null
+            : Number(s.expectedGoalsConceded),
         ictIndex: Number(s.ictIndex),
         // The live table carries only the composite index; the split exists in the archive alone
         // (B-037), so live rows are honestly missing rather than zero.

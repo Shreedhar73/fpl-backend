@@ -58,7 +58,42 @@ const SCORING_PRE_DEFCON: RawScoring = {
   defensive_contribution: { GKP: 0, DEF: 0, MID: 0, FWD: 0 },
 };
 
+/**
+ * Before 2025-26 a goalkeeper's goal was worth SIX, not ten, and there is exactly one row in the
+ * archive that proves it: a keeper scored in 2020-21. Re-scoring every season from 2016-17 to
+ * 2022-23 with a ten-point keeper goal produces that single mismatch and no other; with six it
+ * produces none.
+ *
+ * That one row is also why the 2023-24 and 2024-25 tables above can carry GKP: 10 and still verify
+ * with zero mismatches — no keeper scored in either season, so those seasons say nothing about the
+ * value, exactly as the 2025-26 comment warns. The older tables are constrained by evidence the
+ * newer ones are not.
+ */
+const SCORING_PRE_2025_26: RawScoring = {
+  ...SCORING_PRE_DEFCON,
+  goals_scored: { GKP: 6, DEF: 6, MID: 5, FWD: 4 },
+};
+
+const OLDER_SEASONS = [
+  '2016-17',
+  '2017-18',
+  '2018-19',
+  '2019-20',
+  '2020-21',
+  '2021-22',
+  '2022-23',
+] as const;
+
 export const ARCHIVE_SCORING: ArchiveScoringTable[] = [
+  ...OLDER_SEASONS.map((season) => ({
+    season,
+    scoring: SCORING_PRE_2025_26,
+    source:
+      'the 2025-26 table with defensive contribution priced at 0 and a goalkeeper goal at 6; the ' +
+      'keeper value is pinned by the single keeper goal in 2020-21, which mismatches at 10 and ' +
+      'matches at 6, and the whole table is proved by re-scoring every row of every season ' +
+      '(2026-08-28)',
+  })),
   {
     season: '2023-24',
     scoring: SCORING_PRE_DEFCON,

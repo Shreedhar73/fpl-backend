@@ -6,6 +6,7 @@ import {
   ARCHIVE_SEASONS,
   ArchiveGameweekRow,
   elementToCode,
+  elementToPosition,
   elementToTeamId,
   expectedDefconCount,
   mapArchiveRow,
@@ -60,6 +61,9 @@ export interface SeasonImportSummary {
    */
   pointsVerified: number;
   /** the defensive-contribution threshold each position's data actually implies, where it implies one */
+  /** starters per fixture; 22.0 in a healthy season, and the reason `starts` may have been dropped */
+  startsPerFixture: number;
+  startsTrusted: boolean;
   thresholdEvidence: ThresholdEvidence[];
 }
 
@@ -108,12 +112,27 @@ export class ArchiveService {
     const [merged, playersRaw, teams] = await Promise.all([
       this.csv(season, 'gws/merged_gw.csv'),
       this.csv(season, 'players_raw.csv'),
-      this.csv(season, 'teams.csv'),
+      // Absent before 2019-20. The club code is recoverable without it — `players_raw.team_code` is
+      // the same stable club id — so a missing file is a shape difference, not a failure.
+      this.csv(season, 'teams.csv').catch(() => [] as Record<string, string>[]),
     ]);
 
     const codeOf = elementToCode(playersRaw);
     const teamIdOf = elementToTeamId(playersRaw);
     const codeOfTeamId = teamIdToCode(teams);
+    // Only source of position before 2020-21, whose merged_gw.csv has no `position` column.
+    const positionOf = elementToPosition(playersRaw);
+    // teams.csv is the season-id → club-code map. Without it, build the same map from players_raw,
+    // which carries both `team` (that season's 1-20 id) and `team_code` (the stable club id).
+    if (codeOfTeamId.size === 0) {
+      for (const r of playersRaw) {
+        const seasonTeamId = Number(r.team);
+        const clubCode = Number(r.team_code);
+        if (Number.isFinite(seasonTeamId) && Number.isFinite(clubCode)) {
+          codeOfTeamId.set(seasonTeamId, clubCode);
+        }
+      }
+    }
 
     const teamCodeOfElement = (element: number): number | null => {
       const t = teamIdOf.get(element);
@@ -144,6 +163,7 @@ export class ArchiveService {
         codeOf,
         teamCodeOfElement,
         teamCodeOfSeasonId,
+        positionOf,
       );
       if (!mapped) {
         // Distinguish "not a player" from "we failed to map a player": only the second is a defect.
@@ -164,6 +184,7 @@ export class ArchiveService {
       );
     }
 
+    const startsVerdict = this.verifyStarts(season, rows);
     const defconRowsChecked = this.assertDefconIsACount(season, rows);
     const pointsVerified = this.verifyPoints(season, rows);
     const thresholdEvidence = this.thresholdEvidence(rows);
@@ -186,6 +207,8 @@ export class ArchiveService {
       defconRowsChecked,
       pointsVerified,
       thresholdEvidence,
+      startsPerFixture: startsVerdict.perFixture,
+      startsTrusted: startsVerdict.trusted,
     };
 
     this.log.log(
@@ -193,7 +216,14 @@ export class ArchiveService {
         `${(summary.linkRate * 100).toFixed(1)}% linked to a current player), ` +
         `${duplicateRows} duplicate, ${nonPlayerRows} non-player, ` +
         `${defconRowsChecked} defcon rows checked, ` +
-        `${pointsVerified} rows points-verified`,
+        `${pointsVerified} rows points-verified, ` +
+        `starts ${
+          Number.isNaN(startsVerdict.perFixture)
+            ? 'not recorded by this season'
+            : startsVerdict.trusted
+              ? `ok (${startsVerdict.perFixture.toFixed(1)}/fixture)`
+              : `DISCARDED (${startsVerdict.perFixture.toFixed(1)}/fixture, expected 22)`
+        }`,
     );
     for (const e of thresholdEvidence) {
       if (e.impliedThreshold === null) continue;
@@ -203,6 +233,44 @@ export class ArchiveService {
       );
     }
     return summary;
+  }
+
+  /**
+   * Does this season's `starts` column mean what it means everywhere else?
+   *
+   * Every match starts exactly 22 players, so a season's starts divided by its fixtures must come
+   * out at 22. Measured across the archive: 2023-24, 2024-25 and 2025-26 all give exactly 22.0 —
+   * and 2022-23 gives 14.1, with about three thousand starters recorded as substitutes. A
+   * "substitute" in that season averages 51 minutes and plays an hour 48% of the time, against 18
+   * minutes and 1.3% everywhere else.
+   *
+   * A column that exists and lies is worse than one that is absent, because every guard written for
+   * absence passes it through. So a season that fails this gate has its `starts` set to NULL and
+   * says so loudly, which puts it in the same category as the seasons that never recorded it.
+   *
+   * Checked rather than hard-coded to 2022-23: the same corruption in a future season would
+   * otherwise be imported silently.
+   */
+  private verifyStarts(
+    season: string,
+    rows: ArchiveGameweekRow[],
+  ): { perFixture: number; trusted: boolean } {
+    const recorded = rows.filter((r) => r.starts !== null);
+    if (recorded.length === 0) return { perFixture: NaN, trusted: false };
+    const fixtures = new Set(recorded.map((r) => `${r.round}|${r.fixture}`));
+    const total = recorded.reduce((t, r) => t + (r.starts ?? 0), 0);
+    const perFixture = total / Math.max(1, fixtures.size);
+    // Two per side of slack. A real season lands on 22.0 exactly; anything that does not is a
+    // column meaning something else.
+    const trusted = Math.abs(perFixture - 22) <= 2;
+    if (!trusted) {
+      this.log.warn(
+        `${season}: starts column reports ${perFixture.toFixed(1)} starters per fixture, ` +
+          `expected 22 — discarding it as unrecorded rather than fitting a start curve on it`,
+      );
+      for (const r of rows) r.starts = null;
+    }
+    return { perFixture, trusted };
   }
 
   /**

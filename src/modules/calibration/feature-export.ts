@@ -37,7 +37,7 @@ export const WINDOWS = [1, 3, 5, 10, 38] as const;
 interface PlayerMatch {
   points: number;
   minutes: number;
-  started: number;
+  started: number | null;
   goals: number;
   assists: number;
   conceded: number;
@@ -45,9 +45,9 @@ interface PlayerMatch {
   saves: number;
   bonus: number;
   bps: number;
-  xg: number;
-  xa: number;
-  xgc: number;
+  xg: number | null;
+  xa: number | null;
+  xgc: number | null;
   ict: number;
   defcon: number;
   influence: number | null;
@@ -56,16 +56,27 @@ interface PlayerMatch {
 }
 
 /**
- * Fields that can be null per match (the I/C/T split — B-037). Their windows average the matches
- * that HAVE the value and go missing when none do, so a season with the split and one without do
- * not blend a real number with an invented zero.
+ * Fields that can be null per match. Their windows average the matches that HAVE the value and go
+ * missing when none do, so a season with the field and one without do not blend a real number with
+ * an invented zero.
+ *
+ * The I/C/T split arrived in B-037. `started`, `xg`, `xa` and `xgc` joined them when the archive was
+ * extended back to 2016-17: none of the four exists before 2022-23, and a window that averaged them
+ * as zeros would report six seasons of substitutes who never had a shot.
  */
-const NULLABLE_PLAYER_FIELDS = ['influence', 'creativity', 'threat'] as const;
+const NULLABLE_PLAYER_FIELDS = [
+  'influence',
+  'creativity',
+  'threat',
+  'started',
+  'xg',
+  'xa',
+  'xgc',
+] as const;
 
 const PLAYER_FIELDS = [
   'points',
   'minutes',
-  'started',
   'goals',
   'assists',
   'conceded',
@@ -73,9 +84,6 @@ const PLAYER_FIELDS = [
   'saves',
   'bonus',
   'bps',
-  'xg',
-  'xa',
-  'xgc',
   'ict',
   'defcon',
 ] as const;
@@ -84,8 +92,9 @@ const PLAYER_FIELDS = [
 interface TeamMatch {
   goalsFor: number;
   goalsAgainst: number;
-  xgFor: number;
-  xgAgainst: number;
+  /** null for a season the archive has no expected goals for, same rule as the player fields */
+  xgFor: number | null;
+  xgAgainst: number | null;
 }
 
 const TEAM_FIELDS = ['goalsFor', 'goalsAgainst', 'xgFor', 'xgAgainst'] as const;
@@ -148,6 +157,10 @@ export function featureNames(): string[] {
     'laggedSubRate',
     'form',
     'priorSeasonPointsPer90',
+    'priorSeasonMinutes',
+    'priorSeasonStartRate',
+    'priorSeasonAppearances',
+    'priorSeasonGap',
     'appearancesSample',
     'matchesSample',
     'lambdaFor',
@@ -229,6 +242,10 @@ export function exportFeatures(
       f.set('laggedSubRate', features.laggedSubRate);
       f.set('form', features.form);
       f.set('priorSeasonPointsPer90', features.priorSeasonPointsPer90);
+      f.set('priorSeasonMinutes', features.priorSeasonMinutes);
+      f.set('priorSeasonStartRate', features.priorSeasonStartRate);
+      f.set('priorSeasonAppearances', features.priorSeasonAppearances);
+      f.set('priorSeasonGap', features.priorSeasonGap);
       f.set('appearancesSample', features.appearancesSample);
       f.set('matchesSample', features.matchesSample);
       f.set('lambdaFor', goalRates.lambdaFor);
@@ -242,15 +259,18 @@ export function exportFeatures(
         for (const w of WINDOWS)
           f.set(`p_${field}_${w}`, nullableWindowMean(ph, w, (m) => m[field]));
 
+      // Team windows use the nullable mean throughout: two of the four fields are expected goals,
+      // which no season before 2022-23 records, and averaging those as zero would make every club
+      // of that era look incapable of creating a chance.
       const th = teamHist.get(row.teamCode) ?? [];
       for (const field of TEAM_FIELDS)
         for (const w of WINDOWS)
-          f.set(`t_${field}_${w}`, windowMean(th, w, (m) => m[field]));
+          f.set(`t_${field}_${w}`, nullableWindowMean(th, w, (m) => m[field]));
 
       const oh = teamHist.get(row.opponentTeamCode) ?? [];
       for (const field of TEAM_FIELDS)
         for (const w of WINDOWS)
-          f.set(`o_${field}_${w}`, windowMean(oh, w, (m) => m[field]));
+          f.set(`o_${field}_${w}`, nullableWindowMean(oh, w, (m) => m[field]));
 
       out.push({
         season: row.season,
@@ -314,12 +334,16 @@ export function exportFeatures(
       if (row.teamCode !== null && row.opponentTeamCode !== null) {
         const us = side(row.teamCode, row.fixture);
         us.goals += row.goalsScored;
-        us.xg += row.expectedGoals;
+        if (row.expectedGoals !== null) {
+          us.xg = (us.xg ?? 0) + row.expectedGoals;
+        }
         us.oppGoals += row.ownGoals;
         const them = side(row.opponentTeamCode, row.fixture);
         them.goals += row.ownGoals;
         them.oppGoals += row.goalsScored;
-        them.oppXg += row.expectedGoals;
+        if (row.expectedGoals !== null) {
+          them.oppXg = (them.oppXg ?? 0) + row.expectedGoals;
+        }
       }
     }
     for (const agg of teamAgg.values()) {

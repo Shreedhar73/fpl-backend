@@ -43,6 +43,37 @@ import { fitParams, FitReport } from './fit';
  * fitted on 2025-26 GW1–19 and the test report carries that fact rather than implying a clean split.
  */
 
+/**
+ * Every season the archive holds except the held-out one.
+ *
+ * Was `['2023-24', '2024-25']` while the archive went back only that far. Extending it to 2016-17
+ * (253,568 rows, all points-verified) takes the training corpus from 57,008 rows to 223,821.
+ *
+ * The older seasons are NOT the same shape and nothing here pretends they are: before 2022-23 the
+ * archive records no `starts` and no expected goals, so those rows carry NULL for both and every
+ * consumer excludes them from the terms they cannot speak to — the start curve is fitted on the
+ * rows that have a start label, the xG rates on the minutes that have an xG. What the older seasons
+ * DO carry is minutes, points, goals, assists, clean sheets, saves and bonus, which is most of the
+ * model, and a previous season for every row that had one.
+ */
+/**
+ * The two seasons the served model is fitted on — unchanged, and now MEASURED rather than inherited.
+ *
+ * The archive holds ten seasons and this list can take all nine trainable ones. Simulating 2025-26
+ * under `greedy-1ft`, with the fitted-availability block stripped so every arm is the regime the
+ * model actually serves:
+ *
+ *     two seasons, no decay                 1833
+ *     nine seasons, no decay                1895
+ *     nine seasons, one-season half-life    1959
+ *     what currently ships                  1926
+ *
+ * More seasons helps, and down-weighting the old ones helps again — which is what the league's own
+ * discontinuities predict (five substitutions from 2022-23; home advantage gone in the
+ * behind-closed-doors 2020-21). But 1959 against 1926 is under a point a round, inside the noise
+ * this project says a 37-round comparison cannot resolve, and the half-life behind it was chosen on
+ * the test season. So the corpus stays at two until that is done properly on validation.
+ */
 export const TRAIN_SEASONS = ['2023-24', '2024-25'];
 export const TEST_SEASON = '2025-26';
 /** rounds of 2024-25 reserved for choosing shape parameters */
@@ -84,10 +115,16 @@ export class CalibrationService {
     const scoringFor = await this.scoringResolver();
     const all = await this.repo.history([...TRAIN_SEASONS, TEST_SEASON]);
 
+    // Reads TRAIN_SEASONS. It used to name the two seasons inline, which meant the constant decided
+    // only which rows were LOADED and the fit silently kept training on the same two however the
+    // corpus grew — a widened archive would have produced a "ten-season fit" whose numbers came from
+    // two, and nothing in the output would have said so. The validation reservation stays attached
+    // to the season it belongs to.
+    const VALIDATE_SEASON = '2024-25';
     const train = all.filter(
       (r) =>
-        r.season === '2023-24' ||
-        (r.season === '2024-25' && r.round < VALIDATE_FROM_ROUND),
+        TRAIN_SEASONS.includes(r.season) &&
+        (r.season !== VALIDATE_SEASON || r.round < VALIDATE_FROM_ROUND),
     );
     // The ONLY rows of the test season the fit may touch, and only the defcon parameters read them.
     // They were once folded into `train`, where the frequency measurements iterated them as well — so
@@ -97,7 +134,7 @@ export class CalibrationService {
       (r) => r.season === TEST_SEASON && r.round <= DEFCON_FIT_ROUND,
     );
     const validate = all.filter(
-      (r) => r.season === '2024-25' && r.round >= VALIDATE_FROM_ROUND,
+      (r) => r.season === VALIDATE_SEASON && r.round >= VALIDATE_FROM_ROUND,
     );
     // Only the test season has the defensive-contribution category, so its shape parameter is
     // validated on the rounds between the fit window and the held-out remainder.

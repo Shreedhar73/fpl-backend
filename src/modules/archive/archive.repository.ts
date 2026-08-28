@@ -68,9 +68,16 @@ export class ArchiveRepository {
       clearancesBlocksInterceptions: r.clearancesBlocksInterceptions,
       tackles: r.tackles,
       recoveries: r.recoveries,
-      expectedGoals: new Prisma.Decimal(r.expectedGoals),
-      expectedAssists: new Prisma.Decimal(r.expectedAssists),
-      expectedGoalsConceded: new Prisma.Decimal(r.expectedGoalsConceded),
+      expectedGoals:
+        r.expectedGoals === null ? null : new Prisma.Decimal(r.expectedGoals),
+      expectedAssists:
+        r.expectedAssists === null
+          ? null
+          : new Prisma.Decimal(r.expectedAssists),
+      expectedGoalsConceded:
+        r.expectedGoalsConceded === null
+          ? null
+          : new Prisma.Decimal(r.expectedGoalsConceded),
       ictIndex: new Prisma.Decimal(r.ictIndex),
       influence: r.influence === null ? null : new Prisma.Decimal(r.influence),
       creativity:

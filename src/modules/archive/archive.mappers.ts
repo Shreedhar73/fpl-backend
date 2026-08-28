@@ -5,16 +5,33 @@ import { bool, int, intOrNull, num } from './csv';
  * Archive CSV rows → the shape `archive_player_gameweek` stores.
  *
  * Pure functions, no DB and no network, so the season-shape differences below are unit-testable
- * against recorded rows rather than discovered during a 87,000-row import.
+ * against recorded rows rather than discovered during a 250,000-row import.
  *
- * The seasons are not the same shape:
- *   2023-24, 2024-25 — no defensive contribution at all (the category did not exist)
- *   2025-26          — defensive_contribution plus its components (CBI, tackles, recoveries)
+ * The seasons are not the same shape, and the differences run deeper the further back you go:
+ *   2016-17 … 2018-19 — no `position` and no `team` column; both come from `players_raw.csv`
+ *   2016-17 … 2021-22 — no `starts`
+ *   2016-17 … 2021-22 — no expected goals, assists or goals conceded
+ *   2016-17 … 2018-19 — no `teams.csv` at all; the club code comes from `players_raw.team_code`
+ *   2023-24, 2024-25  — no defensive contribution (the category did not exist)
+ *   2025-26           — defensive_contribution plus its components (CBI, tackles, recoveries)
+ *
  * A missing column is NULL, never 0. "The category did not exist" and "the player did nothing" are
- * different facts, and a fit that reads them as the same one learns that defenders stopped tackling.
+ * different facts, and a fit that reads them as the same one learns that defenders stopped tackling
+ * — or, for the columns added below, that nobody started a match or generated a chance before 2022.
  */
 
-export const ARCHIVE_SEASONS = ['2023-24', '2024-25', '2025-26'] as const;
+export const ARCHIVE_SEASONS = [
+  '2016-17',
+  '2017-18',
+  '2018-19',
+  '2019-20',
+  '2020-21',
+  '2021-22',
+  '2022-23',
+  '2023-24',
+  '2024-25',
+  '2025-26',
+] as const;
 export type ArchiveSeason = (typeof ARCHIVE_SEASONS)[number];
 
 export interface ArchiveGameweekRow {
@@ -29,7 +46,8 @@ export interface ArchiveGameweekRow {
   wasHome: boolean;
   kickoffTime: Date | null;
   minutes: number;
-  starts: number;
+  /** null before 2022-23 — not recorded. NOT the same as "did not start". */
+  starts: number | null;
   totalPoints: number;
   goalsScored: number;
   assists: number;
@@ -47,9 +65,10 @@ export interface ArchiveGameweekRow {
   clearancesBlocksInterceptions: number | null;
   tackles: number | null;
   recoveries: number | null;
-  expectedGoals: number;
-  expectedAssists: number;
-  expectedGoalsConceded: number;
+  /** null before 2022-23 — the category did not exist in the archive */
+  expectedGoals: number | null;
+  expectedAssists: number | null;
+  expectedGoalsConceded: number | null;
   ictIndex: number;
   /** the ICT split (B-037): null when the CSV lacks the column, never invented as zero */
   influence: number | null;
@@ -69,6 +88,29 @@ export function elementToCode(
 }
 
 /** `players_raw.csv`: the per-season `element` id → that season's team id. */
+/**
+ * `players_raw.csv`: the per-season `element` id → position.
+ *
+ * The only source before 2020-21, whose `merged_gw.csv` carries no `position` column at all. Read
+ * from `element_type`, which every season has had.
+ */
+export function elementToPosition(
+  playersRaw: Record<string, string>[],
+): Map<number, PositionCode> {
+  const byType: Record<number, PositionCode> = {
+    1: 'GKP',
+    2: 'DEF',
+    3: 'MID',
+    4: 'FWD',
+  };
+  const map = new Map<number, PositionCode>();
+  for (const r of playersRaw) {
+    const pos = byType[int(r, 'element_type')];
+    if (pos) map.set(int(r, 'id'), pos);
+  }
+  return map;
+}
+
 export function elementToTeamId(
   playersRaw: Record<string, string>[],
 ): Map<number, number> {
@@ -123,13 +165,20 @@ export function mapArchiveRow(
   codeOf: Map<number, number>,
   teamCodeOfElement: (element: number) => number | null,
   teamCodeOfSeasonId: (seasonTeamId: number) => number | null,
+  positionOfElement?: Map<number, PositionCode>,
 ): ArchiveGameweekRow | null {
   const element = int(rec, 'element');
   const playerCode = codeOf.get(element);
   if (playerCode === undefined) return null;
 
+  // Before 2020-21 there is no `position` column, so the season's own `players_raw.element_type` is
+  // the only source. An unrecognised LABEL is still a rejection — `AM`/`MNG` are not players — but
+  // an ABSENT column is not a rejection, it is an older season.
   const label = (rec.position ?? '').trim();
-  const position = POSITION_BY_ARCHIVE_LABEL[label];
+  if (label && EXCLUDED_POSITION_LABELS.has(label)) return null;
+  const position = label
+    ? POSITION_BY_ARCHIVE_LABEL[label]
+    : positionOfElement?.get(element);
   if (!position) return null;
 
   const kickoff = rec.kickoff_time?.trim();
@@ -146,7 +195,9 @@ export function mapArchiveRow(
     wasHome: bool(rec, 'was_home'),
     kickoffTime: kickoff ? new Date(kickoff) : null,
     minutes: int(rec, 'minutes'),
-    starts: intOrNull(rec, 'starts') ?? 0,
+    // NOT `?? 0`. Before 2022-23 the archive has no `starts` column, and defaulting it to zero
+    // tells the minutes model that every player in six seasons came off the bench.
+    starts: intOrNull(rec, 'starts'),
     totalPoints: int(rec, 'total_points'),
     goalsScored: int(rec, 'goals_scored'),
     assists: int(rec, 'assists'),
@@ -170,9 +221,11 @@ export function mapArchiveRow(
     tackles: intOrNull(rec, 'tackles'),
     recoveries: intOrNull(rec, 'recoveries'),
 
-    expectedGoals: num(rec, 'expected_goals') ?? 0,
-    expectedAssists: num(rec, 'expected_assists') ?? 0,
-    expectedGoalsConceded: num(rec, 'expected_goals_conceded') ?? 0,
+    // NOT `?? 0`, for the same reason: absent before 2022-23, and a zero here is a claim that no
+    // chance was created in the league that season.
+    expectedGoals: num(rec, 'expected_goals'),
+    expectedAssists: num(rec, 'expected_assists'),
+    expectedGoalsConceded: num(rec, 'expected_goals_conceded'),
     ictIndex: num(rec, 'ict_index') ?? 0,
     influence: num(rec, 'influence'),
     creativity: num(rec, 'creativity'),

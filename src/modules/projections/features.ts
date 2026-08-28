@@ -34,7 +34,8 @@ export interface HistoryRow {
   opponentTeamCode: number | null;
   wasHome: boolean;
   minutes: number;
-  starts: number;
+  /** null before 2022-23 — the archive did not record it, which is not "came off the bench" */
+  starts: number | null;
   totalPoints: number;
   goalsScored: number;
   ownGoals: number;
@@ -45,10 +46,11 @@ export interface HistoryRow {
   bonus: number;
   bps: number;
   defensiveContribution: number | null;
-  expectedGoals: number;
-  expectedAssists: number;
+  /** null before 2022-23 — the category did not exist in the archive */
+  expectedGoals: number | null;
+  expectedAssists: number | null;
   /** the player's xG conceded while on the pitch — the defensive twin of `expectedGoals` */
-  expectedGoalsConceded: number;
+  expectedGoalsConceded: number | null;
   /** FPL's ICT index for the match — carried for the v4 feature export (B-034), unread by v3 */
   ictIndex: number;
   /**
@@ -108,17 +110,68 @@ export interface PlayerFeatures {
   form: number | null;
   /** previous season's points per 90, the other baseline */
   priorSeasonPointsPer90: number | null;
+  /**
+   * Previous season's VOLUME, which `priorSeasonPointsPer90` deliberately divides away.
+   *
+   * At the first deadline of a season every rolling feature is either empty or describes the run-in
+   * of the season before — a title already won, a striker rested, a dead rubber. A rate cannot tell
+   * "finished the season being rested" from "was never picked"; minutes and starts can. Measured in
+   * a parallel backtest, a model without these terms ranked the previous season's highest scorer
+   * 224th of 616 for an opening gameweek, because his last two rows were blanks.
+   *
+   * Null when the player has no previous season in the walked rows — which is NOT the same as zero,
+   * and every consumer has to treat it that way.
+   */
+  priorSeasonMinutes: number | null;
+  priorSeasonStartRate: number | null;
+  priorSeasonAppearances: number | null;
+  /**
+   * Seasons between the previous one and this, so a year out of the league is visible.
+   *
+   * 1 for consecutive seasons. Without it, a player last seen two seasons ago looks exactly like one
+   * who played last year.
+   */
+  priorSeasonGap: number | null;
+}
+
+/**
+ * What is carried across a season boundary.
+ *
+ * Points per ninety alone cannot separate the two players the opening gameweek of a season most
+ * needs separated: one who played three thousand minutes and was rested for a dead rubber, and one
+ * who barely featured. Their rolling five-appearance form is identical — both blank — and the rate
+ * is undefined or noisy for the second. Minutes, starts and appearances are what tell them apart.
+ */
+interface LastSeason {
+  season: string;
+  points: number;
+  minutes: number;
+  starts: number;
+  matches: number;
+  appearances: number;
 }
 
 interface Accumulator {
   minutes: number;
   starts: number;
+  /**
+   * Matches in which `starts` was RECORDED — the denominator the start rate needs.
+   *
+   * Before 2022-23 the archive has no `starts` column. Dividing starts by `matches` across a career
+   * that straddles that boundary computes a rate over seasons of missing numerators and reports a
+   * decade-long starter as a permanent substitute. Same shape as `defconMinutes`.
+   */
+  startMatches: number;
+  /** appearances (minutes > 0) among those same rows — the numerator side of the sub rate */
+  startAppearances: number;
   /** every row, including unused-sub zeros — NOT an appearance count. See `appearances`. */
   matches: number;
   /** rows with minutes > 0 — the appearance count B-010's floor is defined on */
   appearances: number;
   xg: number;
   xa: number;
+  /** minutes played in rows where expected goals were RECORDED — the per-90 denominator for xg/xa */
+  xgMinutes: number;
   defcon: number;
   defconMinutes: number;
   saves: number;
@@ -131,10 +184,13 @@ interface Accumulator {
 const empty = (): Accumulator => ({
   minutes: 0,
   starts: 0,
+  startMatches: 0,
+  startAppearances: 0,
   matches: 0,
   appearances: 0,
   xg: 0,
   xa: 0,
+  xgMinutes: 0,
   defcon: 0,
   defconMinutes: 0,
   saves: 0,
@@ -221,7 +277,7 @@ export function* walkRounds(
   /** playerCode → career accumulator, carried across seasons */
   const career = new Map<number, Accumulator>();
   /** playerCode → the accumulator for the season that has just ended */
-  const lastSeason = new Map<number, { points: number; minutes: number }>();
+  const lastSeason = new Map<number, LastSeason>();
   /** current-season strength inputs, reset when the season turns over */
   let strengthRows: StrengthInputRow[] = [];
   let league = buildLeague([]);
@@ -241,7 +297,14 @@ export function* walkRounds(
       if (currentSeason !== null) {
         lastSeason.clear();
         for (const [code, acc] of seasonAcc) {
-          lastSeason.set(code, { points: acc.points, minutes: acc.minutes });
+          lastSeason.set(code, {
+            season: currentSeason,
+            points: acc.points,
+            minutes: acc.minutes,
+            starts: acc.starts,
+            matches: acc.matches,
+            appearances: acc.appearances,
+          });
         }
       }
       seasonAcc = new Map();
@@ -316,7 +379,11 @@ export function* walkRounds(
         teamCode: row.teamCode,
         opponentTeamCode: row.opponentTeamCode,
         fixtureKey: `${row.season}|${row.round}|${row.fixture}`,
-        expectedGoals: row.expectedGoals,
+        // Seasons before 2022-23 have no expected goals. Team strength blends xG with goals by a
+        // fitted weight, so leaving xG at zero for those seasons would halve every club's rating;
+        // the goals actually scored stand in instead. Both are on the same scale, and the
+        // substitution is explicit rather than a zero pretending to be a measurement.
+        expectedGoals: row.expectedGoals ?? row.goalsScored,
         goalsScored: row.goalsScored,
         ownGoals: row.ownGoals,
         round: row.round,
@@ -337,11 +404,20 @@ function fold(acc: Map<number, Accumulator>, row: HistoryRow): void {
   let a = acc.get(row.playerCode);
   if (!a) acc.set(row.playerCode, (a = empty()));
   a.minutes += row.minutes;
-  a.starts += row.starts;
+  // Absent is not zero. A row from a season with no `starts` column contributes to neither the
+  // numerator nor the denominator, so the rate describes the seasons that actually recorded it.
+  if (row.starts !== null) {
+    a.starts += row.starts;
+    a.startMatches += 1;
+    if (row.minutes > 0) a.startAppearances += 1;
+  }
   a.matches += 1;
   if (row.minutes > 0) a.appearances += 1;
-  a.xg += row.expectedGoals;
-  a.xa += row.expectedAssists;
+  if (row.expectedGoals !== null) {
+    a.xg += row.expectedGoals;
+    a.xa += row.expectedAssists ?? 0;
+    a.xgMinutes += row.minutes;
+  }
   a.saves += row.saves;
   a.bps += row.bps;
   a.points += row.totalPoints;
@@ -357,7 +433,7 @@ function featuresFor(
   row: HistoryRow,
   career: Map<number, Accumulator>,
   seasonAcc: Map<number, Accumulator>,
-  lastSeason: Map<number, { points: number; minutes: number }>,
+  lastSeason: Map<number, LastSeason>,
   round: number,
 ): PlayerFeatures {
   const c = career.get(row.playerCode) ?? empty();
@@ -373,9 +449,13 @@ function featuresFor(
   const per90 = (total: number, minutes: number) =>
     minutes > 0 ? (total / minutes) * 90 : 0;
 
+  // xG and xA are divided by the minutes in which they were RECORDED, and shrunk on that same
+  // sample. Using `mins` would spread six seasons of missing chance data across the denominator and
+  // report every pre-2022 career as chanceless.
+  const xgWeight = c.xgMinutes / (c.xgMinutes + RATE_SHRINK_MINUTES);
   const rates: PlayerRates = {
-    xg90: blend(per90(c.xg, mins), league.xg90, weight),
-    xa90: blend(per90(c.xa, mins), league.xa90, weight),
+    xg90: blend(per90(c.xg, c.xgMinutes), league.xg90, xgWeight),
+    xa90: blend(per90(c.xa, c.xgMinutes), league.xa90, xgWeight),
     defcon90: blend(
       per90(c.defcon, c.defconMinutes),
       league.defcon90,
@@ -397,11 +477,14 @@ function featuresFor(
     rates,
     // A player with no history at all is assumed a squad player rather than a starter — the
     // alternative, assuming they start, is what makes a model recommend every new signing.
+    // Denominated on matches where `starts` was recorded, so a career that straddles 2022-23 is
+    // rated on the half of it the archive actually describes rather than diluted by the half it
+    // does not.
     laggedStartRate:
-      s.matches > 0
-        ? s.starts / s.matches
-        : c.matches > 0
-          ? c.starts / c.matches
+      s.startMatches > 0
+        ? s.starts / s.startMatches
+        : c.startMatches > 0
+          ? c.starts / c.startMatches
           : 0.3,
     laggedSubRate: laggedSubRate(s, c),
     minutesSample: mins,
@@ -412,7 +495,31 @@ function featuresFor(
       prior && prior.minutes >= 450
         ? (prior.points / prior.minutes) * 90
         : null,
+    // No minutes floor on these three. The floor on the rate above exists because a rate over 200
+    // minutes is noise; a COUNT of 200 minutes is not noise, it is the fact that he barely played,
+    // and gating it away would discard exactly the signal these terms are here for.
+    priorSeasonMinutes: prior ? prior.minutes : null,
+    priorSeasonStartRate:
+      prior && prior.matches > 0 ? prior.starts / prior.matches : null,
+    priorSeasonAppearances: prior ? prior.appearances : null,
+    priorSeasonGap: prior ? seasonGap(prior.season, row.season) : null,
   };
+}
+
+/**
+ * How many seasons apart two archive season labels are ("2023-24" and "2025-26" are two).
+ *
+ * Returns null rather than guessing when a label is not the archive's shape — a wrong gap is worse
+ * than an absent one, because absent is a value the model already knows how to handle.
+ */
+function seasonGap(from: string, to: string): number | null {
+  const start = (label: string): number | null => {
+    const m = /^(\d{4})-\d{2}$/.exec(label);
+    return m ? Number(m[1]) : null;
+  };
+  const a = start(from);
+  const b = start(to);
+  return a === null || b === null ? null : b - a;
 }
 
 function blend(own: number, league: number, weight: number): number {
@@ -440,10 +547,14 @@ const SUB_RATE_SHRINK = 8;
  * fallback while the season is young, and the prior is the fallback behind that.
  */
 function laggedSubRate(season: Accumulator, career: Accumulator): number {
+  // Denominated on the rows that RECORDED a start, not on every row. `matches - starts` over a
+  // career that straddles 2022-23 counts seven seasons of unrecorded starts as non-starts, and
+  // `appearances - starts` counts every one of those appearances as a substitute appearance — so a
+  // decade-long ever-present comes out as a career benchwarmer.
   const pick =
-    season.matches - season.starts >= SUB_RATE_SHRINK ? season : career;
-  const nonStarts = Math.max(0, pick.matches - pick.starts);
-  const subAppearances = Math.max(0, pick.appearances - pick.starts);
+    season.startMatches - season.starts >= SUB_RATE_SHRINK ? season : career;
+  const nonStarts = Math.max(0, pick.startMatches - pick.starts);
+  const subAppearances = Math.max(0, pick.startAppearances - pick.starts);
   return (
     (subAppearances + SUB_RATE_PRIOR * SUB_RATE_SHRINK) /
     (nonStarts + SUB_RATE_SHRINK)
