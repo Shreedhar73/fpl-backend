@@ -215,7 +215,10 @@ export function arrangeSquad(
   const benchGk = bench.filter((c) => c.position === 'GKP');
   const benchOut = bench
     .filter((c) => c.position !== 'GKP')
-    .sort((a, b) => b.pPlay * b.ep - a.pPlay * a.ep);
+    // Tie-broken on the LP key (B-039), which is `p_<playerId>` and unique. Bench order is
+    // auto-substitution priority, and two equally-rated bench players resolved by candidate array
+    // order means the served recommendation can differ between two identical solves.
+    .sort((a, b) => b.pPlay * b.ep - a.pPlay * a.ep || a.key.localeCompare(b.key));
   const benchOrdered = [...benchGk, ...benchOut];
 
   const squad: SquadPlayer[] = inSquad.map((c) => {

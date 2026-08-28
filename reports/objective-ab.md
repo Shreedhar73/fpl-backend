@@ -1,5 +1,15 @@
 # The squad objective, A/B'd against the one it replaced (B-031)
 
+> **Produced before B-039 (2026-08-28), and its season totals are therefore not reproducible.**
+> The rows below were walked while `PredictionRow[]` arrived in whatever order Postgres returned,
+> which the XI, the armband, the bench order and the weekly transfer all broke their ties on. Two
+> runs of `pnpm decision-quality` over an unchanged database put one arm **165 points** apart on the
+> same code and the same data. Paired per-round figures in this file moved far less and are the ones
+> to read; **any season total here is a reference, and a difference between two of them is not a
+> result.** Regenerating an arm means re-running it against current code — it has not been done,
+> because these arms are the record of what was measured at the time, and rewriting them would erase
+> that rather than correct it.
+
 Season **2025-26**, held out of the fit. Every arm is the **same model, the same predictions, the same policy and the same lineup rule** — only the objective row of the squad program differs. The opening fifteen is chosen at round 1 and the season is walked from there.
 
 ## Why this harness exists

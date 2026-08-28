@@ -92,6 +92,11 @@ export class OptimizerRepository {
   async loadPlayers(): Promise<OptimizePlayer[]> {
     const rows = await this.prisma.player.findMany({
       where: { removed: false },
+      // A total order (B-039). This list becomes the LP's variable order and the bench sort's input,
+      // and without an `ORDER BY` Postgres is free to return it differently between two identical
+      // solves — so the product's own recommendation could differ run to run wherever two candidates
+      // tie. `id` is the primary key, so this is total by construction rather than by luck.
+      orderBy: { id: 'asc' },
       select: {
         id: true,
         webName: true,

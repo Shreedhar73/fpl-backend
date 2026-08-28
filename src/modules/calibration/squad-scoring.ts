@@ -119,11 +119,16 @@ export function scoreLineup(lineup: Lineup, rules: Rules): SquadScore {
  * with no notion of appearance probability — handing them ours would be lending a baseline a piece of
  * the model and then reporting that we beat it.
  */
-export function benchOrder<T extends { predictedPoints: number; pPlay: number | null }>(
-  bench: T[],
-): T[] {
+export function benchOrder<
+  T extends { predictedPoints: number; pPlay: number | null },
+>(bench: T[], identity: (x: T) => number): T[] {
   return [...bench].sort(
     (a, b) =>
-      b.predictedPoints * (b.pPlay ?? 1) - a.predictedPoints * (a.pPlay ?? 1),
+      b.predictedPoints * (b.pPlay ?? 1) - a.predictedPoints * (a.pPlay ?? 1) ||
+      // Tie-broken on the player (B-039). Bench order is not cosmetic — it is auto-substitution
+      // priority, so two equally-rated bench players in the other order is a different number of
+      // points the week one of the starters blanks. `identity` is required rather than optional
+      // because a caller that forgets it gets input order back, which is the bug this closes.
+      identity(a) - identity(b),
   );
 }

@@ -110,10 +110,16 @@ export function chooseLineup(
     pPlay: s.row ? s.row.pPlay : (s.carried?.pPlay ?? 0),
   }));
 
+  // `playerCode` breaks the tie (B-039). Without it two players on the same projection resolve to
+  // input order, which was not deterministic — and which of them starts changes the week's points.
   const byPos = (p: PositionCode) =>
     scored
       .filter((s) => s.member.position === p)
-      .sort((a, b) => b.predictedPoints - a.predictedPoints);
+      .sort(
+        (a, b) =>
+          b.predictedPoints - a.predictedPoints ||
+          a.member.playerCode - b.member.playerCode,
+      );
 
   const gk = byPos('GKP');
   const def = byPos('DEF');
@@ -168,10 +174,15 @@ export function chooseLineup(
   const benchGk = benched.filter((s) => s.member.position === 'GKP');
   const benchOutfield = benchOrder(
     benched.filter((s) => s.member.position !== 'GKP'),
+    (s) => s.member.playerCode,
   );
 
+  // Tie-broken on `playerCode` (B-039): the armband is doubled, so a tie resolved by input order
+  // is the single largest thing a non-deterministic row order can move in one week.
   const captainPick = [...starters].sort(
-    (a, b) => b.predictedPoints - a.predictedPoints,
+    (a, b) =>
+      b.predictedPoints - a.predictedPoints ||
+      a.member.playerCode - b.member.playerCode,
   );
 
   return {
@@ -193,7 +204,9 @@ export function chooseLineup(
  */
 export function ceilingFor(members: SquadMember[], rules: Rules): number {
   const byPos = (p: PositionCode) =>
-    members.filter((m) => m.position === p).sort((a, b) => b.actual - a.actual);
+    members
+      .filter((m) => m.position === p)
+      .sort((a, b) => b.actual - a.actual || a.playerCode - b.playerCode);
   const gk = byPos('GKP');
   const def = byPos('DEF');
   const mid = byPos('MID');

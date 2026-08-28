@@ -165,10 +165,10 @@ describe('bench order', () => {
     // the chance of appearing at all: 8 x 0.30 = 2.40 against 3 x 0.98 = 2.94. The naive ordering
     // puts the 8 first; this one does not.
     const bench = [
-      { predictedPoints: 8, pPlay: 0.3, name: 'rotation risk' },
-      { predictedPoints: 3, pPlay: 0.98, name: 'nailed' },
+      { predictedPoints: 8, pPlay: 0.3, name: 'rotation risk', code: 1 },
+      { predictedPoints: 3, pPlay: 0.98, name: 'nailed', code: 2 },
     ];
-    expect(benchOrder(bench)[0].name).toBe('nailed');
+    expect(benchOrder(bench, (x) => x.code)[0].name).toBe('nailed');
     // and the ordering it disagrees with, stated so the test shows a flip rather than an assertion
     expect([...bench].sort((a, b) => b.predictedPoints - a.predictedPoints)[0].name).toBe(
       'rotation risk',
@@ -178,10 +178,13 @@ describe('bench order', () => {
   it('falls back to predicted points for a baseline that has no pPlay', () => {
     // `form` and last season's points-per-90 are scalars with no appearance probability. Handing
     // them the model's would be lending a baseline a piece of the model and then beating it.
-    const ordered = benchOrder([
-      { predictedPoints: 3, pPlay: null, name: 'lower' },
-      { predictedPoints: 8, pPlay: null, name: 'higher' },
-    ]);
+    const ordered = benchOrder(
+      [
+        { predictedPoints: 3, pPlay: null, name: 'lower', code: 1 },
+        { predictedPoints: 8, pPlay: null, name: 'higher', code: 2 },
+      ],
+      (x) => x.code,
+    );
     expect(ordered[0].name).toBe('higher');
   });
 });

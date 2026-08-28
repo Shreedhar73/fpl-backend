@@ -214,7 +214,19 @@ export const GREEDY_ONE_FT: SimPolicy = {
         if (already >= rules.clubLimit()) continue;
 
         const gain = (row.predicted[predictor] ?? 0) - outScore;
-        if (gain > 0 && (!best || gain > best.gain)) {
+        if (gain <= 0) continue;
+        // Ties broken on `playerCode`, low first (B-039). `market` is a Map, so it iterates in
+        // insertion order, and `gain > best.gain` alone means the first equal-gain move seen wins —
+        // which made this week's transfer a function of the order Postgres returned the rows in.
+        // A different player transferred in week 3 is a different squad for the rest of the season:
+        // measured 2026-08-28, two identical runs put the `greedy-1ft` `form` arm 165 points apart.
+        const better =
+          !best ||
+          gain > best.gain ||
+          (gain === best.gain &&
+            (code < best.in ||
+              (code === best.in && owned.playerCode < best.out)));
+        if (better) {
           best = { out: owned.playerCode, in: code, gain };
         }
       }
@@ -260,7 +272,12 @@ export async function openingSquad(
    */
   objective: SquadObjective = 'xi-bench-captain',
 ): Promise<PredictionRow[]> {
-  const candidates: Candidate[] = rows
+  // Sorted before the LP is written (B-039). Measured 2026-08-28: two runs produced different
+  // candidate orders and therefore different LP strings, and HiGHS returned the SAME fifteen from
+  // both — so this is inert on the data we have, and kept anyway. It is inert by luck: nothing about
+  // the solver promises one optimum among several is chosen by anything but variable order.
+  const candidates: Candidate[] = [...rows]
+    .sort((a, b) => a.playerCode - b.playerCode)
     .filter((r) => r.teamCode !== null)
     .map((r) => ({
       key: `p_${r.playerCode}`,
@@ -445,8 +462,12 @@ export function simulateSeason(
         const over = bbGain - chipThreshold(options.chips.benchBoost, round);
         if (over > 0) candidates.push({ chip: 'BB', over });
       }
-      // one chip a week, and the one clearing its bar by the widest margin
-      const pick = candidates.sort((a, b) => b.over - a.over)[0];
+      // one chip a week, and the one clearing its bar by the widest margin. An exact tie goes to
+      // BB — `'BB' < 'TC'` — named here rather than left to array order (B-039). Which of the two
+      // wins a tie is arbitrary; that it is always the same one is not.
+      const pick = candidates.sort(
+        (a, b) => b.over - a.over || a.chip.localeCompare(b.chip),
+      )[0];
       if (pick) {
         chipsLeft.delete(pick.chip);
         chipPlayed = pick.chip;
