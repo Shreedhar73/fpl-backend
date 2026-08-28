@@ -58,6 +58,20 @@ import {
  */
 export const SIM_OPTIONS = { freeTransferCap: 5, hitCost: 4 };
 
+
+/** The planner arm that may not take a hit. Named here so the report and the pairing agree. */
+export const PLANNER_NO_HITS_LABEL = 'planner (no hits)';
+
+/**
+ * The bar a chip must clear on the projection at round 1, decaying to a quarter of it by round 38.
+ *
+ * Calibrated on 2020-21 and 2021-22 — seasons this simulator never scores. Triple captain and bench
+ * boost leave the fifteen untouched, so their worth in any gameweek can be read off a season that
+ * did not play them, and a threshold scored over that recorded sequence never sees the test season.
+ * Choosing them on 2025-26 would be hindsight wearing a policy's clothes.
+ */
+export const CHIP_BARS = { tripleCaptain: 11, benchBoost: 12 };
+
 /**
  * The seed behind every random fixed squad in this report.
  *
@@ -193,6 +207,29 @@ export class DecisionService {
           simulateSeason(byRound, opening, p, rules, policy, SIM_OPTIONS),
         );
       }
+      // The same policy again, allowed two chips. A separate arm rather than a change to the one
+      // above: every number this report has ever published is unchipped, and an arm that silently
+      // gained a chip would move all of them for a reason no reader could see.
+      if (policy === GREEDY_ONE_FT) {
+        const chippedOpening = await openingSquad(
+          [...squadPool.values()],
+          'model',
+          rules,
+          null,
+          benchWeight,
+        );
+        seasons.push(
+          simulateSeason(
+            byRound,
+            chippedOpening,
+            'model',
+            rules,
+            { ...policy, label: `${policy.label} + chips` },
+            { ...SIM_OPTIONS, chips: CHIP_BARS },
+          ),
+        );
+      }
+
       // The template squad, run under the same policy, as the crowd proxy.
       seasons.push({
         ...simulateSeason(
@@ -237,6 +274,19 @@ export class DecisionService {
           objective: 'all-fifteen-equal' as const,
           concentrationLambda: null,
         },
+        {
+          // The same planner, with a hit priced out of reach.
+          //
+          // The planner arm above spends 48 hits across a season — 192 points — to finish 12 ahead
+          // of a greedy single swap, and behind holding the opening squad. A hit is a bet that the
+          // forecast is right about the gap between two named players, and at this ordering it is
+          // not. Rather than argue about it, this arm bans them by pricing one at 1000 and lets the
+          // season say which is better.
+          label: PLANNER_NO_HITS_LABEL,
+          objective: 'xi-bench-captain' as const,
+          concentrationLambda: DEFENCE_CONCENTRATION_LAMBDA,
+          hitCost: 1000,
+        },
       ]) {
         seasons.push(
           simulateSeason(
@@ -245,7 +295,7 @@ export class DecisionService {
             'model',
             rules,
             plannerPolicy((lp) => highs.solve(lp), {
-              hitCost: SIM_OPTIONS.hitCost,
+              hitCost: arm.hitCost ?? SIM_OPTIONS.hitCost,
               maxTransfers: MAX_TRANSFERS,
               // As served, both of them. An arm is only worth anything if it is the planner a user
               // is actually given: a harness that solves a tidier objective than the product

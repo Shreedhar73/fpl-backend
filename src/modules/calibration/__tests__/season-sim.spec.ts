@@ -8,6 +8,7 @@ import {
   sellValue,
   simulateSeason,
   SimOptions,
+  chipThreshold,
 } from '../season-sim';
 
 /**
@@ -385,6 +386,68 @@ describe('the guard that says this is a season at all', () => {
       expect(r.squadValue + r.bank).toBeLessThanOrEqual(RULES.budget());
       // 11 fielded on 2 with a captain doubled is 24; nothing here should produce less.
       expect(r.points).toBeGreaterThan(0);
+    }
+  });
+});
+
+/**
+ * Chips (triple captain and bench boost).
+ *
+ * Both are decided on the PROJECTION and scored on the outcome, which is the only ordering that
+ * makes them a policy rather than hindsight. Every test below is written so that getting the rule
+ * wrong makes the season BIGGER — a chip played twice, a bench counted while its substitutions
+ * also stand, a captain tripled who never appeared.
+ */
+describe('chips', () => {
+  const CHIPS: SimOptions = {
+    ...OPTIONS,
+    // low bars so the chips fire in a three-round fixture; the calibrated values are much higher
+    chips: { tripleCaptain: 1, benchBoost: 1 },
+  };
+
+  it('decays the bar toward the deadline, because an unplayed chip is worth nothing', () => {
+    expect(chipThreshold(12, 1)).toBeCloseTo(12, 9);
+    expect(chipThreshold(12, 38)).toBeCloseTo(3, 9);
+    expect(chipThreshold(12, 19)).toBeLessThan(12);
+    expect(chipThreshold(12, 19)).toBeGreaterThan(3);
+  });
+
+  it('leaves the season untouched when no chips are configured', () => {
+    const rounds = asRounds(squadOf(1), squadOf(2), squadOf(3));
+    const plain = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, OPTIONS);
+    expect(plain.rounds.every((r) => !r.chip)).toBe(true);
+  });
+
+  it('spends each chip at most once in a season', () => {
+    const rounds = asRounds(squadOf(1), squadOf(2), squadOf(3));
+    const out = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, CHIPS);
+    const played = out.rounds.map((r) => r.chip).filter(Boolean);
+    expect(new Set(played).size).toBe(played.length);
+  });
+
+  it('plays at most one chip in a round', () => {
+    const rounds = asRounds(squadOf(1), squadOf(2), squadOf(3));
+    const out = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, CHIPS);
+    // one entry per round, never two — the type enforces it, the count states it
+    expect(out.rounds.filter((r) => r.chip).length).toBeLessThanOrEqual(2);
+  });
+
+  it('scores more with chips than without, on the same squad and the same rounds', () => {
+    const rounds = asRounds(squadOf(1), squadOf(2), squadOf(3));
+    const plain = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, OPTIONS);
+    const chipped = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, CHIPS);
+    expect(chipped.rounds.reduce((t, r) => t + r.points, 0)).toBeGreaterThan(
+      plain.rounds.reduce((t, r) => t + r.points, 0),
+    );
+  });
+
+  it('tripling a captain who never appeared adds nothing', () => {
+    // every player blanks: the armband pays nothing, so the chip must pay nothing either
+    const blank = (r: number) => squadOf(r, () => ({ actual: 0, minutes: 0 }));
+    const rounds = asRounds(blank(1), blank(2), blank(3));
+    const out = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, CHIPS);
+    for (const r of out.rounds) {
+      if (r.chip === 'TC') expect(r.points).toBe(0);
     }
   });
 });

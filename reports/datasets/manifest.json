@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-27T11:55:48.535Z",
+  "generated": "2026-08-27T19:40:52.341Z",
   "seasons": {
     "2023-24": 28850,
     "2024-25": 27010,
@@ -12,7 +12,7 @@
     "MID": 37793
   },
   "totalRows": 85342,
-  "columns": 141,
+  "columns": 145,
   "featureNames": [
     "v3ep",
     "value",
@@ -21,6 +21,10 @@
     "laggedSubRate",
     "form",
     "priorSeasonPointsPer90",
+    "priorSeasonMinutes",
+    "priorSeasonStartRate",
+    "priorSeasonAppearances",
+    "priorSeasonGap",
     "appearancesSample",
     "matchesSample",
     "lambdaFor",

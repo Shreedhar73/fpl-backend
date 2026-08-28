@@ -143,7 +143,8 @@ export interface PredictionRow {
  * support.
  */
 export interface RealisedOutcomes {
-  started: number;
+  /** null when the season did not record `starts` — the same convention `defcon` already uses */
+  started: number | null;
   played: number;
   sixtyPlus: number;
   cleanSheet: number;
@@ -160,6 +161,15 @@ export interface RealisedOutcomes {
 }
 
 export interface RunOptions {
+  /**
+   * An outside forecast, keyed `season|round|playerCode`.
+   *
+   * Two systems cannot be compared by their own season totals — each brings its own simulator, its
+   * own opening fifteen and its own idea of a transfer, so the difference measures all three. This
+   * lets a foreign forecast be scored by THIS simulator under the SAME policies, which leaves the
+   * model as the only thing that differs. Absent by default; nothing changes when it is not given.
+   */
+  lab?: Map<string, number>;
   /** rows to predict; anything outside is history the model may read but is never scored on */
   evaluate: (row: HistoryRow) => boolean;
   /**
@@ -399,7 +409,9 @@ export function observationsFor(
 export function realisedOutcomes(row: HistoryRow): RealisedOutcomes {
   const threshold = DEFCON_THRESHOLD[row.position];
   return {
-    started: row.starts > 0 ? 1 : 0,
+    // null, not 0, when the season did not record it: a reliability curve scored against an
+    // invented label is confidently about nothing, which is what this function's own header warns of
+    started: row.starts === null ? null : row.starts > 0 ? 1 : 0,
     played: row.minutes > 0 ? 1 : 0,
     sixtyPlus: row.minutes >= 60 ? 1 : 0,
     cleanSheet: row.cleanSheets > 0 ? 1 : 0,

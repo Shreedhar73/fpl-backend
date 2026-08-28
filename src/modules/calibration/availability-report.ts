@@ -105,7 +105,7 @@ export function availabilityReport(
   const brierBand = (
     band: Band,
     p: (r: PredictionRow) => number,
-    y: (r: PredictionRow) => number,
+    y: (r: PredictionRow) => number | null,
   ): BandStats => {
     const diffs: number[] = [];
     let incSum = 0;
@@ -113,6 +113,10 @@ export function availabilityReport(
     for (const { flags, inc, cand } of pairs) {
       if (!band.member(flags)) continue;
       const target = y(inc);
+      // A row whose season never recorded the outcome has no label to be scored against, and is
+      // dropped from the pair rather than scored against an invented one. `n` in the report is
+      // therefore the labelled count, which is what the standard error should be built on.
+      if (target === null) continue;
       const bi = (p(inc) - target) ** 2;
       const bc = (p(cand) - target) ** 2;
       incSum += bi;

@@ -65,6 +65,8 @@ export interface SquadState {
 }
 
 export interface SimRound {
+  /** the chip played this round, or null — see `SimOptions.chips` */
+  chip?: 'TC' | 'BB' | null;
   round: number;
   points: number;
   /** points lost to hits this round, as a positive number */
@@ -299,6 +301,27 @@ export async function openingSquad(
 export interface SimOptions {
   freeTransferCap: number;
   hitCost: number;
+  /**
+   * Triple captain and bench boost, or absent for the unchipped season this harness has always run.
+   *
+   * Only these two. Neither touches the squad — they change what the same fifteen score in one week
+   * — so they can be decided at scoring time and cannot confound the transfer policy they run
+   * beside. A wildcard or free hit changes which players are owned, which is a different question
+   * and belongs with the planner.
+   *
+   * The numbers are the bar a chip must clear ON THE PROJECTION, at round 1, decaying to a quarter
+   * of that by the last round: an unplayed chip is worth nothing, so late in the season almost
+   * anything beats letting it expire. They were calibrated on 2020-21 and 2021-22 — seasons this
+   * simulator does not score — because a threshold chosen on the season being reported is not a
+   * policy, it is hindsight with extra steps.
+   */
+  chips?: { tripleCaptain: number; benchBoost: number };
+}
+
+/** What a chip must be worth at `round` to be spent, given the bar it starts the season at. */
+export function chipThreshold(base: number, round: number, lastRound = 38): number {
+  const urgency = Math.min(1, Math.max(0, (round - 1) / (lastRound - 1)));
+  return base * (1 - 0.75 * urgency);
 }
 
 /**
@@ -341,6 +364,8 @@ export function simulateSeason(
   };
 
   const rounds: SimRound[] = [];
+  /** one of each per season; a chip is spent the round it is played and never returns */
+  const chipsLeft = new Set<'TC' | 'BB'>(options.chips ? ['TC', 'BB'] : []);
   /** the predictor's most recent word on each player, for the dropped-versus-blank rule */
   const lastSeen = new Map<number, { points: number; pPlay: number }>();
 
@@ -399,9 +424,54 @@ export function simulateSeason(
     const scored = scoreLineup(lineup, rules);
     const captain = scored.fielded.find((m) => m.playerCode === scored.doubled);
 
+    // ---- chips, decided on the projection and scored on the outcome ---------------------------
+    // Both are priced against what the model SAID before the round, never against what happened;
+    // pricing them on the outcome would report the best week in hindsight and call it a policy.
+    let chipPlayed: 'TC' | 'BB' | null = null;
+    let chipPoints = 0;
+    if (options.chips) {
+      const projected = (code: number): number =>
+        market.get(code)?.predicted[predictor] ??
+        lastSeen.get(code)?.points ??
+        0;
+      const tcGain = scored.doubled === null ? 0 : projected(scored.doubled);
+      const bbGain = lineup.bench.reduce((t, m) => t + projected(m.playerCode), 0);
+      const candidates: { chip: 'TC' | 'BB'; over: number }[] = [];
+      if (chipsLeft.has('TC')) {
+        const over = tcGain - chipThreshold(options.chips.tripleCaptain, round);
+        if (over > 0) candidates.push({ chip: 'TC', over });
+      }
+      if (chipsLeft.has('BB')) {
+        const over = bbGain - chipThreshold(options.chips.benchBoost, round);
+        if (over > 0) candidates.push({ chip: 'BB', over });
+      }
+      // one chip a week, and the one clearing its bar by the widest margin
+      const pick = candidates.sort((a, b) => b.over - a.over)[0];
+      if (pick) {
+        chipsLeft.delete(pick.chip);
+        chipPlayed = pick.chip;
+        if (pick.chip === 'TC') {
+          // a third share of the captain, and nothing at all when neither he nor the vice appeared
+          chipPoints = captain?.actual ?? 0;
+        } else {
+          // Bench boost: all fifteen score and no substitution happens. Against the unchipped
+          // score that is the bench added, and the substitutions that DID happen undone — each
+          // one swapped a starter's blank for a bench player's points, and under the chip both
+          // count instead of one replacing the other.
+          chipPoints =
+            lineup.bench.reduce((t, m) => t + m.actual, 0) +
+            scored.substitutions.reduce(
+              (t, x) => t + x.off.actual - x.on.actual,
+              0,
+            );
+        }
+      }
+    }
+
     rounds.push({
       round,
-      points: scored.points - hitCost,
+      chip: chipPlayed,
+      points: scored.points + chipPoints - hitCost,
       hitCost,
       transfersMade: moves.length,
       freeTransfersAfter: state.freeTransfers,

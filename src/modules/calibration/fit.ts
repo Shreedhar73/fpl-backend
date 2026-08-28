@@ -84,6 +84,79 @@ export interface FitReport {
  */
 const FLAT_EPSILON = 0.001;
 
+/**
+ * How fast a season's evidence decays, in seasons, or Infinity for "every season counts equally".
+ *
+ * Extending the archive from two seasons to nine made the model WORSE — 1945 against 1982 in a
+ * simulated 2025-26 under `greedy-1ft`. The corpus is not the problem; treating 2016-17 as evidence
+ * about 2025-26 on equal terms is. Football moves, and nothing in the fit knew that a row had an age.
+ *
+ * A row from `d` seasons before the most recent training season is weighted `0.5 ** (d / halfLife)`.
+ *
+ * **The reason is mechanical, not statistical: the league changed, and two of the changes are
+ * visible in these very rows.**
+ *
+ * Substitutions went from three to five in 2022-23, and the archive shows the break rather than a
+ * drift — short appearances (0 < minutes < 60) per fixture, and appearances per fixture:
+ *
+ *     2016-17 .. 2021-22   6.3 – 7.0 short,  27.4 – 27.9 total
+ *     2022-23 .. 2025-26   9.2 – 9.9 short,  29.9 – 30.4 total
+ *
+ * Forty-two per cent more substitute appearances, from one season to the next, held ever since. For
+ * anything about minutes, a pre-2022-23 row is evidence about a different sport.
+ *
+ * Home advantage has its own discontinuity. Home goals divided by away goals per fixture:
+ *
+ *     2016-17 1.318   2017-18 1.347   2018-19 1.232   2019-20 1.239
+ *     2020-21 1.012   <- played behind closed doors; the edge disappears
+ *     2021-22 1.138   <- partial crowds
+ *     2022-23 1.338   2023-24 1.219   2024-25 1.040   2025-26 1.214
+ *
+ * `homeAdvantage` is a single fitted constant. Pooling ten seasons equally hands it a season in
+ * which home advantage did not exist.
+ *
+ * ONE season, and the season simulation agrees with the mechanism — 2025-26 under `greedy-1ft`,
+ * nine training seasons throughout:
+ *
+ *     half-life   0.5    0.75    1      2      4      none
+ *     season     1847    1919   1999   1996   1961    1945
+ *
+ * An interior optimum, falling away on both sides. The two seasons the model used to train on
+ * scored 1982, so the older seasons ARE worth having — but only once they stop counting as equal
+ * evidence, which is exactly what the substitution and crowd breaks predict.
+ *
+ * That the mechanism and the curve agree matters, because the curve alone would be selection on the
+ * test season: this parameter moves the season simulation, and that runs on 2025-26 only. The
+ * direction was predicted from the rule changes before the sweep ran, which is the part that is not
+ * fitted to 2025-26. Confirmation is 2026-27 as it plays.
+ *
+ * **Default OFF, and not adopted.** The evidence above is real but two things are unfinished: the
+ * half-life was picked on runs that also carried the fitted-availability block (which the served
+ * model rejects, so those numbers measured two changes at once), and the parameters it produces
+ * fail a behavioural test — a substitute-only defender comes out at P(60+) = 0.175 against a bound
+ * of 0.15, because the start intercept rises. Set `SEASON_HALF_LIFE=1` to reproduce the candidate.
+ *
+ * With the decay off this file reproduces the unweighted fit exactly, which the tests assert.
+ */
+const SEASON_HALF_LIFE = Number(process.env.SEASON_HALF_LIFE) || Infinity;
+
+/** season label → its weight, newest season in the corpus being 1.0 */
+function seasonWeights(rows: HistoryRow[]): Map<string, number> {
+  const seasons = [...new Set(rows.map((r) => r.season))].sort();
+  const newest = seasons.length - 1;
+  const out = new Map<string, number>();
+  seasons.forEach((season, i) => {
+    const age = newest - i;
+    out.set(
+      season,
+      Number.isFinite(SEASON_HALF_LIFE)
+        ? Math.pow(0.5, age / SEASON_HALF_LIFE)
+        : 1,
+    );
+  });
+  return out;
+}
+
 export function fitParams(input: FitInput): FitReport {
   const { train, defconTrain, validate, defconValidate, scoringFor } = input;
 
@@ -317,24 +390,39 @@ function measureDirect(rows: HistoryRow[]) {
   const homeXg = { total: 0, fixtures: new Set<string>() };
   const awayXg = { total: 0, fixtures: new Set<string>() };
 
+  const wOf = seasonWeights(rows);
+
   for (const r of rows) {
-    if (r.starts > 0) {
-      started++;
-      startedMinutes += r.minutes;
-      if (r.minutes >= 60) startedSixty++;
-    } else {
-      notStarted++;
-      if (r.minutes > 0) {
-        subAppeared++;
-        subMinutes += r.minutes;
-        if (r.minutes >= 60) subSixty++;
+    const w = wOf.get(r.season) ?? 1;
+    // A row from a season with no `starts` column is not a non-start — it is a row that cannot
+    // speak to this question, and it is excluded from BOTH sides of the frequency rather than
+    // counted as a substitute appearance.
+    if (r.starts !== null) {
+      if (r.starts > 0) {
+        started += w;
+        startedMinutes += w * r.minutes;
+        if (r.minutes >= 60) startedSixty += w;
+      } else {
+        notStarted += w;
+        if (r.minutes > 0) {
+          subAppeared += w;
+          subMinutes += w * r.minutes;
+          if (r.minutes >= 60) subSixty += w;
+        }
       }
     }
 
-    xg += r.expectedGoals;
-    goals += r.goalsScored;
-    xa += r.expectedAssists;
-    assists += r.assists;
+    // Same rule for the goals-per-xG ratio: a season without expected goals contributes neither
+    // numerator nor denominator, instead of contributing goals against an xG of zero and driving
+    // the fitted ratio to infinity.
+    if (r.expectedGoals !== null) {
+      xg += w * r.expectedGoals;
+      goals += w * r.goalsScored;
+    }
+    if (r.expectedAssists !== null) {
+      xa += w * r.expectedAssists;
+      assists += w * r.assists;
+    }
 
     // Bonus is only meaningful for players who were on the pitch; including 0-minute rows would drag
     // the fitted line to zero and make every projection's bonus term vanish.
@@ -346,13 +434,15 @@ function measureDirect(rows: HistoryRow[]) {
       bpsBonus += r.bps * r.bonus;
     }
 
-    const key = `${r.season}|${r.round}|${r.fixture}`;
-    if (r.wasHome) {
-      homeXg.total += r.expectedGoals;
-      homeXg.fixtures.add(key);
-    } else {
-      awayXg.total += r.expectedGoals;
-      awayXg.fixtures.add(key);
+    if (r.expectedGoals !== null) {
+      const key = `${r.season}|${r.round}|${r.fixture}`;
+      if (r.wasHome) {
+        homeXg.total += r.expectedGoals;
+        homeXg.fixtures.add(key);
+      } else {
+        awayXg.total += r.expectedGoals;
+        awayXg.fixtures.add(key);
+      }
     }
   }
 
@@ -447,13 +537,13 @@ function fitMinutesCurves(rows: HistoryRow[]): {
   //     effect (the flagged-sub sample cannot support an interaction).
   //   - UNKNOWN rows — no capture inside the staleness bound. They keep their own offset, so the
   //     base curves are not silently averaged over rows whose flags nobody knows.
-  const startPoints: { x: number[]; y: number }[] = [];
-  const subPoints: { x: number[]; y: number }[] = [];
+  const startPoints: { x: number[]; y: number; w: number }[] = [];
+  const subPoints: { x: number[]; y: number; w: number }[] = [];
   // Keeper base curves (B-021) keep their own two-parameter fit, on the same filtered population;
   // the availability terms are global — ~5% of rows are flagged, and a per-position flagged sample
   // is too thin to defend.
-  const gkpStartPoints: { x: number; y: number }[] = [];
-  const gkpSubPoints: { x: number; y: number }[] = [];
+  const gkpStartPoints: { x: number; y: number; w: number }[] = [];
+  const gkpSubPoints: { x: number; y: number; w: number }[] = [];
 
   let nStartFlagged = 0;
   let nSubFlagged = 0;
@@ -467,6 +557,8 @@ function fitMinutesCurves(rows: HistoryRow[]): {
   let allStartSixty = 0;
   let allStartMinutes = 0;
 
+  const curveWeights = seasonWeights(rows);
+
   for (const context of walkRounds(rows, UNFITTED_PARAMS)) {
     for (const { row, features } of context.items) {
       if (features.matchesSample === 0) continue;
@@ -475,6 +567,10 @@ function fitMinutesCurves(rows: HistoryRow[]): {
         ? availabilitySignal(row.deadlineStatus as string, row.deadlineChance ?? null)
         : null;
       if (sig?.zero) continue;
+      // The start and sub curves are regressions ON `starts`. A row that does not record it has no
+      // label, so it is skipped here rather than labelled 0 — labelling it would put six seasons of
+      // every player into the "did not start" class and drag the fitted intercept with them.
+      if (row.starts === null) continue;
       const inj = sig?.inj ?? 0;
       const unknown = known ? 0 : 1;
       if (unknown === 1) nUnknown += 1;
@@ -493,21 +589,29 @@ function fitMinutesCurves(rows: HistoryRow[]): {
       }
 
       const startLogit = logit(features.laggedStartRate);
+      const sw = curveWeights.get(row.season) ?? 1;
       startPoints.push({
         x: [startLogit, inj, inj * startLogit, unknown],
         y: row.starts > 0 ? 1 : 0,
+        w: sw,
       });
       if (row.position === 'GKP') {
-        gkpStartPoints.push({ x: startLogit, y: row.starts > 0 ? 1 : 0 });
+        gkpStartPoints.push({
+          x: startLogit,
+          y: row.starts > 0 ? 1 : 0,
+          w: sw,
+        });
       }
       if (row.starts === 0) {
         if (inj > 0) nSubFlagged += 1;
         subPoints.push({
           x: [logit(features.laggedSubRate), inj, unknown],
           y: row.minutes > 0 ? 1 : 0,
+          w: sw,
         });
         if (row.position === 'GKP') {
           gkpSubPoints.push({
+            w: sw,
             x: logit(features.laggedSubRate),
             y: row.minutes > 0 ? 1 : 0,
           });
@@ -583,7 +687,7 @@ function fitMinutesCurves(rows: HistoryRow[]): {
  * per feature, and it is returned whole when the fit is unusable.
  */
 function fitLogisticK(
-  points: { x: number[]; y: number }[],
+  points: { x: number[]; y: number; w?: number }[],
   fallback: number[],
 ): number[] {
   if (points.length === 0) return fallback;
@@ -599,8 +703,9 @@ function fitLogisticK(
       let z = beta[0];
       for (let j = 1; j < k; j++) z += beta[j] * p.x[j - 1];
       const mu = 1 / (1 + Math.exp(-z));
-      const w = mu * (1 - mu);
-      const r = p.y - mu;
+      const sw = p.w ?? 1;
+      const w = sw * mu * (1 - mu);
+      const r = sw * (p.y - mu);
       for (let a = 0; a < k; a++) {
         g[a] += r * xi(p, a);
         for (let b = a; b < k; b++) h[a][b] += w * xi(p, a) * xi(p, b);
@@ -671,7 +776,7 @@ function solveSymmetric(h: number[][], g: number[]): number[] | null {
  * gets a curve it can defend rather than one it has to check.
  */
 function fitLogistic(
-  points: { x: number; y: number }[],
+  points: { x: number; y: number; w?: number }[],
   fallback: { intercept: number; slope: number },
 ): { intercept: number; slope: number } {
   if (points.length === 0) return fallback;
@@ -689,8 +794,11 @@ function fitLogistic(
     for (const p of points) {
       const z = a + b * p.x;
       const mu = 1 / (1 + Math.exp(-z));
-      const w = mu * (1 - mu);
-      const r = p.y - mu;
+      // The row's season weight multiplies both the gradient and the Hessian, which is what makes
+      // this a weighted likelihood rather than an unweighted one with a rescaled step.
+      const sw = p.w ?? 1;
+      const w = sw * mu * (1 - mu);
+      const r = sw * (p.y - mu);
       g0 += r;
       g1 += r * p.x;
       h00 += w;
@@ -788,14 +896,20 @@ function measureLeagueRates(
     const per90 = (total: number, mins: number) =>
       mins > 0 ? (total / mins) * 90 : 0;
 
+    // The league xG rate is measured over the rows that RECORD xG and the minutes those rows
+    // played — not over every row and every minute. Seasons before 2022-23 have no expected goals,
+    // and folding their minutes into the denominator would halve the positional prior that every
+    // thin-sample player is shrunk toward.
+    const xgRows = played.filter((r) => r.expectedGoals !== null);
+    const xgMinutes = xgRows.reduce((s, r) => s + r.minutes, 0);
     out[position] = {
       xg90: per90(
-        played.reduce((s, r) => s + r.expectedGoals, 0),
-        minutes,
+        xgRows.reduce((s, r) => s + (r.expectedGoals ?? 0), 0),
+        xgMinutes,
       ),
       xa90: per90(
-        played.reduce((s, r) => s + r.expectedAssists, 0),
-        minutes,
+        xgRows.reduce((s, r) => s + (r.expectedAssists ?? 0), 0),
+        xgMinutes,
       ),
       defcon90: per90(
         defconRows.reduce((s, r) => s + (r.defensiveContribution ?? 0), 0),

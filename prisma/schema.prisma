@@ -447,7 +447,10 @@ model ArchivePlayerGameweek {
   kickoffTime      DateTime?
 
   minutes         Int @default(0)
-  starts          Int @default(0)
+  /// NULL before 2022-23 — the archive did not record it. Zero would mean "came off the bench",
+  /// which is a different fact and one that would flatten the fitted start curve across seven
+  /// seasons. Every consumer must exclude the row rather than read a default.
+  starts          Int?
   totalPoints     Int @default(0)
   goalsScored     Int @default(0)
   assists         Int @default(0)
@@ -470,9 +473,12 @@ model ArchivePlayerGameweek {
   tackles                       Int?
   recoveries                    Int?
 
-  expectedGoals         Decimal @default(0) @db.Decimal(6, 2)
-  expectedAssists       Decimal @default(0) @db.Decimal(6, 2)
-  expectedGoalsConceded Decimal @default(0) @db.Decimal(6, 2)
+  /// NULL before 2022-23 — expected goals did not exist in the archive. Zero would tell the rate
+  /// model that nobody generated chances for six seasons; the per-90 denominator is tracked
+  /// separately instead, the same way `defensiveContribution` already is.
+  expectedGoals         Decimal? @db.Decimal(6, 2)
+  expectedAssists       Decimal? @db.Decimal(6, 2)
+  expectedGoalsConceded Decimal? @db.Decimal(6, 2)
   ictIndex              Decimal @default(0) @db.Decimal(6, 1)
   /// the ICT components, split (B-037). Nullable: rows imported before the columns existed are
   /// missing, not zero — and the exporter reads missing as missing.
