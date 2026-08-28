@@ -58,7 +58,6 @@ import {
  */
 export const SIM_OPTIONS = { freeTransferCap: 5, hitCost: 4 };
 
-
 /** The planner arm that may not take a hit. Named here so the report and the pairing agree. */
 export const PLANNER_NO_HITS_LABEL = 'planner (no hits)';
 
@@ -352,10 +351,12 @@ export class DecisionService {
    * fit already showed what that costs: scoring 2023-24 with the current table gives every player a
    * defensive-contribution term in a season where the category did not exist.
    */
-  async scoringResolver(): Promise<(season: string) => Scoring> {
+  async scoringResolver(
+    seasons: readonly string[] = [...TRAIN_SEASONS, TEST_SEASON],
+  ): Promise<(season: string) => Scoring> {
     const cache = new Map<string, Scoring>();
     let live: Scoring | null = null;
-    for (const season of [...TRAIN_SEASONS, TEST_SEASON]) {
+    for (const season of seasons) {
       const table = scoringForSeason(season);
       if (table) {
         cache.set(season, Scoring.from(table.scoring));
@@ -857,7 +858,7 @@ export class DecisionService {
       if (!model) continue;
       const against: { label: string; row: SeasonResult | undefined }[] = [
         ...(['form', 'priorSeason', 'v4'] as Predictor[]).map((p) => ({
-          label: p as string,
+          label: p,
           row: forPolicy.find((s2) => s2.predictor === p && !s2.squadLabel),
         })),
         ...forPolicy
@@ -902,7 +903,10 @@ export class DecisionService {
         key: string,
       ) => {
         if (!a2 || !b2) return;
-        const d = pairedDifference(asDecisions(a2.rounds), asDecisions(b2.rounds));
+        const d = pairedDifference(
+          asDecisions(a2.rounds),
+          asDecisions(b2.rounds),
+        );
         if (!d) return;
         simPaired.set(key, d);
         w(

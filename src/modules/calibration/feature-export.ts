@@ -190,6 +190,15 @@ export function exportFeatures(
   /** per-season scoring, for the incumbent's EP — the same resolver every calibration run uses */
   scoringFor: (season: string) => Scoring,
   evaluate: (row: HistoryRow) => boolean = () => true,
+  /**
+   * Let the walk read imputed start probabilities (B-040, plan 027 task 7).
+   *
+   * Default off, so the exporter reproduces the three-season export byte for byte. On, the seasons
+   * before 2023-24 carry a usable `laggedStartRate` for the first time — without it their rows have
+   * no start history at all and `v3ep` is a number computed from nothing, which is worse for a
+   * gradient-boosted model than not having the row.
+   */
+  imputedStarts = false,
 ): ExportedRow[] {
   const out: ExportedRow[] = [];
 
@@ -199,7 +208,7 @@ export function exportFeatures(
   const teamHist = new Map<number, TeamMatch[]>();
   let currentSeason: string | null = null;
 
-  for (const context of walkRounds(rows, params)) {
+  for (const context of walkRounds(rows, params, { imputedStarts })) {
     // Season rollover: windows do not cross seasons — promotion, relegation and squad turnover make
     // a 38-match window spanning two seasons a claim the data does not support. `walkRounds` makes
     // the same call for team strength.
@@ -254,10 +263,16 @@ export function exportFeatures(
       const ph = playerHist.get(row.playerCode) ?? [];
       for (const field of PLAYER_FIELDS)
         for (const w of WINDOWS)
-          f.set(`p_${field}_${w}`, windowMean(ph, w, (m) => m[field]));
+          f.set(
+            `p_${field}_${w}`,
+            windowMean(ph, w, (m) => m[field]),
+          );
       for (const field of NULLABLE_PLAYER_FIELDS)
         for (const w of WINDOWS)
-          f.set(`p_${field}_${w}`, nullableWindowMean(ph, w, (m) => m[field]));
+          f.set(
+            `p_${field}_${w}`,
+            nullableWindowMean(ph, w, (m) => m[field]),
+          );
 
       // Team windows use the nullable mean throughout: two of the four fields are expected goals,
       // which no season before 2022-23 records, and averaging those as zero would make every club
@@ -265,12 +280,18 @@ export function exportFeatures(
       const th = teamHist.get(row.teamCode) ?? [];
       for (const field of TEAM_FIELDS)
         for (const w of WINDOWS)
-          f.set(`t_${field}_${w}`, nullableWindowMean(th, w, (m) => m[field]));
+          f.set(
+            `t_${field}_${w}`,
+            nullableWindowMean(th, w, (m) => m[field]),
+          );
 
       const oh = teamHist.get(row.opponentTeamCode) ?? [];
       for (const field of TEAM_FIELDS)
         for (const w of WINDOWS)
-          f.set(`o_${field}_${w}`, nullableWindowMean(oh, w, (m) => m[field]));
+          f.set(
+            `o_${field}_${w}`,
+            nullableWindowMean(oh, w, (m) => m[field]),
+          );
 
       out.push({
         season: row.season,
@@ -292,7 +313,13 @@ export function exportFeatures(
     // count matches on a different clock from every other team's.
     const teamAgg = new Map<
       string,
-      { teamCode: number; goals: number; xg: number; oppGoals: number; oppXg: number }
+      {
+        teamCode: number;
+        goals: number;
+        xg: number;
+        oppGoals: number;
+        oppXg: number;
+      }
     >();
     const side = (teamCode: number, fixture: number) => {
       const key = `${teamCode}|${fixture}`;

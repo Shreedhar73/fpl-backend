@@ -70,6 +70,22 @@ export interface FitInput {
    * only way several candidate decays can be fitted inside one process.
    */
   seasonHalfLife?: number;
+  /**
+   * How the deadline-time availability flags enter the fit (B-040, plan 027 task 8).
+   *
+   * - `joint` — plan 024's regime: the flags are features of the two logistics, with an interaction
+   *   against the lagged start rate. Fitted params carry `minutes.availability`, and the model reads
+   *   the flags directly.
+   * - `unflagged-base` — the hybrid D-032's reading argued for. Rows carrying ANY doubt are excluded
+   *   from the base curves entirely, so the curves describe the players nobody had a question about;
+   *   the params carry no `availability` block, so the model falls back to applying FPL's own chance
+   *   percentage MULTIPLICATIVELY. That is the shape D-032 found the joint fit could not express: a
+   *   near-calibrated percentage applied as a rescale is not a linear term in a logit.
+   * - `none` — flags are ignored entirely, which is where v3 was before plan 024.
+   *
+   * Defaults to `joint`, which is what `fitParams` did before this option existed.
+   */
+  availabilityMode?: 'joint' | 'unflagged-base' | 'none';
 }
 
 export interface FitReport {
@@ -214,8 +230,14 @@ export function fitParams(input: FitInput): FitReport {
   const { train, defconTrain, validate, defconValidate, scoringFor } = input;
   const imputedStarts = input.imputedStarts ?? false;
   const halfLife = input.seasonHalfLife ?? SEASON_HALF_LIFE;
+  const availabilityMode = input.availabilityMode ?? 'joint';
 
-  const measured = measureDirect(train, imputedStarts, halfLife);
+  const measured = measureDirect(
+    train,
+    imputedStarts,
+    halfLife,
+    availabilityMode,
+  );
   const leagueRates = measureLeagueRates(train);
 
   let params: FittedParams = {
@@ -236,7 +258,12 @@ export function fitParams(input: FitInput): FitReport {
       minutesGivenStart: measured.minutesGivenStart,
       minutesGivenSub: measured.minutesGivenSub,
       gkp: measured.gkp,
-      availability: measured.availability,
+      // Only the joint regime emits the availability block, and emitting it is what SWITCHES the
+      // model's regime — `minutesDistribution` reads the flags directly when it is present and
+      // applies FPL's chance percentage multiplicatively when it is not. So the hybrid is expressed
+      // by leaving it off, not by a second code path in the model.
+      availability:
+        availabilityMode === 'joint' ? measured.availability : undefined,
     },
     saves: { elasticity: 1 },
     attack: {
@@ -426,6 +453,7 @@ function measureDirect(
   rows: HistoryRow[],
   imputed = false,
   halfLife: number = SEASON_HALF_LIFE,
+  mode: 'joint' | 'unflagged-base' | 'none' = 'joint',
 ) {
   let started = 0;
   let startedSixty = 0;
@@ -534,7 +562,7 @@ function measureDirect(
     leagueGoalsPerTeamMatch: (homePerMatch + awayPerMatch) / 2,
     // The start model is fitted as a calibration of the lagged rate onto the realised one; see
     // fitMinutesCurves for why each is a two-parameter logistic rather than the identity v1 assumed.
-    ...fitMinutesCurves(rows, imputed, halfLife),
+    ...fitMinutesCurves(rows, imputed, halfLife, mode),
   };
 }
 
@@ -561,6 +589,7 @@ function fitMinutesCurves(
   rows: HistoryRow[],
   imputed = false,
   halfLife: number = SEASON_HALF_LIFE,
+  mode: 'joint' | 'unflagged-base' | 'none' = 'joint',
 ): {
   startIntercept: number;
   startSlope: number;
@@ -635,6 +664,12 @@ function fitMinutesCurves(
           )
         : null;
       if (sig?.zero) continue;
+      // The hybrid (plan 027 task 8). A row carrying ANY doubt is dropped from the base curves, so
+      // they describe the players nobody had a question about — and FPL's own chance percentage is
+      // then applied multiplicatively at prediction time, which is the shape D-032 measured the
+      // joint fit as unable to express. Dropping them is the point: leaving them in makes the base
+      // curve an average over two populations, one of which is priced again downstream.
+      if (mode === 'unflagged-base' && (sig === null || sig.inj > 0)) continue;
       // The start and sub curves are regressions ON `starts`. A row that does not record it has no
       // label, so it is skipped here rather than labelled 0 — labelling it would put seven seasons
       // of every player into the "did not start" class and drag the fitted intercept with them.

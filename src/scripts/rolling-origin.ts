@@ -10,6 +10,8 @@
  *   pnpm referee:rolling --imputed        let pre-2023-24 seasons fit minutes on imputed labels
  *   pnpm referee:rolling --imputed --compare-imputed   pair the two fits directly, per round
  *   pnpm referee:rolling --select-window  choose window and decay per fold, on the season before it
+ *   pnpm referee:rolling --availability unflagged-base --vs-availability none
+ *                                         the hybrid against the incumbent's hand rule, paired
  *
  * `--window` is here because plan 027 task 4 turns "do the old seasons help?" into a measurement, and
  * a measurement needs the same referee reading both arms. It is NOT a tuning knob to be turned until
@@ -21,6 +23,8 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from '../app.module';
 import { RollingOriginService } from '../modules/calibration/rolling-origin.service';
+
+type AvailabilityMode = 'joint' | 'unflagged-base' | 'none';
 
 function numberFlag(name: string): number | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -46,6 +50,21 @@ async function main(): Promise<void> {
   // Plan 027 task 4. Choose the training window and the recency half-life per fold, on the season
   // before it, instead of training on everything at equal weight because nobody chose otherwise.
   const selectWindow = process.argv.includes('--select-window');
+  // Plan 027 task 8. `--availability <mode>` sets how the deadline flags enter the main arm's fit,
+  // and `--vs-availability <mode>` fits the fold a second time under the other one and pairs them.
+  const modeFlag = (name: string): AvailabilityMode | undefined => {
+    const i = process.argv.indexOf(`--${name}`);
+    if (i === -1) return undefined;
+    const value = process.argv[i + 1];
+    if (value !== 'joint' && value !== 'unflagged-base' && value !== 'none') {
+      throw new Error(
+        `--${name} takes joint | unflagged-base | none, got ${String(value)}`,
+      );
+    }
+    return value;
+  };
+  const availabilityMode = modeFlag('availability');
+  const compareAvailabilityMode = modeFlag('vs-availability');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
@@ -59,6 +78,8 @@ async function main(): Promise<void> {
       k,
       compareImputed,
       selectWindow,
+      availabilityMode,
+      compareAvailabilityMode,
     });
     log.log(`report: ${report.path}`);
     for (const [label, across] of Object.entries(report.across)) {

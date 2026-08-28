@@ -90,6 +90,7 @@ export class RollingOriginService {
       imputedStarts: options.folds?.imputedStarts ?? false,
       seasonHalfLife: SEASON_HALF_LIFE,
       selectedWindow: options.selectWindow ?? false,
+      availabilityMode: options.availabilityMode ?? 'joint',
       folds,
       across: this.summarise(folds, arms),
     };
@@ -142,6 +143,7 @@ export class RollingOriginService {
       scoringFor,
       imputedStarts,
       seasonHalfLife: selection?.candidate.seasonHalfLife,
+      availabilityMode: options.availabilityMode,
     });
     const params: FittedParams = options.transform
       ? options.transform(fit.params, plan)
@@ -180,12 +182,18 @@ export class RollingOriginService {
       plan.capability.startLabelRows >= MIN_COMPONENT_ROWS
     ) {
       const other = fitParams({
-        train: split.train,
+        // The SAME window and the same decay as the main arm — only the imputation flag differs.
+        // Fitting the counter-arm on the unfiltered corpus would compare two changes under a label
+        // that names one, which is how a comparison becomes a sentence nobody can check.
+        train: selection
+          ? split.train.filter((r) => selection.seasons.includes(r.season))
+          : split.train,
         defconTrain: split.defconTrain,
         validate: split.validate,
         defconValidate: split.defconValidate,
         scoringFor,
-        imputedStarts: !(options.folds?.imputedStarts ?? false),
+        imputedStarts: !imputedStarts,
+        seasonHalfLife: selection?.candidate.seasonHalfLife,
       });
       const otherResult = runBacktest(upToFold, other.params, scoringFor, {
         evaluate: split.evaluate,
@@ -199,6 +207,34 @@ export class RollingOriginService {
       ] = pairedByRound(
         this.perRound(common, 'model', view, k),
         this.perRound(otherCommon, 'model', view, k),
+      );
+    }
+
+    // The availability A/B (plan 027 task 8): the same fold, the same window, the same labels —
+    // only how the deadline flags enter the fit differs, and the two are paired per round.
+    if (options.compareAvailabilityMode) {
+      const other = fitParams({
+        train: selection
+          ? split.train.filter((r) => selection.seasons.includes(r.season))
+          : split.train,
+        defconTrain: split.defconTrain,
+        validate: split.validate,
+        defconValidate: split.defconValidate,
+        scoringFor,
+        imputedStarts,
+        seasonHalfLife: selection?.candidate.seasonHalfLife,
+        availabilityMode: options.compareAvailabilityMode,
+      });
+      const otherResult = runBacktest(upToFold, other.params, scoringFor, {
+        evaluate: split.evaluate,
+      });
+      const mine = commonRows(result.rows, ['model', 'form']);
+      const theirs = commonRows(otherResult.rows, ['model', 'form']);
+      paired[
+        `availability ${options.availabilityMode ?? 'joint'} vs ${options.compareAvailabilityMode}`
+      ] = pairedByRound(
+        this.perRound(mine, 'model', view, k),
+        this.perRound(theirs, 'model', view, k),
       );
     }
 
@@ -364,6 +400,10 @@ export class RollingOriginService {
       Number.isFinite(report.seasonHalfLife)
         ? `hl${report.seasonHalfLife}`
         : null,
+      report.selectedWindow ? 'selected' : null,
+      report.availabilityMode === 'joint'
+        ? null
+        : `avail-${report.availabilityMode}`,
     ].filter(Boolean);
     const path = join(
       dir,
@@ -393,6 +433,20 @@ export interface RunOptions {
    * deliberately, and the one this project's own comment says is the worse of two.
    */
   selectWindow?: boolean;
+  /**
+   * How the deadline-time flags enter the fit for the MAIN arm (plan 027 task 8).
+   *
+   * The incumbent is `none` — v3 serves without the plan 024 block, applying FPL's percentage by
+   * hand. `joint` is plan 024's fitted regime, declined by D-032. `unflagged-base` is the hybrid
+   * that reading argued for: base curves fitted on the players nobody had a doubt about, the
+   * percentage still applied multiplicatively.
+   */
+  availabilityMode?: 'joint' | 'unflagged-base' | 'none';
+  /**
+   * Fit each fold a second time under `compareAvailabilityMode` and pair the two directly, so the
+   * hybrid is measured against a named alternative rather than against a remembered number.
+   */
+  compareAvailabilityMode?: 'joint' | 'unflagged-base' | 'none';
   folds?: FoldOptions;
   view?: OrderingView;
   k?: number;
@@ -467,6 +521,8 @@ export interface RollingOriginReport {
   seasonHalfLife: number;
   /** whether each fold chose its own window and decay on the season before it */
   selectedWindow: boolean;
+  /** how the deadline-time flags entered the main arm's fit */
+  availabilityMode: 'joint' | 'unflagged-base' | 'none';
   folds: FoldResult[];
   across: Record<string, AcrossFolds | null>;
   path?: string;
@@ -511,7 +567,15 @@ export function renderReport(report: RollingOriginReport): string {
       `(${report.seasons.join(', ')}), ${report.totalRows.toLocaleString()} archive rows. ` +
       `Training window: ${report.trainWindow === null ? 'every earlier season' : `${report.trainWindow} season(s)`}. ` +
       `Season half-life: ${Number.isFinite(report.seasonHalfLife) ? `${report.seasonHalfLife} season(s) — older seasons down-weighted` : 'none — every season counts equally'}. ` +
-      `Imputed start labels: ${report.imputedStarts ? 'USED — the seasons before 2023-24 fit the minutes model on inferred probabilities (plan 027 task 6)' : 'not used'}.`,
+      `Imputed start labels: ${report.imputedStarts ? 'USED — the seasons before 2023-24 fit the minutes model on inferred probabilities (plan 027 task 6)' : 'not used'}. ` +
+      `Window and decay: ${report.selectedWindow ? 'CHOSEN per fold, on the season before it' : 'fixed for every fold'}. ` +
+      `Availability: ${
+        report.availabilityMode === 'joint'
+          ? "plan 024's fitted flags"
+          : report.availabilityMode === 'unflagged-base'
+            ? "base curves on unflagged rows, FPL's percentage applied multiplicatively (the D-032 hybrid)"
+            : "the incumbent's hand rule, flags unfitted"
+      }.`,
   );
   lines.push('');
   lines.push(

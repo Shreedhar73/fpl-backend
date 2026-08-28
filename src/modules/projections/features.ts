@@ -257,6 +257,17 @@ export interface WalkOptions {
    * round and the transfer harness needs five.
    */
   horizon?: number;
+  /**
+   * Let a row with no recorded `starts` contribute its imputed probability to the start and sub
+   * rates (B-040, plan 027 tasks 6 and 7).
+   *
+   * Default off, so every existing caller — the serving path included — walks exactly as before. On,
+   * `startMatches` gains the row and `starts` gains `startProb`, which is the same arithmetic a
+   * recorded label already does at p ∈ {0, 1}. This is what lets a feature export reach back past
+   * 2023-24 at all: `laggedStartRate` is the input the whole minutes model turns on, and without it
+   * seven seasons of rows carry no usable start history.
+   */
+  imputedStarts?: boolean;
 }
 
 /**
@@ -385,8 +396,8 @@ export function* walkRounds(
 
     // Only now does this round become visible to anything.
     for (const row of roundRows) {
-      fold(career, row);
-      fold(seasonAcc, row);
+      fold(career, row, options.imputedStarts ?? false);
+      fold(seasonAcc, row, options.imputedStarts ?? false);
       strengthRows.push({
         teamCode: row.teamCode,
         opponentTeamCode: row.opponentTeamCode,
@@ -412,7 +423,11 @@ export function* walkRounds(
   }
 }
 
-function fold(acc: Map<number, Accumulator>, row: HistoryRow): void {
+function fold(
+  acc: Map<number, Accumulator>,
+  row: HistoryRow,
+  imputedStarts = false,
+): void {
   let a = acc.get(row.playerCode);
   if (!a) acc.set(row.playerCode, (a = empty()));
   a.minutes += row.minutes;
@@ -420,6 +435,16 @@ function fold(acc: Map<number, Accumulator>, row: HistoryRow): void {
   // numerator nor the denominator, so the rate describes the seasons that actually recorded it.
   if (row.starts !== null) {
     a.starts += row.starts;
+    a.startMatches += 1;
+    if (row.minutes > 0) a.startAppearances += 1;
+  } else if (
+    imputedStarts &&
+    row.startProb !== null &&
+    row.startProb !== undefined
+  ) {
+    // A fractional start, which is what an inferred label honestly is. The denominator gains a whole
+    // row because the row IS a match the player was part of; only the numerator is uncertain.
+    a.starts += row.startProb;
     a.startMatches += 1;
     if (row.minutes > 0) a.startAppearances += 1;
   }
