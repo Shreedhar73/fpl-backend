@@ -783,20 +783,33 @@ export class DecisionService {
     );
     w();
     w(
-      `| Policy | Squad picked by | rounds | **points** | transfers | hits | final team value |`,
+      `**The season totals below are a reference figure, not a result. Do not read a difference ` +
+        `between two of them.** Each is one sample of one path: a single choice made differently in ` +
+        `round 3 changes who is owned for the rest of the season, and the total moves by far more ` +
+        `than the effects this report is used to argue about. The verdict is the **paired ` +
+        `per-round** table in the next section, where both arms face the same fixtures, blanks and ` +
+        `hauls and the round-to-round variance cancels. B-039 is why this is stated rather than ` +
+        `assumed: before it, two runs of this script over an unchanged database put one arm 165 ` +
+        `points apart, and three claims were published off differences smaller than that.`,
+    );
+    w();
+    w(
+      `| Policy | Squad picked by | rounds | points (reference) | transfers | hits | final team value |`,
     );
     w(`|---|---|---:|---:|---:|---:|---:|`);
     for (const r of seasons) {
       w(
-        `| ${r.policy} | ${r.squadLabel ?? r.predictor} | ${r.rounds.length} | **${r.totalPoints}** | ` +
+        `| ${r.policy} | ${r.squadLabel ?? r.predictor} | ${r.rounds.length} | ${r.totalPoints} | ` +
           `${r.totalTransfers} | ${r.totalHitCost} | £${(r.finalTeamValue / 10).toFixed(1)}m |`,
       );
     }
     w();
-    w(`### Is the difference bigger than the noise?`);
+    w(`### The verdict — paired by round`);
     w();
     w(
-      `Every row is **paired by round** — both arms faced the same fixtures, blanks and hauls, so ` +
+      `**This is the table to read.** The totals above are a reference; these rows are the ` +
+        `comparison. Every row is **paired by round** — both arms faced the same fixtures, blanks ` +
+        `and hauls, so ` +
         `the round-to-round variance that dominates a season total cancels. "Clears noise" is ` +
         `|mean| > 2 standard errors, a crude bar and meant to be.`,
     );

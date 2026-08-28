@@ -64,7 +64,20 @@ export class ForecastRepository {
     );
     const rows = await this.prisma.archivePlayerGameweek.findMany({
       where: { season: { in: seasons } },
-      orderBy: [{ season: 'asc' }, { round: 'asc' }],
+      // A TOTAL order, not just the one the walk needs (B-039). `season, round` alone leaves the
+      // rows within one round in whatever order Postgres happened to return, and that order is free
+      // to differ between two runs over an unchanged table. It is not merely presentation: every
+      // consumer reads it as data — a stable `sort()` resolves ties to it, and `randomLegalSquad`
+      // draws its seeded stream against it. Measured 2026-08-28: two identical `pnpm
+      // decision-quality` runs disagreed by 165 points on one arm because of it.
+      orderBy: [
+        { season: 'asc' },
+        { round: 'asc' },
+        { playerCode: 'asc' },
+        // A double gameweek is two rows for one player in one round; `fixture` is what separates
+        // them, and without it the pair is still free to swap.
+        { fixture: 'asc' },
+      ],
       select: {
         season: true,
         round: true,

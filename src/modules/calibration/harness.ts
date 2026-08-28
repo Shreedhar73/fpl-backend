@@ -341,9 +341,47 @@ export function runBacktest(
   }
 
   return {
-    rows: out,
+    rows: sortRows(out),
     skipped: [...skipped.entries()].map(([reason, n]) => ({ reason, n })),
   };
+}
+
+/**
+ * One canonical order for every prediction row, applied once here so nothing downstream has to
+ * remember to (B-039).
+ *
+ * **This ordering is data, not presentation.** Three consumers read it:
+ *
+ *  - `randomLegalSquad()` draws its seeded xorshift stream per row, in row order, so a different
+ *    order assigns different weights to different players and the recorded seed stops meaning
+ *    anything;
+ *  - every `sort()` with a comparator that can return 0 — the XI, the armband, the weekly transfer,
+ *    the chip pick, the ordering metrics — resolves its ties to input order, because
+ *    `Array.prototype.sort` is stable;
+ *  - `buildLp()` emits its variables in array order, so the LP string differs.
+ *
+ * Measured on 2026-08-28 (plan 026, task 1): two `pnpm decision-quality` runs over an unchanged
+ * database returned rows in different orders and disagreed by **165 points** on the `greedy-1ft`
+ * `form` arm, flipping the sign of a conclusion the report prints in prose. The opening fifteen was
+ * byte-identical across those runs, so sorting inside the squad solve alone would have fixed
+ * nothing — the order has to be pinned upstream of every consumer, which is here.
+ *
+ * The reader's `ORDER BY` is also total (`forecast.repository.ts`). This is deliberately the second
+ * of two: a query is one refactor away from losing a clause, and this sort is what keeps that
+ * refactor from silently costing 165 points again.
+ */
+export function sortRows(rows: PredictionRow[]): PredictionRow[] {
+  return [...rows].sort(
+    (a, b) =>
+      a.season.localeCompare(b.season) ||
+      a.round - b.round ||
+      a.playerCode - b.playerCode ||
+      // A double gameweek is two rows for one player in one round; the opponent is what separates
+      // them. `PredictionRow` does not carry the fixture id, and does not need to — one player
+      // does not face the same opponent twice in one gameweek.
+      a.opponentTeamCode - b.opponentTeamCode ||
+      Number(b.wasHome) - Number(a.wasHome),
+  );
 }
 
 /**

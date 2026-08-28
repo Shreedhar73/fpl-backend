@@ -88,9 +88,13 @@ export function pointsCaptured(
     throw new Error('pointsCaptured: length mismatch');
   }
   if (predicted.length < k) return null;
+  // Ties here resolve to array index, and the array is a round's rows. That is deterministic ONLY
+  // because the rows arrive in one canonical order (`sortRows`, B-039) — this function is handed
+  // bare numbers and has no player identity to break a tie with. If the row order ever floats
+  // again, the top-k cut floats with it.
   const byPredicted = predicted
     .map((p, i) => ({ p, i }))
-    .sort((a, b) => b.p - a.p)
+    .sort((a, b) => b.p - a.p || a.i - b.i)
     .slice(0, k);
   const best = [...actual].sort((a, b) => b - a).slice(0, k);
   const ceiling = best.reduce((s, x) => s + x, 0);
@@ -116,7 +120,7 @@ export function precisionAtK(
     new Set(
       xs
         .map((v, i) => ({ v, i }))
-        .sort((a, b) => b.v - a.v)
+        .sort((a, b) => b.v - a.v || a.i - b.i)
         .slice(0, k)
         .map((x) => x.i),
     );
@@ -159,7 +163,12 @@ export const ORDERING_VIEWS: OrderingView[] = [
     label: 'top 100 by price',
     // Price is the field the optimiser is actually constrained by, and it is knowable before the
     // round. Ranking the whole 600 measures a job nobody does.
-    restrict: (rows) => [...rows].sort((a, b) => b.value - a.value).slice(0, 100),
+    // Tie-broken on `playerCode` (B-039): at 100 of ~550 the cut lands in a crowd of equal prices,
+    // and which side of it a player falls on decides whether the round scores them at all.
+    restrict: (rows) =>
+      [...rows]
+        .sort((a, b) => b.value - a.value || a.playerCode - b.playerCode)
+        .slice(0, 100),
   },
   {
     label: 'top 100 by predicted',
@@ -168,7 +177,11 @@ export const ORDERING_VIEWS: OrderingView[] = [
     // that reaches a recommendation.
     restrict: (rows, predictor) =>
       [...rows]
-        .sort((a, b) => (b.predicted[predictor] ?? 0) - (a.predicted[predictor] ?? 0))
+        .sort(
+          (a, b) =>
+            (b.predicted[predictor] ?? 0) - (a.predicted[predictor] ?? 0) ||
+            a.playerCode - b.playerCode,
+        )
         .slice(0, 100),
   },
 ];

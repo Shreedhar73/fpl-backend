@@ -1,5 +1,15 @@
 # The XI replay (B-025)
 
+> **Produced before B-039 (2026-08-28), and its season totals are therefore not reproducible.**
+> The rows below were walked while `PredictionRow[]` arrived in whatever order Postgres returned,
+> which the XI, the armband, the bench order and the weekly transfer all broke their ties on. Two
+> runs of `pnpm decision-quality` over an unchanged database put one arm **165 points** apart on the
+> same code and the same data. Paired per-round figures in this file moved far less and are the ones
+> to read; **any season total here is a reference, and a difference between two of them is not a
+> result.** Regenerating an arm means re-running it against current code — it has not been done,
+> because these arms are the record of what was measured at the time, and rewriting them would erase
+> that rather than correct it.
+
 What the solver's OWN eleven scored, round by round, over an archived season. Every other
 harness in this repo re-chooses the lineup by predicted points and is therefore blind to the
 LP's `y` and `k` columns — which is how a knob acting only through them came to be tuned on

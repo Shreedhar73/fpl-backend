@@ -299,7 +299,13 @@ export function replaySeason(
     const benchOutfield = benchOrder(
       benchedCandidates
         .filter((c) => c.position !== 'GKP')
-        .map((c) => ({ key: c.key, predictedPoints: c.ep, pPlay: c.pPlay })),
+        .map((c) => ({
+          key: c.key,
+          predictedPoints: c.ep,
+          pPlay: c.pPlay,
+          code: Number(c.playerId),
+        })),
+      (c) => c.code,
     );
     const bench = [...benchGk.map((c) => c.key), ...benchOutfield.map((b) => b.key)].map(at);
 

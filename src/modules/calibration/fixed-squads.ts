@@ -112,8 +112,14 @@ export async function randomLegalSquad(
     state ^= state << 5;
     return Math.abs(state) / 2 ** 31;
   };
-  const candidates = rows
+  // Sorted before the stream is drawn (B-039). The xorshift is seeded so the squad is replayable —
+  // but it is drawn one value per row, in row order, so a different row order hands different
+  // weights to different players and the same recorded seed produces a different squad. Measured
+  // 2026-08-28: `random #4` came out 558 in one run and 1253 in the next, on the same seed. Sorting
+  // here rather than trusting the caller, because the seed's promise is this function's to keep.
+  const candidates = [...rows]
     .filter((r) => r.teamCode !== null)
+    .sort((a, b) => a.playerCode - b.playerCode)
     .map((r) => candidate(r, next()));
   const chosen = await solveSquad(candidates, rules);
   return {
