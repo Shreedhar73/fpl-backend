@@ -45,7 +45,8 @@
     "export:features": "nest build && node dist/scripts/export-features.js",
     "decision-quality": "nest build && node dist/scripts/decision-quality.js",
     "referee:rolling": "nest build && node dist/scripts/rolling-origin.js",
-    "report:coverage": "nest build && node dist/scripts/archive-coverage.js"
+    "report:coverage": "nest build && node dist/scripts/archive-coverage.js",
+    "report:imputation": "nest build && node dist/scripts/start-imputation.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",

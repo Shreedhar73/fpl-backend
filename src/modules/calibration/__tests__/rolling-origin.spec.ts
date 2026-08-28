@@ -312,6 +312,8 @@ describe('verdict', () => {
       seasons,
       totalRows: 100,
       k: 11,
+      imputedStarts: false,
+      seasonHalfLife: Infinity,
       trainWindow: null,
       folds: [
         ...perFold.map((d, i) => mk(seasons[i], d, true)),

@@ -36,6 +36,18 @@ export interface HistoryRow {
   minutes: number;
   /** null before 2023-24 — the archive did not record it, which is not "came off the bench" */
   starts: number | null;
+  /**
+   * P(this row was a start), inferred from minutes where `starts` is null (B-040, plan 027 task 6).
+   *
+   * Present ONLY where `starts` is null, so the two never disagree and nothing can read an inferred
+   * label as a recorded one. It is a probability and not a label because the inference is 96.6%
+   * accurate and the 3.4% is concentrated in one band — 45 to 59 minutes, where an early-substituted
+   * starter and a half-time substitute are the same row. The fit takes it as a weight; every scoring
+   * path reads `starts` and still gets null.
+   *
+   * See `archive/start-imputation.ts` for the calibration and what it cannot validate.
+   */
+  startProb?: number | null;
   totalPoints: number;
   goalsScored: number;
   ownGoals: number;

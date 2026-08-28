@@ -45,6 +45,14 @@ export interface FoldCapability {
   trainRows: number;
   /** rows carrying a real start label — the sample the start and sub curves are regressions on */
   startLabelRows: number;
+  /**
+   * rows carrying an IMPUTED start probability instead (plan 027 task 6).
+   *
+   * Counted separately and never added into `startLabelRows`, so a fold's report can always say how
+   * much of its minutes model came from what the archive recorded and how much from what was
+   * inferred at 96.6% accuracy.
+   */
+  imputedStartRows: number;
   /** rows carrying expected goals */
   xgRows: number;
   /** rows carrying the defensive-contribution category */
@@ -64,25 +72,38 @@ export interface FoldCapability {
  */
 export const MIN_COMPONENT_ROWS = 1;
 
-export function capabilityOf(train: HistoryRow[]): FoldCapability {
+export function capabilityOf(
+  train: HistoryRow[],
+  imputedStarts = false,
+): FoldCapability {
   let startLabelRows = 0;
+  let imputedStartRows = 0;
   let xgRows = 0;
   let defconRows = 0;
   const seasons = new Set<string>();
   for (const r of train) {
     seasons.add(r.season);
     if (r.starts !== null) startLabelRows += 1;
+    else if (r.startProb !== null && r.startProb !== undefined) {
+      imputedStartRows += 1;
+    }
     if (r.expectedGoals !== null) xgRows += 1;
     if (r.defensiveContribution !== null) defconRows += 1;
   }
   return {
     trainRows: train.length,
     startLabelRows,
+    imputedStartRows,
     xgRows,
     defconRows,
     seasons: [...seasons].sort(),
     fittable: {
-      minutes: startLabelRows >= MIN_COMPONENT_ROWS,
+      // With imputation on, an inferred probability is a usable label — that is the whole claim of
+      // plan 027 task 6, and it is the claim the referee is there to test. With it off, seven
+      // seasons remain unfittable and the fold is refused.
+      minutes:
+        startLabelRows + (imputedStarts ? imputedStartRows : 0) >=
+        MIN_COMPONENT_ROWS,
       // Rates, clean sheets and the strength model read minutes, goals, assists and conceded, which
       // every season of the archive carries. They are fittable wherever there are rows at all.
       rates: train.length >= MIN_COMPONENT_ROWS,
@@ -133,6 +154,8 @@ const FULL_MODEL_COMPONENTS: Component[] = ['minutes', 'rates', 'strength'];
  */
 export interface FoldOptions {
   trainWindow?: number;
+  /** treat an imputed start probability as a fittable label when deciding what a fold can fit */
+  imputedStarts?: boolean;
   /** rounds of the validation season reserved for shape parameters (mirrors `VALIDATE_FROM_ROUND`) */
   validateFromRound?: number;
   /** first round scored when the defensive-contribution term is fitted inside the evaluation season */
@@ -146,6 +169,7 @@ export interface FoldOptions {
 
 const DEFAULTS = {
   trainWindow: Infinity,
+  imputedStarts: false,
   validateFromRound: 20,
   defconEvalFromRound: 20,
   defconFitRound: 12,
@@ -182,7 +206,7 @@ export function planFolds(
       : earlier;
 
     const train = trainSeasons.flatMap((s) => bySeason.get(s) ?? []);
-    const capability = capabilityOf(train);
+    const capability = capabilityOf(train, opts.imputedStarts);
 
     // The evaluation season's own category, which decides whether the defcon parameters can come
     // from the past at all.
@@ -453,4 +477,59 @@ export function acrossFolds(
       rounds: r.paired.rounds,
     })),
   };
+}
+
+/**
+ * The training-window and recency candidates a fold may choose between (plan 027 task 4).
+ *
+ * Small and deliberately so. Every candidate costs a full fit inside every fold, and a grid wide
+ * enough to be interesting on a half-season validation set is wide enough to win by luck on it —
+ * which is the failure `fit.ts` already names about its own v4 grid. `window: Infinity` is every
+ * earlier season; a half-life of `Infinity` is no decay at all.
+ *
+ * A one-season window makes the decay meaningless — there is nothing older to down-weight — so that
+ * pair appears once rather than twice.
+ */
+export interface WindowCandidate {
+  trainWindow: number;
+  seasonHalfLife: number;
+}
+
+export const WINDOW_CANDIDATES: WindowCandidate[] = [
+  { trainWindow: 1, seasonHalfLife: Infinity },
+  { trainWindow: 2, seasonHalfLife: Infinity },
+  { trainWindow: 2, seasonHalfLife: 1 },
+  { trainWindow: 3, seasonHalfLife: Infinity },
+  { trainWindow: 3, seasonHalfLife: 1 },
+  { trainWindow: Infinity, seasonHalfLife: Infinity },
+  { trainWindow: Infinity, seasonHalfLife: 1 },
+  { trainWindow: Infinity, seasonHalfLife: 0.5 },
+];
+
+export function describeCandidate(c: WindowCandidate): string {
+  const window = Number.isFinite(c.trainWindow)
+    ? `${c.trainWindow} season${c.trainWindow === 1 ? '' : 's'}`
+    : 'all seasons';
+  const decay = Number.isFinite(c.seasonHalfLife)
+    ? `half-life ${c.seasonHalfLife}`
+    : 'no decay';
+  return `${window}, ${decay}`;
+}
+
+/**
+ * The seasons a candidate trains on inside a fold.
+ *
+ * Separate from `splitForFold` because the window is chosen INSIDE the fold and the fold's own
+ * `trainSeasons` are the widest the candidate may reach — a candidate cannot see further back than
+ * the fold does, and it must never see the evaluation season at all.
+ */
+export function candidateSeasons(
+  plan: FoldPlan,
+  candidate: WindowCandidate,
+): string[] {
+  return Number.isFinite(candidate.trainWindow)
+    ? plan.trainSeasons.slice(
+        Math.max(0, plan.trainSeasons.length - candidate.trainWindow),
+      )
+    : [...plan.trainSeasons];
 }
