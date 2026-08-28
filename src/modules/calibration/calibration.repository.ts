@@ -5,6 +5,7 @@ import { RawScoring } from '../projections/scoring';
 import { HistoryRow } from '../projections/features';
 import { ForecastRepository } from '../projections/forecast.repository';
 import { Rules } from '../optimizer/rules';
+import { assertShape, coverageOf } from '../archive/coverage';
 
 /**
  * Reads for the calibration harness. Reads only — the harness writes no projection anywhere
@@ -18,15 +19,42 @@ export class CalibrationRepository {
   ) {}
 
   /**
+   * The seasons the archive actually holds, in order.
+   *
+   * Asked of the database rather than read from `ARCHIVE_SEASONS`: that constant says which seasons
+   * the importer knows how to fetch, and this says which ones are imported. The rolling-origin
+   * referee plans one fold per season and would otherwise plan folds over seasons with no rows —
+   * which produces a fold that trains on nothing and reports a number anyway.
+   */
+  async archiveSeasons(): Promise<string[]> {
+    const rows = await this.prisma.archivePlayerGameweek.groupBy({
+      by: ['season'],
+      orderBy: { season: 'asc' },
+    });
+    return rows.map((r) => r.season);
+  }
+
+  /**
    * Every archive row for the given seasons, as history.
    *
    * Loaded whole rather than streamed: 87,000 rows is a few tens of MB and the feature walk needs
    * them in round order anyway. If a season is ever added that makes this uncomfortable, the fix is
    * to page by season, not to sample — a sampled backtest measures a different model.
    */
-  /** Delegates to the serving path's reader, so backtest and forecast share one definition. */
+  /**
+   * Delegates to the serving path's reader, so backtest and forecast share one definition — and
+   * checks the shape of what came back before handing it to a fit (B-040, plan 027 task 3).
+   *
+   * The check belongs HERE, on the read, and not in the importer: the fault it exists for is a column
+   * that stops arriving, and by the time a fit is reading rows the import that emptied it has long
+   * since reported success. `assertShape` throws; it does not warn. A fit trained on a season whose
+   * `starts` column silently emptied produces a start curve fitted on nothing and a report that looks
+   * entirely normal.
+   */
   async history(seasons: string[]): Promise<HistoryRow[]> {
-    return this.forecast.archiveHistory(seasons);
+    const rows = await this.forecast.archiveHistory(seasons);
+    assertShape(coverageOf(rows));
+    return rows;
   }
 
   /**
@@ -60,7 +88,10 @@ export class CalibrationRepository {
    * model must never see (`fpl-agent-guide` §2.1 — ownership is not a quality signal). Keeping it
    * out of the row is what stops it leaking into a feature later by being conveniently to hand.
    */
-  async ownershipAt(season: string, round: number): Promise<Map<number, number>> {
+  async ownershipAt(
+    season: string,
+    round: number,
+  ): Promise<Map<number, number>> {
     const rows = await this.prisma.archivePlayerGameweek.findMany({
       where: { season, round },
       select: { playerCode: true, selectedBy: true },

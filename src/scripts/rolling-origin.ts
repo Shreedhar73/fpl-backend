@@ -1,0 +1,67 @@
+/**
+ * CLI for `pnpm referee:rolling` — the rolling-origin referee (B-040, plan 027 task 1).
+ *
+ * One fold per evaluation season: fit on every season before it, score that season once, pair per
+ * round. Writes `reports/rolling-origin.md`.
+ *
+ *   pnpm referee:rolling                  every earlier season trains each fold
+ *   pnpm referee:rolling --window 2       only the two seasons before each evaluation season
+ *   pnpm referee:rolling --k 15           pair on points captured @15 instead of @11
+ *
+ * `--window` is here because plan 027 task 4 turns "do the old seasons help?" into a measurement, and
+ * a measurement needs the same referee reading both arms. It is NOT a tuning knob to be turned until
+ * the number looks good: a window chosen by re-reading these folds is selection on the folds, and the
+ * selection this project permits happens inside a fold, on the season before it.
+ */
+import 'dotenv/config';
+import { NestFactory } from '@nestjs/core';
+import { Logger } from '@nestjs/common';
+import { AppModule } from '../app.module';
+import { RollingOriginService } from '../modules/calibration/rolling-origin.service';
+
+function numberFlag(name: string): number | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i === -1) return undefined;
+  const value = Number(process.argv[i + 1]);
+  if (!Number.isFinite(value)) {
+    throw new Error(`--${name} needs a number, got ${process.argv[i + 1]}`);
+  }
+  return value;
+}
+
+async function main(): Promise<void> {
+  const log = new Logger('rolling-origin');
+  const window = numberFlag('window');
+  const k = numberFlag('k');
+
+  const app = await NestFactory.createApplicationContext(AppModule, {
+    logger: ['error', 'warn', 'log'],
+  });
+  try {
+    const report = await app.get(RollingOriginService).run({
+      folds: window === undefined ? {} : { trainWindow: window },
+      k,
+    });
+    log.log(`report: ${report.path}`);
+    for (const [label, across] of Object.entries(report.across)) {
+      if (!across) {
+        log.log(`${label}: no fold produced a pairing`);
+        continue;
+      }
+      log.log(
+        `${label}: ${(100 * across.meanOfFoldMeans).toFixed(2)}% captured@${
+          k ?? RollingOriginService.PRIMARY_K
+        } over ${across.folds} folds` +
+          (across.standardError === null
+            ? ' (one fold — no spread exists)'
+            : `, se ${(100 * across.standardError).toFixed(2)}%, ${
+                across.clearsNoise ? 'clears' : 'does not clear'
+              } 2se`),
+      );
+    }
+  } finally {
+    await app.close();
+  }
+}
+
+void main();

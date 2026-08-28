@@ -8,6 +8,7 @@ import { ServedScoringService } from './served-scoring.service';
 import { XiReplayService } from './xi-replay.service';
 import { CollisionCorrelationService } from './collision-correlation.service';
 import { ObjectiveAbService } from './objective-ab.service';
+import { RollingOriginService } from './rolling-origin.service';
 import { ProjectionsModule } from '../projections/projections.module';
 
 /**
@@ -28,6 +29,7 @@ import { ProjectionsModule } from '../projections/projections.module';
     XiReplayService,
     CollisionCorrelationService,
     ObjectiveAbService,
+    RollingOriginService,
   ],
   exports: [
     CalibrationService,
@@ -37,6 +39,7 @@ import { ProjectionsModule } from '../projections/projections.module';
     XiReplayService,
     CollisionCorrelationService,
     ObjectiveAbService,
+    RollingOriginService,
   ],
 })
 export class CalibrationModule {}

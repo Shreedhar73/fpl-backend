@@ -49,8 +49,10 @@ import { fitParams, FitReport } from './fit';
  * Was `['2023-24', '2024-25']` while the archive went back only that far. Extending it to 2016-17
  * (253,568 rows, all points-verified) takes the training corpus from 57,008 rows to 223,821.
  *
- * The older seasons are NOT the same shape and nothing here pretends they are: before 2022-23 the
- * archive records no `starts` and no expected goals, so those rows carry NULL for both and every
+ * The older seasons are NOT the same shape and nothing here pretends they are, and the two boundaries
+ * are one season apart: expected goals start in **2022-23** and the `starts` column in **2023-24**
+ * (measured 2026-08-28 — 2022-23 has zero non-null start rows; `archive/coverage.ts` is the table and
+ * the assertion). Those rows carry NULL for the columns they lack and every
  * consumer excludes them from the terms they cannot speak to — the start curve is fitted on the
  * rows that have a start label, the xG rates on the minutes that have an xG. What the older seasons
  * DO carry is minutes, points, goals, assists, clean sheets, saves and bonus, which is most of the
@@ -228,12 +230,19 @@ export class CalibrationService {
    * Public because `ComponentCalibrationService` scores the same seasons and must use the SAME
    * tables — a second copy of this resolver is a second answer to "what were the rules that year",
    * and the two reports would disagree without either being wrong on its own terms.
+   *
+   * `seasons` defaults to the ones the served fit reads; the rolling-origin referee (B-040) passes all
+   * ten. The resolver still throws on a season it was not built for rather than quietly reaching for
+   * the live table — a season scored with another season's rules is a silent error, which is why the
+   * fallback inside the loop warns even where it is the only answer available.
    */
-  async scoringResolver(): Promise<(season: string) => Scoring> {
+  async scoringResolver(
+    seasons: readonly string[] = [...TRAIN_SEASONS, TEST_SEASON],
+  ): Promise<(season: string) => Scoring> {
     const cache = new Map<string, Scoring>();
     let live: Scoring | null = null;
 
-    for (const season of [...TRAIN_SEASONS, TEST_SEASON]) {
+    for (const season of seasons) {
       const table = scoringForSeason(season);
       if (table) {
         cache.set(season, Scoring.from(table.scoring));

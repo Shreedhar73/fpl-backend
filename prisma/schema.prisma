@@ -447,9 +447,15 @@ model ArchivePlayerGameweek {
   kickoffTime      DateTime?
 
   minutes         Int @default(0)
-  /// NULL before 2022-23 — the archive did not record it. Zero would mean "came off the bench",
+  /// NULL before 2023-24 — the archive did not record it. Zero would mean "came off the bench",
   /// which is a different fact and one that would flatten the fitted start curve across seven
   /// seasons. Every consumer must exclude the row rather than read a default.
+  ///
+  /// This comment said "before 2022-23" until 2026-08-28 and was wrong by one season: 2022-23 has
+  /// **zero** non-null start rows, 2023-24 has 29,725. The season it is wrong about is the one that
+  /// decides whether the rolling-origin referee (B-040) can fit a minutes model for the 2024-25 fold,
+  /// so the boundary is now asserted on every read rather than described here — see
+  /// `src/modules/archive/coverage.ts`.
   starts          Int?
   totalPoints     Int @default(0)
   goalsScored     Int @default(0)
