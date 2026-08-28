@@ -31,10 +31,22 @@ async function main(): Promise<void> {
   });
   try {
     const repo = app.get(CalibrationRepository);
-    const seasons = [...TRAIN_SEASONS, TEST_SEASON];
+    // `--all-seasons` widens the export to everything the archive holds, with imputed start labels
+    // so the older rows carry a usable start history (plan 027 task 7). Without both, those seasons
+    // export a `laggedStartRate` computed from no recorded starts at all.
+    const wide = process.argv.includes('--all-seasons');
+    const seasons = wide
+      ? await repo.archiveSeasons()
+      : [...TRAIN_SEASONS, TEST_SEASON];
     const rows = await repo.history(seasons);
-    const scoringFor = await app.get(DecisionService).scoringResolver();
-    const exported = exportFeatures(rows, FITTED_PARAMS, scoringFor);
+    const scoringFor = await app.get(DecisionService).scoringResolver(seasons);
+    const exported = exportFeatures(
+      rows,
+      FITTED_PARAMS,
+      scoringFor,
+      () => true,
+      wide,
+    );
 
     const dir = join(process.cwd(), 'reports', 'datasets');
     await mkdir(dir, { recursive: true });

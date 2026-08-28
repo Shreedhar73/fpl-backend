@@ -315,6 +315,7 @@ describe('verdict', () => {
       imputedStarts: false,
       seasonHalfLife: Infinity,
       selectedWindow: false,
+      availabilityMode: 'joint' as const,
       trainWindow: null,
       folds: [
         ...perFold.map((d, i) => mk(seasons[i], d, true)),
