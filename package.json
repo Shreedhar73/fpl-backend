@@ -43,7 +43,9 @@
     "optimize:bench-sweep": "nest build && node dist/scripts/bench-sweep.js",
     "ab:objective": "nest build && node dist/scripts/objective-ab.js",
     "export:features": "nest build && node dist/scripts/export-features.js",
-    "decision-quality": "nest build && node dist/scripts/decision-quality.js"
+    "decision-quality": "nest build && node dist/scripts/decision-quality.js",
+    "referee:rolling": "nest build && node dist/scripts/rolling-origin.js",
+    "report:coverage": "nest build && node dist/scripts/archive-coverage.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",

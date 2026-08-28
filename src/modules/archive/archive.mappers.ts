@@ -46,7 +46,7 @@ export interface ArchiveGameweekRow {
   wasHome: boolean;
   kickoffTime: Date | null;
   minutes: number;
-  /** null before 2022-23 — not recorded. NOT the same as "did not start". */
+  /** null before 2023-24 — not recorded. NOT the same as "did not start". */
   starts: number | null;
   totalPoints: number;
   goalsScored: number;

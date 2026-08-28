@@ -34,7 +34,7 @@ export interface HistoryRow {
   opponentTeamCode: number | null;
   wasHome: boolean;
   minutes: number;
-  /** null before 2022-23 — the archive did not record it, which is not "came off the bench" */
+  /** null before 2023-24 — the archive did not record it, which is not "came off the bench" */
   starts: number | null;
   totalPoints: number;
   goalsScored: number;
