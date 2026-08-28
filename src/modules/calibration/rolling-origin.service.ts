@@ -89,6 +89,7 @@ export class RollingOriginService {
       trainWindow: options.folds?.trainWindow ?? null,
       imputedStarts: options.folds?.imputedStarts ?? false,
       seasonHalfLife: SEASON_HALF_LIFE,
+      selectedWindow: options.selectWindow ?? false,
       folds,
       across: this.summarise(folds, arms),
     };
@@ -464,6 +465,8 @@ export interface RollingOriginReport {
    * half-life, so the difference is not decorative.
    */
   seasonHalfLife: number;
+  /** whether each fold chose its own window and decay on the season before it */
+  selectedWindow: boolean;
   folds: FoldResult[];
   across: Record<string, AcrossFolds | null>;
   path?: string;
