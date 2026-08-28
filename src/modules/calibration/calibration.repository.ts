@@ -6,6 +6,7 @@ import { HistoryRow } from '../projections/features';
 import { ForecastRepository } from '../projections/forecast.repository';
 import { Rules } from '../optimizer/rules';
 import { assertShape, coverageOf } from '../archive/coverage';
+import { withImputedStarts } from '../archive/start-imputation';
 
 /**
  * Reads for the calibration harness. Reads only — the harness writes no projection anywhere
@@ -54,7 +55,12 @@ export class CalibrationRepository {
   async history(seasons: string[]): Promise<HistoryRow[]> {
     const rows = await this.forecast.archiveHistory(seasons);
     assertShape(coverageOf(rows));
-    return rows;
+    // Attach `startProb` to the rows the archive never labelled (plan 027 task 6). Inert by default:
+    // nothing reads it unless a fit is asked for `imputedStarts`, and `starts` itself is untouched,
+    // so every scoring path still sees null exactly where the archive has nothing. Calibrated from
+    // the rows in hand, so a caller that loads only unlabelled seasons gets no imputation rather
+    // than one borrowed from a table it cannot see.
+    return withImputedStarts(rows);
   }
 
   /**

@@ -7,6 +7,9 @@
  *   pnpm referee:rolling                  every earlier season trains each fold
  *   pnpm referee:rolling --window 2       only the two seasons before each evaluation season
  *   pnpm referee:rolling --k 15           pair on points captured @15 instead of @11
+ *   pnpm referee:rolling --imputed        let pre-2023-24 seasons fit minutes on imputed labels
+ *   pnpm referee:rolling --imputed --compare-imputed   pair the two fits directly, per round
+ *   pnpm referee:rolling --select-window  choose window and decay per fold, on the season before it
  *
  * `--window` is here because plan 027 task 4 turns "do the old seasons help?" into a measurement, and
  * a measurement needs the same referee reading both arms. It is NOT a tuning knob to be turned until
@@ -33,14 +36,29 @@ async function main(): Promise<void> {
   const log = new Logger('rolling-origin');
   const window = numberFlag('window');
   const k = numberFlag('k');
+  // Plan 027 task 6's arm. Off, the referee is 2 folds; on, the seven seasons the archive never gave
+  // a start label fit the minutes model on inferred probabilities and the fold count rises. Which of
+  // those is better is the measurement, so it is a flag and not a default.
+  const imputed = process.argv.includes('--imputed');
+  // Fit each fold twice, flag inverted, and pair the two models directly — the measurement plan 027
+  // task 6 turns on. Doubles the run.
+  const compareImputed = process.argv.includes('--compare-imputed');
+  // Plan 027 task 4. Choose the training window and the recency half-life per fold, on the season
+  // before it, instead of training on everything at equal weight because nobody chose otherwise.
+  const selectWindow = process.argv.includes('--select-window');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
   try {
     const report = await app.get(RollingOriginService).run({
-      folds: window === undefined ? {} : { trainWindow: window },
+      folds: {
+        ...(window === undefined ? {} : { trainWindow: window }),
+        imputedStarts: imputed,
+      },
       k,
+      compareImputed,
+      selectWindow,
     });
     log.log(`report: ${report.path}`);
     for (const [label, across] of Object.entries(report.across)) {

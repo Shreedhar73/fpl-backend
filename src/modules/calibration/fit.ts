@@ -54,6 +54,22 @@ export interface FitInput {
    */
   defconValidate: HistoryRow[];
   scoringFor: (season: string) => Scoring;
+  /**
+   * Use the imputed start probabilities on rows the archive never labelled (plan 027 task 6).
+   *
+   * Default OFF. On, the seven seasons before 2023-24 contribute to the minutes curves for the first
+   * time, weighted by how sure the imputation is; off, `fitParams` behaves exactly as it did, which
+   * is what makes the comparison between the two a measurement rather than a change.
+   */
+  imputedStarts?: boolean;
+  /**
+   * Seasons of half-life for the recency weighting; `Infinity` weights every season equally.
+   *
+   * Defaults to `SEASON_HALF_LIFE`, which is the environment variable, so an unset caller behaves
+   * exactly as before. Passed explicitly by the per-fold selection (plan 027 task 4), which is the
+   * only way several candidate decays can be fitted inside one process.
+   */
+  seasonHalfLife?: number;
 }
 
 export interface FitReport {
@@ -138,10 +154,22 @@ const FLAT_EPSILON = 0.001;
  *
  * With the decay off this file reproduces the unweighted fit exactly, which the tests assert.
  */
-const SEASON_HALF_LIFE = Number(process.env.SEASON_HALF_LIFE) || Infinity;
+export const SEASON_HALF_LIFE =
+  Number(process.env.SEASON_HALF_LIFE) || Infinity;
 
-/** season label → its weight, newest season in the corpus being 1.0 */
-function seasonWeights(rows: HistoryRow[]): Map<string, number> {
+/**
+ * season label → its weight, newest season in the corpus being 1.0
+ *
+ * The half-life is a PARAMETER, defaulting to the environment variable that used to be the only way
+ * to set it (B-040, plan 027 task 4). It has to be one: selecting a window and a decay per fold
+ * means fitting the same rows several ways inside one process, and a module-level constant read from
+ * `process.env` cannot vary between two fits in the same run — a sweep built on it would report
+ * several candidates that were all secretly the same fit.
+ */
+function seasonWeights(
+  rows: HistoryRow[],
+  halfLife: number = SEASON_HALF_LIFE,
+): Map<string, number> {
   const seasons = [...new Set(rows.map((r) => r.season))].sort();
   const newest = seasons.length - 1;
   const out = new Map<string, number>();
@@ -149,18 +177,45 @@ function seasonWeights(rows: HistoryRow[]): Map<string, number> {
     const age = newest - i;
     out.set(
       season,
-      Number.isFinite(SEASON_HALF_LIFE)
-        ? Math.pow(0.5, age / SEASON_HALF_LIFE)
-        : 1,
+      Number.isFinite(halfLife) ? Math.pow(0.5, age / halfLife) : 1,
     );
   });
   return out;
 }
 
+/**
+ * What a row says about whether it was a start, and how sure that is (B-040, plan 027 task 6).
+ *
+ * Three states, and collapsing any two of them is a measured bug this project has already paid for:
+ *
+ *  - a RECORDED label — weight 1 on the value the archive holds;
+ *  - an IMPUTED probability — `startProb`, present only where `starts` is null, and only when the
+ *    caller asked for it. The row enters both classes, weighted p and 1−p, so a 45-minute
+ *    appearance contributes half a start and half a substitute rather than a coin flip that the fit
+ *    then treats as fact;
+ *  - NOTHING — the row cannot speak to the question and is skipped, which is what every season
+ *    before 2023-24 does when imputation is off.
+ *
+ * `imputed` is opt-in and defaults OFF. Turning it on changes every minutes parameter, so it is an
+ * arm of a measured comparison (the rolling-origin referee, D-034) and never a quiet default.
+ */
+function startEvidence(
+  row: HistoryRow,
+  imputed: boolean,
+): { p: number; recorded: boolean } | null {
+  if (row.starts !== null) return { p: row.starts > 0 ? 1 : 0, recorded: true };
+  if (!imputed) return null;
+  const p = row.startProb;
+  if (p === null || p === undefined) return null;
+  return { p, recorded: false };
+}
+
 export function fitParams(input: FitInput): FitReport {
   const { train, defconTrain, validate, defconValidate, scoringFor } = input;
+  const imputedStarts = input.imputedStarts ?? false;
+  const halfLife = input.seasonHalfLife ?? SEASON_HALF_LIFE;
 
-  const measured = measureDirect(train);
+  const measured = measureDirect(train, imputedStarts, halfLife);
   const leagueRates = measureLeagueRates(train);
 
   let params: FittedParams = {
@@ -367,7 +422,11 @@ export function fitParams(input: FitInput): FitReport {
 /**
  * The parameters that are frequencies, not choices. Each is a count over training rows.
  */
-function measureDirect(rows: HistoryRow[]) {
+function measureDirect(
+  rows: HistoryRow[],
+  imputed = false,
+  halfLife: number = SEASON_HALF_LIFE,
+) {
   let started = 0;
   let startedSixty = 0;
   let startedMinutes = 0;
@@ -390,25 +449,26 @@ function measureDirect(rows: HistoryRow[]) {
   const homeXg = { total: 0, fixtures: new Set<string>() };
   const awayXg = { total: 0, fixtures: new Set<string>() };
 
-  const wOf = seasonWeights(rows);
+  const wOf = seasonWeights(rows, halfLife);
 
   for (const r of rows) {
     const w = wOf.get(r.season) ?? 1;
     // A row from a season with no `starts` column is not a non-start — it is a row that cannot
     // speak to this question, and it is excluded from BOTH sides of the frequency rather than
-    // counted as a substitute appearance.
-    if (r.starts !== null) {
-      if (r.starts > 0) {
-        started += w;
-        startedMinutes += w * r.minutes;
-        if (r.minutes >= 60) startedSixty += w;
-      } else {
-        notStarted += w;
-        if (r.minutes > 0) {
-          subAppeared += w;
-          subMinutes += w * r.minutes;
-          if (r.minutes >= 60) subSixty += w;
-        }
+    // counted as a substitute appearance. With imputation on it speaks fractionally instead:
+    // weight p to the start side and 1−p to the other, which is the same arithmetic a recorded
+    // label already does at p ∈ {0, 1}.
+    const evidence = startEvidence(r, imputed);
+    if (evidence !== null) {
+      const { p } = evidence;
+      started += w * p;
+      startedMinutes += w * p * r.minutes;
+      if (r.minutes >= 60) startedSixty += w * p;
+      notStarted += w * (1 - p);
+      if (r.minutes > 0) {
+        subAppeared += w * (1 - p);
+        subMinutes += w * (1 - p) * r.minutes;
+        if (r.minutes >= 60) subSixty += w * (1 - p);
       }
     }
 
@@ -474,7 +534,7 @@ function measureDirect(rows: HistoryRow[]) {
     leagueGoalsPerTeamMatch: (homePerMatch + awayPerMatch) / 2,
     // The start model is fitted as a calibration of the lagged rate onto the realised one; see
     // fitMinutesCurves for why each is a two-parameter logistic rather than the identity v1 assumed.
-    ...fitMinutesCurves(rows),
+    ...fitMinutesCurves(rows, imputed, halfLife),
   };
 }
 
@@ -497,7 +557,11 @@ function measureDirect(rows: HistoryRow[]) {
  * is the population it is asked about at prediction time. Fitting it over every row would make it a
  * curve about starting, dressed as a curve about coming on.
  */
-function fitMinutesCurves(rows: HistoryRow[]): {
+function fitMinutesCurves(
+  rows: HistoryRow[],
+  imputed = false,
+  halfLife: number = SEASON_HALF_LIFE,
+): {
   startIntercept: number;
   startSlope: number;
   subIntercept: number;
@@ -557,61 +621,78 @@ function fitMinutesCurves(rows: HistoryRow[]): {
   let allStartSixty = 0;
   let allStartMinutes = 0;
 
-  const curveWeights = seasonWeights(rows);
+  const curveWeights = seasonWeights(rows, halfLife);
 
   for (const context of walkRounds(rows, UNFITTED_PARAMS)) {
     for (const { row, features } of context.items) {
       if (features.matchesSample === 0) continue;
-      const known = row.deadlineStatus !== null && row.deadlineStatus !== undefined;
+      const known =
+        row.deadlineStatus !== null && row.deadlineStatus !== undefined;
       const sig = known
-        ? availabilitySignal(row.deadlineStatus as string, row.deadlineChance ?? null)
+        ? availabilitySignal(
+            row.deadlineStatus as string,
+            row.deadlineChance ?? null,
+          )
         : null;
       if (sig?.zero) continue;
       // The start and sub curves are regressions ON `starts`. A row that does not record it has no
-      // label, so it is skipped here rather than labelled 0 — labelling it would put six seasons of
-      // every player into the "did not start" class and drag the fitted intercept with them.
-      if (row.starts === null) continue;
+      // label, so it is skipped here rather than labelled 0 — labelling it would put seven seasons
+      // of every player into the "did not start" class and drag the fitted intercept with them.
+      // With imputation on (plan 027 task 6) such a row carries a PROBABILITY instead, and enters
+      // both classes weighted; `p` is 1 or 0 for a recorded label, so the two paths are one.
+      const evidence = startEvidence(row, imputed);
+      if (evidence === null) continue;
+      const p = evidence.p;
       const inj = sig?.inj ?? 0;
       const unknown = known ? 0 : 1;
       if (unknown === 1) nUnknown += 1;
-      if (row.starts > 0) {
-        allStarts += 1;
-        allStartMinutes += row.minutes;
-        if (row.minutes >= 60) allStartSixty += 1;
-      }
+      allStarts += p;
+      allStartMinutes += p * row.minutes;
+      if (row.minutes >= 60) allStartSixty += p;
       if (inj > 0) {
         nStartFlagged += 1;
-        if (row.starts > 0) {
-          flaggedStarts += 1;
-          flaggedStartMinutes += row.minutes;
-          if (row.minutes >= 60) flaggedStartSixty += 1;
-        }
+        flaggedStarts += p;
+        flaggedStartMinutes += p * row.minutes;
+        if (row.minutes >= 60) flaggedStartSixty += p;
       }
 
       const startLogit = logit(features.laggedStartRate);
       const sw = curveWeights.get(row.season) ?? 1;
-      startPoints.push({
-        x: [startLogit, inj, inj * startLogit, unknown],
-        y: row.starts > 0 ? 1 : 0,
-        w: sw,
-      });
-      if (row.position === 'GKP') {
-        gkpStartPoints.push({
-          x: startLogit,
-          y: row.starts > 0 ? 1 : 0,
-          w: sw,
+      // One point per class, weighted by how much of this row belongs to it. At p ∈ {0, 1} the
+      // zero-weight point contributes nothing to the likelihood and this is exactly the old
+      // single-point push; in between, the row is half a start and half a substitute rather than a
+      // coin flip the fit is told to believe.
+      const startClasses: { y: number; w: number }[] = [
+        { y: 1, w: sw * p },
+        { y: 0, w: sw * (1 - p) },
+      ];
+      for (const { y, w } of startClasses) {
+        if (w <= 0) continue;
+        startPoints.push({
+          x: [startLogit, inj, inj * startLogit, unknown],
+          y,
+          w,
         });
+        if (row.position === 'GKP') {
+          gkpStartPoints.push({ x: startLogit, y, w });
+        }
       }
-      if (row.starts === 0) {
-        if (inj > 0) nSubFlagged += 1;
+      // The substitute curve is conditional on NOT starting, so a row enters it with weight 1−p.
+      const subWeight = sw * (1 - p);
+      if (subWeight > 0) {
+        // Fractionally, like every other count under imputation: a row that is 6% substitute is 0.06
+        // of a flagged substitute, not one. At a recorded label this is the old arithmetic exactly —
+        // a recorded starter contributes 0 and a recorded non-starter 1 — which is what keeps the
+        // flag-off path byte-identical to the fit that shipped.
+        if (inj > 0) nSubFlagged += 1 - p;
         subPoints.push({
           x: [logit(features.laggedSubRate), inj, unknown],
           y: row.minutes > 0 ? 1 : 0,
-          w: sw,
+          w: subWeight,
         });
         if (row.position === 'GKP') {
           gkpSubPoints.push({
-            w: sw,
+            w: subWeight,
             x: logit(features.laggedSubRate),
             y: row.minutes > 0 ? 1 : 0,
           });
@@ -627,11 +708,14 @@ function fitMinutesCurves(rows: HistoryRow[]): {
 
   // The sub fallback is the flat curve at the population rate — exactly the constant this replaces.
   const fallbackRate = (points: { y: number }[]) =>
-    points.length
-      ? points.reduce((t, p) => t + p.y, 0) / points.length
-      : 0.15;
+    points.length ? points.reduce((t, p) => t + p.y, 0) / points.length : 0.15;
   // Feature order: [logit(subRate), inj, unknown].
-  const sub = fitLogisticK(subPoints, [logit(fallbackRate(subPoints)), 0, 0, 0]);
+  const sub = fitLogisticK(subPoints, [
+    logit(fallbackRate(subPoints)),
+    0,
+    0,
+    0,
+  ]);
 
   const gkpStart = fitLogistic(gkpStartPoints, { intercept: 0, slope: 1 });
   const gkpSub = fitLogistic(gkpSubPoints, {
@@ -666,7 +750,9 @@ function fitMinutesCurves(rows: HistoryRow[]): {
       subUnknown: sub[3],
       sixtyGivenStartFlagged,
       minutesGivenStartFlagged:
-        flaggedStarts >= 200 ? flaggedStartMinutes / flaggedStarts : globalMinutes,
+        flaggedStarts >= 200
+          ? flaggedStartMinutes / flaggedStarts
+          : globalMinutes,
       n: {
         startFlagged: nStartFlagged,
         subFlagged: nSubFlagged,
