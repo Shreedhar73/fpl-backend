@@ -13,7 +13,3 @@ No gameweek has both a served projection and checked data. A scorer with nothing
 | gameweek | reason |
 |---:|---|
 | 2 | has not been played yet |
-| 3 | has not been played yet |
-| 4 | has not been played yet |
-| 5 | has not been played yet |
-| 6 | has not been played yet |

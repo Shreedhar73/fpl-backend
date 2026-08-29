@@ -763,7 +763,23 @@ const SUB_RATE_PRIOR = 0.15;
  */
 const MINUTES_GIVEN_START_PRIOR = 82.8;
 const SIXTY_GIVEN_START_PRIOR = 0.934;
-const START_BEHAVIOUR_SHRINK = 10;
+/**
+ * Starts before a player's own start behaviour outweighs the league constants.
+ *
+ * **Three, not ten.** Ten was set on the reasoning that a mean minute count is dominated by one early
+ * substitution below about that many starts — which is true of the MEAN and is the wrong thing to
+ * protect. At ten, a player with nine starts is still counted more than half league-average, and in
+ * August that is nearly everybody: the term does the least work in exactly the weeks a squad is being
+ * picked from the least evidence. Three matches the pseudo-count the rate features already use
+ * (`RATE_SHRINK_MINUTES` is 270 minutes, three matches), so the two halves of the model now trust a
+ * player's own record at the same speed.
+ *
+ * What it costs is variance early: a striker taken off on the hour twice in his first three starts
+ * reads as a 60-minute player until the fourth. The prior is still there — at three starts his own
+ * record carries half the weight, not all of it — and the referee reading below is what the number
+ * was chosen against rather than the argument above.
+ */
+const START_BEHAVIOUR_SHRINK = 3;
 /** Non-starts before a player's own rate outweighs the prior — a Beta(k) pseudo-count. */
 const SUB_RATE_SHRINK = 8;
 
