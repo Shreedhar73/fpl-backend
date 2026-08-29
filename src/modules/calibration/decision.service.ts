@@ -36,7 +36,7 @@ import { loadV4Scorers } from '../projections/v4/load';
 import { categoryRmse, v4Bar } from './v4-verdict';
 import highsLoader from 'highs';
 import { HORIZON } from '../optimizer/policy';
-import { MAX_TRANSFERS } from '../transfers/transfer-lp';
+import { maxTransfersFor } from '../transfers/transfer-lp';
 import {
   GREEDY_ONE_FT,
   NO_TRANSFER,
@@ -295,7 +295,9 @@ export class DecisionService {
             rules,
             plannerPolicy((lp) => highs.solve(lp), {
               hitCost: arm.hitCost ?? SIM_OPTIONS.hitCost,
-              maxTransfers: MAX_TRANSFERS,
+              // The served rule, not a copy of it (#97): the planner arm is only worth anything
+              // if it is the planner a user is actually given, and that now reads the bank.
+              maxTransfers: maxTransfersFor,
               // As served, both of them. An arm is only worth anything if it is the planner a user
               // is actually given: a harness that solves a tidier objective than the product
               // measures a planner nobody has.

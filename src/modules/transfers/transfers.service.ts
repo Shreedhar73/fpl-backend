@@ -29,7 +29,8 @@ import { adviseChips, type ChipAdvice } from './chips';
 import {
   buildTransferLp,
   HIT_COST,
-  MAX_TRANSFERS,
+  MAX_HITS,
+  maxTransfersFor,
   type OwnedCandidate,
 } from './transfer-lp';
 import { TransfersRepository } from './transfers.repository';
@@ -53,7 +54,7 @@ import { TransfersRepository } from './transfers.repository';
 
 // Both moved to `transfer-lp.ts` so a backtest can read them without importing this service; they
 // are re-exported here because callers and tests refer to them by this path.
-export { HIT_COST, MAX_TRANSFERS };
+export { HIT_COST, MAX_HITS, maxTransfersFor };
 
 export interface PlannedMove {
   out: {
@@ -177,7 +178,9 @@ export class TransfersService {
       bank: squad.bank,
       freeTransfers: state.freeTransfers,
       hitCost: HIT_COST,
-      maxTransfers: MAX_TRANSFERS,
+      // Everything free, plus the two hits the advice is asked to consider (#97). A flat count made
+      // the reachable hit depth a function of the bank rather than of the question.
+      maxTransfers: maxTransfersFor(state.freeTransfers),
       // The same objective the recommendation is solved under (B-024). It was NOT, for two releases:
       // B-023 gave the squad solve an eleven, a discounted bench and an armband, and this program
       // kept maximising all fifteen equally — so the plan and the recommendation could prefer
