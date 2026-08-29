@@ -315,6 +315,42 @@ export async function openingSquad(
   return rows.filter((r) => chosen.has(`p_${r.playerCode}`));
 }
 
+/**
+ * The free-transfer bank the walk opens with, DERIVED from the round it opens at (#99).
+ *
+ * The seed used to be the literal 1, with the comment "GW1 is unlimited transfers and the squad is
+ * chosen there, so the bank opens at one". That is right if and only if the first round handed to
+ * this function is round 2 — and nothing here established it. The guarantee lived three files away:
+ * both callers build their rounds from `commonRows`, `form` is one of the predictors, `form` is null
+ * at a season's first deadline, so every round-1 row was filtered out before it ever arrived.
+ *
+ * That is a coupling, not an invariant. Removing `form` from `PREDICTORS`, giving it a round-1
+ * fallback, or handing this a full-season map would have started the walk at round 1, held a free
+ * transfer through the unlimited window and granted a second one entering round 2 — every arm one
+ * transfer richer for the season. The A/B comparisons would have stayed valid, because the bias is
+ * identical across arms; the absolute season totals `decision-quality` publishes would have moved.
+ *
+ * So the seed reads the walk instead of assuming it:
+ *
+ * - opens at round 1 — the unlimited squad-selection window, where a free transfer means nothing.
+ *   The bank is 0 during it and the ordinary grant makes it 1 entering round 2, which is FPL.
+ * - opens at round 2 — one free transfer, the case every report has actually run.
+ * - opens later — a mid-season start, and the bank is then a fact about a manager rather than about
+ *   the rules. It cannot be derived, so it is refused rather than guessed.
+ */
+export function openingFreeTransfers(orderedRounds: readonly number[]): number {
+  const first = orderedRounds[0];
+  if (first === undefined) return 1;
+  if (first <= 1) return 0;
+  if (first === 2) return 1;
+  throw new Error(
+    `simulateSeason was handed a walk opening at gameweek ${first}. The free-transfer seed is ` +
+      `derivable only for a season that starts at gameweek 1 or 2 — a mid-season start's bank is a ` +
+      `fact about a manager, not about the rules, and guessing it would shift every season total ` +
+      `this simulator publishes.`,
+  );
+}
+
 export interface SimOptions {
   freeTransferCap: number;
   hitCost: number;
@@ -336,7 +372,11 @@ export interface SimOptions {
 }
 
 /** What a chip must be worth at `round` to be spent, given the bar it starts the season at. */
-export function chipThreshold(base: number, round: number, lastRound = 38): number {
+export function chipThreshold(
+  base: number,
+  round: number,
+  lastRound = 38,
+): number {
   const urgency = Math.min(1, Math.max(0, (round - 1) / (lastRound - 1)));
   return base * (1 - 0.75 * urgency);
 }
@@ -376,8 +416,7 @@ export function simulateSeason(
       position: r.position as PositionCode,
     })),
     bank: rules.budget() - opening.reduce((s, r) => s + r.value, 0),
-    // GW1 is unlimited transfers and the squad is chosen there, so the bank opens at one.
-    freeTransfers: 1,
+    freeTransfers: openingFreeTransfers(orderedRounds),
   };
 
   const rounds: SimRound[] = [];
@@ -452,7 +491,10 @@ export function simulateSeason(
         lastSeen.get(code)?.points ??
         0;
       const tcGain = scored.doubled === null ? 0 : projected(scored.doubled);
-      const bbGain = lineup.bench.reduce((t, m) => t + projected(m.playerCode), 0);
+      const bbGain = lineup.bench.reduce(
+        (t, m) => t + projected(m.playerCode),
+        0,
+      );
       const candidates: { chip: 'TC' | 'BB'; over: number }[] = [];
       if (chipsLeft.has('TC')) {
         const over = tcGain - chipThreshold(options.chips.tripleCaptain, round);
@@ -635,7 +677,10 @@ export function plannerPolicy(
           playerId: String(o.playerCode),
           webName: row?.webName ?? `#${o.playerCode}`,
           position: o.position,
-          teamId: row?.teamCode != null ? String(row.teamCode) : `own_${o.playerCode}`,
+          teamId:
+            row?.teamCode != null
+              ? String(row.teamCode)
+              : `own_${o.playerCode}`,
           teamShortName: `T${row?.teamCode ?? 0}`,
           cost: price,
           ep: row ? ep(row) : 0,
