@@ -79,9 +79,27 @@ export class OptimizerRepository {
     return MODEL_VERSION;
   }
 
+  /**
+   * The next `n` gameweeks a decision can still be made for.
+   *
+   * **`finished: false` is not the same thing, and the difference is destructive.** A gameweek whose
+   * deadline has passed is unfinished for as long as its matches are being played — so the old query
+   * returned the gameweek in progress, and `pnpm project` would write it. Two consequences, both
+   * silent:
+   *
+   * - `writeProjections` upserts on `(playerId, gameweekId, modelVersion)`, so a run during a
+   *   gameweek OVERWRITES the pre-deadline rows for it. Those rows are the record of what the model
+   *   said while the decision was still open, and `score:gameweek` grades them as exactly that. A
+   *   projection written at half-time, scored as a forecast, flatters every model that has one.
+   * - the optimizer would recommend transfers for a gameweek that can no longer take them.
+   *
+   * So the horizon starts at the first gameweek whose deadline is still ahead. Read against the
+   * clock rather than a flag, because `finished` flips at the last whistle and `isNext` is upstream's
+   * opinion, refreshed on a sync this query cannot assume has run.
+   */
   async horizonGameweeks(n: number): Promise<number[]> {
     const rows = await this.prisma.gameweek.findMany({
-      where: { finished: false },
+      where: { finished: false, deadlineTime: { gt: new Date() } },
       orderBy: { id: 'asc' },
       take: n,
       select: { id: true },
