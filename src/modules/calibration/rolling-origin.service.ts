@@ -24,6 +24,11 @@ import {
   FoldOptions,
   FoldPlan,
   MIN_COMPONENT_ROWS,
+  BONUS_TAU_CANDIDATES,
+  describeTau,
+  RATE_CANDIDATES,
+  RateCandidate,
+  describeRates,
   WINDOW_CANDIDATES,
   WindowCandidate,
   Paired,
@@ -91,6 +96,9 @@ export class RollingOriginService {
       seasonHalfLife: SEASON_HALF_LIFE,
       selectedWindow: options.selectWindow ?? false,
       availabilityMode: options.availabilityMode ?? 'joint',
+      selectedRates: options.selectRates ?? false,
+      perPlayerStart: options.perPlayerStart ?? false,
+      selectedBonusTau: options.selectBonusTau ?? false,
       folds,
       across: this.summarise(folds, arms),
     };
@@ -149,13 +157,59 @@ export class RollingOriginService {
       ? options.transform(fit.params, plan)
       : fit.params;
 
+    // The rate half-life and its shrinkage (plan 028 task 2), chosen inside the fold on the season
+    // before it. They are a property of the FEATURE, not of the fit — `fitParams` reads only the
+    // lagged start and sub rates, which this does not touch — so a candidate needs a backtest and
+    // not a refit, and the winner is applied to the params the fold scores under.
+    const rateSelection = options.selectRates
+      ? this.selectRates(rows, plan, split, params, scoringFor, options)
+      : null;
+    const withRatesOnly: FittedParams = rateSelection
+      ? { ...params, rates: rateSelection.candidate }
+      : options.rates
+        ? { ...params, rates: options.rates }
+        : params;
+    // The bonus temperature (plan 028 task 4), chosen on the season before the fold. `undefined` —
+    // the incumbent's clipped-linear term — is in the grid, so the old way can win.
+    const tauSelection = options.selectBonusTau
+      ? this.selectBonusTau(
+          rows,
+          plan,
+          split,
+          withRatesOnly,
+          scoringFor,
+          options,
+        )
+      : null;
+
+    // Price a starter with his own minute record rather than the league constant (plan 028 task 3).
+    // A params flag rather than a code path, so the off state is the incumbent by construction.
+    const withRates: FittedParams =
+      tauSelection && tauSelection.tau !== undefined
+        ? {
+            ...withRatesOnly,
+            bonus: { ...withRatesOnly.bonus, tau: tauSelection.tau },
+          }
+        : options.bonusTau !== undefined
+          ? {
+              ...withRatesOnly,
+              bonus: { ...withRatesOnly.bonus, tau: options.bonusTau },
+            }
+          : withRatesOnly;
+    const scoringParams: FittedParams = options.perPlayerStart
+      ? {
+          ...withRates,
+          minutes: { ...withRates.minutes, perPlayerStart: true },
+        }
+      : withRates;
+
     // The walk is handed the training seasons and the evaluation season only. Nothing later exists
     // as far as this fold is concerned, which is what "rolling origin" means.
     const upToFold = rows.filter(
       (r) =>
         plan.trainSeasons.includes(r.season) || r.season === plan.evalSeason,
     );
-    const result = runBacktest(upToFold, params, scoringFor, {
+    const result = runBacktest(upToFold, scoringParams, scoringFor, {
       evaluate: split.evaluate,
     });
 
@@ -210,6 +264,62 @@ export class RollingOriginService {
       );
     }
 
+    // The rate A/B (plan 028 task 2): the same fold, the same fit, scored twice — once with the
+    // chosen rate parameters and once with the flat career mean the incumbent uses. No refit,
+    // because these parameters are read by the feature walk and not by `fitParams`, so the two arms
+    // differ in exactly one thing.
+    if (options.compareRates && (rateSelection || options.rates)) {
+      const flat = runBacktest(upToFold, params, scoringFor, {
+        evaluate: split.evaluate,
+      });
+      const mine = commonRows(result.rows, ['model', 'form']);
+      const theirs = commonRows(flat.rows, ['model', 'form']);
+      paired['rates chosen vs flat career mean'] = pairedByRound(
+        this.perRound(mine, 'model', view, k),
+        this.perRound(theirs, 'model', view, k),
+      );
+    }
+
+    // The whole of plan 028 against the incumbent, in one pairing: same fold, same fit, scored once
+    // with every model-shape change this plan makes and once with none of them. The individual A/Bs
+    // say which change did what; this says whether the set of them is worth anything.
+    if (options.compareIncumbent) {
+      const incumbent = runBacktest(upToFold, params, scoringFor, {
+        evaluate: split.evaluate,
+      });
+      const mine = commonRows(result.rows, ['model', 'form']);
+      const theirs = commonRows(incumbent.rows, ['model', 'form']);
+      paired['plan 028 model shape vs the incumbent'] = pairedByRound(
+        this.perRound(mine, 'model', view, k),
+        this.perRound(theirs, 'model', view, k),
+      );
+    }
+
+    // The per-player start-behaviour A/B (plan 028 task 3). Same fit, same rates, scored twice.
+    if (options.comparePerPlayerStart) {
+      const other = runBacktest(
+        upToFold,
+        options.perPlayerStart
+          ? withRates
+          : {
+              ...withRates,
+              minutes: { ...withRates.minutes, perPlayerStart: true },
+            },
+        scoringFor,
+        { evaluate: split.evaluate },
+      );
+      const mine = commonRows(result.rows, ['model', 'form']);
+      const theirs = commonRows(other.rows, ['model', 'form']);
+      paired[
+        options.perPlayerStart
+          ? 'per-player start behaviour vs league constants'
+          : 'league constants vs per-player start behaviour'
+      ] = pairedByRound(
+        this.perRound(mine, 'model', view, k),
+        this.perRound(theirs, 'model', view, k),
+      );
+    }
+
     // The availability A/B (plan 027 task 8): the same fold, the same window, the same labels —
     // only how the deadline flags enter the fit differs, and the two are paired per round.
     if (options.compareAvailabilityMode) {
@@ -250,6 +360,8 @@ export class RollingOriginService {
       rounds: new Set(scored.map((r) => r.round)).size,
       scoredRows: scored.length,
       selection,
+      rateSelection,
+      tauSelection,
       fittedMinutes: {
         startIntercept: params.minutes.startIntercept,
         startSlope: params.minutes.startSlope,
@@ -336,6 +448,132 @@ export class RollingOriginService {
     };
   }
 
+  /**
+   * Choose the rate half-life and shrinkage on the fold's validation season.
+   *
+   * A backtest per candidate rather than a refit per candidate, because these parameters are read by
+   * the FEATURE walk and not by `fitParams` — the fitted curves are functions of the lagged start and
+   * sub rates, which no candidate here moves. Scored on the same validation rows the window selection
+   * uses, so the two selections are answering their questions on the same evidence.
+   */
+  private selectRates(
+    rows: HistoryRow[],
+    plan: FoldPlan,
+    split: FoldSplit,
+    params: FittedParams,
+    scoringFor: (season: string) => Scoring,
+    options: RunOptions,
+  ): RateSelection | null {
+    if (split.validate.length === 0 || plan.validateSeason === null)
+      return null;
+    const view = options.view ?? ORDERING_VIEWS[0];
+    const k = options.k ?? RollingOriginService.PRIMARY_K;
+    const upToValidate = rows.filter((r) =>
+      plan.trainSeasons.includes(r.season),
+    );
+
+    const scored: RateScore[] = [];
+    for (const candidate of RATE_CANDIDATES) {
+      const result = runBacktest(
+        upToValidate,
+        { ...params, rates: candidate },
+        scoringFor,
+        {
+          evaluate: (row) =>
+            row.season === plan.validateSeason &&
+            row.round >= plan.validateFromRound,
+        },
+      );
+      const common = commonRows(result.rows, ['model', 'form']);
+      const perRound = this.perRound(common, 'model', view, k);
+      const captured =
+        perRound.length === 0
+          ? null
+          : perRound.reduce((t, r) => t + r.value, 0) / perRound.length;
+      scored.push({ candidate, rounds: perRound.length, captured });
+    }
+
+    const usable = scored.filter(
+      (c): c is RateScore & { captured: number } => c.captured !== null,
+    );
+    if (usable.length === 0) return null;
+    const best = usable.reduce((a, b) => (b.captured > a.captured ? b : a));
+    const worst = usable.reduce((a, b) => (b.captured < a.captured ? b : a));
+    this.log.log(
+      `fold ${plan.evalSeason}: rates — chose ${describeRates(best.candidate)} on ` +
+        `${plan.validateSeason} (captured ${(100 * best.captured).toFixed(2)}%, ` +
+        `spread ${(100 * (best.captured - worst.captured)).toFixed(2)}pp)`,
+    );
+    return {
+      candidate: best.candidate,
+      validateCaptured: best.captured,
+      spread: best.captured - worst.captured,
+      candidates: scored,
+    };
+  }
+
+  /**
+   * Choose the bonus temperature on the fold's validation season.
+   *
+   * A backtest per candidate and no refit: `fitParams` does not read this parameter — the incumbent's
+   * `bonusPerBps` is fitted from the same rows either way and simply goes unused when the rank model
+   * is on. `undefined` is in the grid because "the term that shipped" has to be able to win.
+   */
+  private selectBonusTau(
+    rows: HistoryRow[],
+    plan: FoldPlan,
+    split: FoldSplit,
+    params: FittedParams,
+    scoringFor: (season: string) => Scoring,
+    options: RunOptions,
+  ): TauSelection | null {
+    if (split.validate.length === 0 || plan.validateSeason === null)
+      return null;
+    const view = options.view ?? ORDERING_VIEWS[0];
+    const k = options.k ?? RollingOriginService.PRIMARY_K;
+    const upToValidate = rows.filter((r) =>
+      plan.trainSeasons.includes(r.season),
+    );
+
+    const scored: TauScore[] = [];
+    for (const tau of BONUS_TAU_CANDIDATES) {
+      const candidateParams: FittedParams =
+        tau === undefined
+          ? params
+          : { ...params, bonus: { ...params.bonus, tau } };
+      const result = runBacktest(upToValidate, candidateParams, scoringFor, {
+        evaluate: (row) =>
+          row.season === plan.validateSeason &&
+          row.round >= plan.validateFromRound,
+      });
+      const common = commonRows(result.rows, ['model', 'form']);
+      const perRound = this.perRound(common, 'model', view, k);
+      const captured =
+        perRound.length === 0
+          ? null
+          : perRound.reduce((t, r) => t + r.value, 0) / perRound.length;
+      scored.push({ tau, rounds: perRound.length, captured });
+    }
+
+    const usable = scored.filter(
+      (c): c is TauScore & { captured: number } => c.captured !== null,
+    );
+    if (usable.length === 0) return null;
+    const best = usable.reduce((a, b) => (b.captured > a.captured ? b : a));
+    const worst = usable.reduce((a, b) => (b.captured < a.captured ? b : a));
+    this.log.log(
+      `fold ${plan.evalSeason}: bonus — chose ${describeTau(best.tau)} on ` +
+        `${plan.validateSeason} (captured ${(100 * best.captured).toFixed(2)}%, ` +
+        `spread ${(100 * (best.captured - worst.captured)).toFixed(2)}pp)`,
+    );
+    return {
+      tau: best.tau,
+      validateCaptured: best.captured,
+      spread: best.captured - worst.captured,
+      candidates: scored,
+    };
+  }
+
   /** One predictor's points-captured@k, per round of the fold — the values that get paired. */
   private perRound(
     rows: ReturnType<typeof commonRows>,
@@ -404,6 +642,9 @@ export class RollingOriginService {
       report.availabilityMode === 'joint'
         ? null
         : `avail-${report.availabilityMode}`,
+      report.selectedRates ? 'rates' : null,
+      report.perPlayerStart ? 'startbehaviour' : null,
+      report.selectedBonusTau ? 'bonusrank' : null,
     ].filter(Boolean);
     const path = join(
       dir,
@@ -433,6 +674,22 @@ export interface RunOptions {
    * deliberately, and the one this project's own comment says is the worse of two.
    */
   selectWindow?: boolean;
+  /** choose the rate half-life and shrinkage per fold, on the season before it (plan 028 task 2) */
+  selectRates?: boolean;
+  /** apply one fixed rate candidate to every fold, instead of selecting */
+  rates?: RateCandidate;
+  /** score each fold twice — with the chosen rates and with the flat career mean — and pair them */
+  compareRates?: boolean;
+  /** price a starter with his own E[minutes | started] and P(60+ | started) (plan 028 task 3) */
+  perPlayerStart?: boolean;
+  /** score each fold twice — per-player start behaviour against the league constants — and pair */
+  comparePerPlayerStart?: boolean;
+  /** score each fold twice — every plan 028 change against none of them — and pair */
+  compareIncumbent?: boolean;
+  /** choose the bonus temperature per fold, on the season before it (plan 028 task 4) */
+  selectBonusTau?: boolean;
+  /** apply one fixed bonus temperature to every fold, instead of selecting */
+  bonusTau?: number;
   /**
    * How the deadline-time flags enter the fit for the MAIN arm (plan 027 task 8).
    *
@@ -477,6 +734,33 @@ export interface WindowSelection {
   candidates: CandidateScore[];
 }
 
+export interface TauScore {
+  tau: number | undefined;
+  rounds: number;
+  captured: number | null;
+}
+
+export interface TauSelection {
+  tau: number | undefined;
+  validateCaptured: number;
+  spread: number;
+  candidates: TauScore[];
+}
+
+export interface RateScore {
+  candidate: RateCandidate;
+  rounds: number;
+  captured: number | null;
+}
+
+export interface RateSelection {
+  candidate: RateCandidate;
+  validateCaptured: number;
+  /** best minus worst on validation — how much the choice was worth at all */
+  spread: number;
+  candidates: RateScore[];
+}
+
 export interface FoldResult {
   plan: FoldPlan;
   /** false when the fold was planned and refused — the reason is in `plan.blockers` */
@@ -486,6 +770,10 @@ export interface FoldResult {
   scoredRows: number;
   /** what the fold chose, and what it chose between — null when selection was off */
   selection?: WindowSelection | null;
+  /** the rate half-life and shrinkage the fold chose, on the season before it */
+  rateSelection?: RateSelection | null;
+  /** the bonus temperature the fold chose, on the season before it */
+  tauSelection?: TauSelection | null;
   /** the three minutes parameters, carried so a report can show the fit MOVED between folds */
   fittedMinutes?: {
     startIntercept: number;
@@ -523,6 +811,12 @@ export interface RollingOriginReport {
   selectedWindow: boolean;
   /** how the deadline-time flags entered the main arm's fit */
   availabilityMode: 'joint' | 'unflagged-base' | 'none';
+  /** whether each fold chose its rate half-life and shrinkage on the season before it */
+  selectedRates: boolean;
+  /** whether starters were priced with their own minute record rather than the league constant */
+  perPlayerStart: boolean;
+  /** whether each fold chose its bonus temperature on the season before it */
+  selectedBonusTau: boolean;
   folds: FoldResult[];
   across: Record<string, AcrossFolds | null>;
   path?: string;
@@ -569,6 +863,9 @@ export function renderReport(report: RollingOriginReport): string {
       `Season half-life: ${Number.isFinite(report.seasonHalfLife) ? `${report.seasonHalfLife} season(s) — older seasons down-weighted` : 'none — every season counts equally'}. ` +
       `Imputed start labels: ${report.imputedStarts ? 'USED — the seasons before 2023-24 fit the minutes model on inferred probabilities (plan 027 task 6)' : 'not used'}. ` +
       `Window and decay: ${report.selectedWindow ? 'CHOSEN per fold, on the season before it' : 'fixed for every fold'}. ` +
+      `Player rates: ${report.selectedRates ? 'half-life and shrinkage CHOSEN per fold, on the season before it (plan 028)' : 'the flat career mean'}. ` +
+      `Bonus: ${report.selectedBonusTau ? 'rank inside the fixture, temperature CHOSEN per fold (plan 028 task 4)' : "a clipped linear function of the player's own BPS"}. ` +
+      `Starter minutes: ${report.perPlayerStart ? "each player's OWN E[minutes | started] and P(60+ | started), shrunk (plan 028 task 3)" : 'the two league constants'}. ` +
       `Availability: ${
         report.availabilityMode === 'joint'
           ? "plan 024's fitted flags"
@@ -656,6 +953,76 @@ export function renderReport(report: RollingOriginReport): string {
       for (const c of sel.candidates) {
         lines.push(
           `| ${describeCandidate(c.candidate)} | ${c.seasons.length} | ${c.rounds} | ` +
+            `${c.captured === null ? '—' : pct(c.captured)} |`,
+        );
+      }
+      lines.push('');
+    }
+  }
+  const tauChosen = ran.filter((f) => f.tauSelection);
+  if (tauChosen.length > 0) {
+    lines.push('### What each fold chose for the bonus term');
+    lines.push('');
+    lines.push(
+      'A fixture has six bonus points and always has. The incumbent term hands out 8.15–8.72 on ' +
+        "average and up to 16.56 in one match, because it reads a player's own BPS and nothing " +
+        'else; the rank model pays exactly six by construction. The incumbent is in the grid, so it ' +
+        'can win.',
+    );
+    lines.push('');
+    lines.push('| eval season | chosen | validate captured | spread |');
+    lines.push('|---|---|---:|---:|');
+    for (const f of tauChosen) {
+      const sel = f.tauSelection!;
+      lines.push(
+        `| ${f.plan.evalSeason} | ${describeTau(sel.tau)} | ` +
+          `${pct(sel.validateCaptured)} | ${(100 * sel.spread).toFixed(2)}pp |`,
+      );
+    }
+    lines.push('');
+    for (const f of tauChosen) {
+      lines.push(`**${f.plan.evalSeason} — every bonus candidate**`);
+      lines.push('');
+      lines.push('| candidate | rounds | validate captured |');
+      lines.push('|---|---:|---:|');
+      for (const c of f.tauSelection!.candidates) {
+        lines.push(
+          `| ${describeTau(c.tau)} | ${c.rounds} | ` +
+            `${c.captured === null ? '—' : pct(c.captured)} |`,
+        );
+      }
+      lines.push('');
+    }
+  }
+  const rateChosen = ran.filter((f) => f.rateSelection);
+  if (rateChosen.length > 0) {
+    lines.push('### What each fold chose for the player rates');
+    lines.push('');
+    lines.push(
+      "How much of a player's own past counts toward the rate he is credited with, chosen inside " +
+        'each fold on the season before it. The flat career mean is in the grid, so "no decay" can ' +
+        'win. `spread` is best minus worst across candidates: a flat grid means the objective could ' +
+        'not tell them apart, whatever the winner is called.',
+    );
+    lines.push('');
+    lines.push('| eval season | chosen | validate captured | spread |');
+    lines.push('|---|---|---:|---:|');
+    for (const f of rateChosen) {
+      const sel = f.rateSelection!;
+      lines.push(
+        `| ${f.plan.evalSeason} | ${describeRates(sel.candidate)} | ` +
+          `${pct(sel.validateCaptured)} | ${(100 * sel.spread).toFixed(2)}pp |`,
+      );
+    }
+    lines.push('');
+    for (const f of rateChosen) {
+      lines.push(`**${f.plan.evalSeason} — every rate candidate**`);
+      lines.push('');
+      lines.push('| candidate | rounds | validate captured |');
+      lines.push('|---|---:|---:|');
+      for (const c of f.rateSelection!.candidates) {
+        lines.push(
+          `| ${describeRates(c.candidate)} | ${c.rounds} | ` +
             `${c.captured === null ? '—' : pct(c.captured)} |`,
         );
       }

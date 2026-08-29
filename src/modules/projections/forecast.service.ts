@@ -157,6 +157,8 @@ export class ForecastService {
           {
             startRate: features.laggedStartRate,
             subRate: features.laggedSubRate,
+            startMinutes: features.startMinutes,
+            startSixty: features.startSixty,
           },
           multiplier,
           params,

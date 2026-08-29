@@ -533,3 +533,62 @@ export function candidateSeasons(
       )
     : [...plan.trainSeasons];
 }
+
+/**
+ * How a player's own record becomes a rate (B-041, plan 028 tasks 1 and 2).
+ *
+ * The grid is small for the reason D-023 names: a wide grid on a half-season of validation rounds
+ * returns a winner whether or not one exists. `Infinity` is the incumbent — the flat career mean —
+ * and it is in the grid, so "no decay" can win.
+ *
+ * The shrinkage moves with the half-life on purpose. Under decay the denominator is an EFFECTIVE
+ * minute count, and a 270-minute pseudo-count against a decayed record is a much heavier prior than
+ * the same number against a whole career: at a three-round half-life a full-time player carries
+ * roughly 390 effective minutes, so 270 would shrink him halfway to the positional mean. Pairing
+ * them is what keeps the comparison about recency rather than about accidental over-shrinking.
+ */
+export interface RateCandidate {
+  halfLifeRounds: number;
+  shrinkMinutes: number;
+}
+
+export const RATE_CANDIDATES: RateCandidate[] = [
+  { halfLifeRounds: Infinity, shrinkMinutes: 270 },
+  { halfLifeRounds: Infinity, shrinkMinutes: 540 },
+  { halfLifeRounds: 38, shrinkMinutes: 270 },
+  { halfLifeRounds: 19, shrinkMinutes: 270 },
+  { halfLifeRounds: 12, shrinkMinutes: 180 },
+  { halfLifeRounds: 8, shrinkMinutes: 135 },
+  { halfLifeRounds: 5, shrinkMinutes: 90 },
+  { halfLifeRounds: 3, shrinkMinutes: 60 },
+];
+
+export function describeRates(c: RateCandidate): string {
+  const life = Number.isFinite(c.halfLifeRounds)
+    ? `half-life ${c.halfLifeRounds} rounds`
+    : 'flat career mean';
+  return `${life}, shrink ${c.shrinkMinutes}`;
+}
+
+/**
+ * The Plackett–Luce temperature for rank-based bonus (B-041, plan 028 task 4), in BPS.
+ *
+ * `undefined` is the incumbent's clipped-linear term and is in the grid, so "the old way" can win.
+ * The spread of realised match BPS among the players who take bonus is on the order of ten, so the
+ * candidates bracket that: 3 is nearly winner-take-all, 30 is close to a lottery among everyone who
+ * played.
+ */
+export const BONUS_TAU_CANDIDATES: (number | undefined)[] = [
+  undefined,
+  3,
+  6,
+  10,
+  16,
+  30,
+];
+
+export function describeTau(tau: number | undefined): string {
+  return tau === undefined
+    ? 'the incumbent clipped-linear term'
+    : `rank model, tau ${tau}`;
+}

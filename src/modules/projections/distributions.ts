@@ -242,6 +242,34 @@ export function bernoulliPmf(probability: number, points: number): PointsPmf {
  * 1, so an award is close to uniform over them. Modelling bonus as a mean would give a player a
  * guaranteed 0.4 points, which is not a thing that can happen and which understates the spread.
  */
+/**
+ * The bonus distribution when the three awards have their OWN probabilities (B-041, plan 028 task 4).
+ *
+ * `bonusPmf` below splits `P(any)` evenly across 3, 2 and 1 because the incumbent term only knows a
+ * total. The rank model knows which award: a player who leads a match on BPS is far more likely to
+ * take the three than the one, and an even split understates his upside and overstates his floor.
+ * The mean of this pmf is `3·first + 2·second + third` exactly, which is what keeps
+ * `distribution.mean` equal to `ep`.
+ */
+export function bonusRankPmf(
+  first: number,
+  second: number,
+  third: number,
+  pointsPerBonus: number,
+): PointsPmf {
+  const clamp = (x: number) => Math.max(0, Math.min(1, x));
+  const p3 = clamp(first);
+  const p2 = clamp(second);
+  const p1 = clamp(third);
+  const span = 3 * Math.max(1, pointsPerBonus);
+  const p = new Array<number>(span + 1).fill(0);
+  p[0] = Math.max(0, 1 - p3 - p2 - p1);
+  p[1 * pointsPerBonus] += p1;
+  p[2 * pointsPerBonus] += p2;
+  p[3 * pointsPerBonus] += p3;
+  return { min: 0, p };
+}
+
 export function bonusPmf(pAny: number, pointsPerBonus: number): PointsPmf {
   const q = Math.max(0, Math.min(1, pAny));
   const span = 3 * Math.max(1, pointsPerBonus);

@@ -6,7 +6,7 @@ import {
   League,
   StrengthInputRow,
 } from './strength';
-import { FittedParams } from './fitted';
+import { FittedParams, RateParams } from './fitted';
 import { PlayerRates } from './model-v2';
 
 /**
@@ -89,6 +89,18 @@ export interface HistoryRow {
 export interface PlayerFeatures {
   rates: PlayerRates;
   laggedStartRate: number;
+  /**
+   * This player's own `E[minutes | started]` and `P(60+ | started)`, shrunk toward the league
+   * constants the model otherwise uses (B-041, plan 028 task 3).
+   *
+   * Season first and career behind, for the same reason `laggedStartRate` is: being taken off on the
+   * hour is a role, and roles change between seasons. Both are `null` until the player has started
+   * anything at all — a number invented from no starts is worse than the constant it would replace.
+   */
+  startMinutes: number | null;
+  startSixty: number | null;
+  /** the weighted starts those two rest on, so a thin one can be recognised as thin */
+  startsSample: number;
   /** appearances the rates rest on — thin samples are shrunk, and the report says how thin */
   minutesSample: number;
   matchesSample: number;
@@ -176,6 +188,18 @@ interface Accumulator {
   startMatches: number;
   /** appearances (minutes > 0) among those same rows — the numerator side of the sub rate */
   startAppearances: number;
+  /**
+   * Minutes played in the matches this player STARTED, and how many of those reached the hour
+   * (B-041, plan 028 task 3).
+   *
+   * Weighted by the start evidence, so a recorded start contributes 1 and an imputed one contributes
+   * its probability. Two league constants stand in for these today — 82.8 minutes and P(60+) = 0.934
+   * — and over 591 players with ten or more starts the truth runs from 69.1 to 90.0 minutes and from
+   * 0.75 to 1.00. That difference multiplies every rate term the model has.
+   */
+  startedWeight: number;
+  startedMinutes: number;
+  startedSixty: number;
   /** every row, including unused-sub zeros — NOT an appearance count. See `appearances`. */
   matches: number;
   /** rows with minutes > 0 — the appearance count B-010's floor is defined on */
@@ -198,6 +222,9 @@ const empty = (): Accumulator => ({
   starts: 0,
   startMatches: 0,
   startAppearances: 0,
+  startedWeight: 0,
+  startedMinutes: 0,
+  startedSixty: 0,
   matches: 0,
   appearances: 0,
   xg: 0,
@@ -299,6 +326,19 @@ export function* walkRounds(
 
   /** playerCode → career accumulator, carried across seasons */
   const career = new Map<number, Accumulator>();
+  /**
+   * playerCode → the same player's rate evidence, aged one round at a time (B-041).
+   *
+   * Carried ACROSS seasons like the career accumulator, because the decay is what handles the passage
+   * of time — resetting it every August would be a second, unfitted claim about how much last season
+   * counts. Inert unless `params.rates` says otherwise: at an infinite half-life the factor is 1 and
+   * this map holds exactly the career totals.
+   */
+  const decayed = new Map<number, DecayedRates>();
+  const rateHalfLife = params.rates?.halfLifeRounds ?? Infinity;
+  const decayFactor = Number.isFinite(rateHalfLife)
+    ? Math.pow(0.5, 1 / rateHalfLife)
+    : 1;
   /** playerCode → the accumulator for the season that has just ended */
   const lastSeason = new Map<number, LastSeason>();
   /** current-season strength inputs, reset when the season turns over */
@@ -355,7 +395,15 @@ export function* walkRounds(
     // state, because it holds values rather than a reference to the walk.
     const items: ScoredRow[] = roundRows.map((row) => ({
       row,
-      features: featuresFor(row, career, seasonAcc, lastSeason, round),
+      features: featuresFor(
+        row,
+        career,
+        seasonAcc,
+        lastSeason,
+        round,
+        params.rates,
+        decayed,
+      ),
       goalRates: fixtureGoalRates(
         row.teamCode === null ? undefined : league.teams.get(row.teamCode),
         row.opponentTeamCode === null
@@ -378,7 +426,15 @@ export function* walkRounds(
         round: round + ahead,
         items: rowsAhead.map((row) => ({
           row,
-          features: featuresFor(row, career, seasonAcc, lastSeason, round),
+          features: featuresFor(
+            row,
+            career,
+            seasonAcc,
+            lastSeason,
+            round,
+            params.rates,
+            decayed,
+          ),
           goalRates: fixtureGoalRates(
             row.teamCode === null ? undefined : league.teams.get(row.teamCode),
             row.opponentTeamCode === null
@@ -395,7 +451,11 @@ export function* walkRounds(
     yield { season, round, league, items, future };
 
     // Only now does this round become visible to anything.
+    // Age what is already known BEFORE this round's rows join it, so a match is at full weight in
+    // the round after it was played and never at more than that.
+    decayAll(decayed, decayFactor);
     for (const row of roundRows) {
+      foldDecayed(decayed, row);
       fold(career, row, options.imputedStarts ?? false);
       fold(seasonAcc, row, options.imputedStarts ?? false);
       strengthRows.push({
@@ -433,6 +493,21 @@ function fold(
   a.minutes += row.minutes;
   // Absent is not zero. A row from a season with no `starts` column contributes to neither the
   // numerator nor the denominator, so the rate describes the seasons that actually recorded it.
+  // What this row says about "how long does he play when he starts", weighted by how sure the start
+  // itself is. A row that says nothing about starting contributes to neither side.
+  const startWeight =
+    row.starts !== null
+      ? row.starts > 0
+        ? 1
+        : 0
+      : imputedStarts && row.startProb !== null && row.startProb !== undefined
+        ? row.startProb
+        : 0;
+  if (startWeight > 0) {
+    a.startedWeight += startWeight;
+    a.startedMinutes += startWeight * row.minutes;
+    if (row.minutes >= 60) a.startedSixty += startWeight;
+  }
   if (row.starts !== null) {
     a.starts += row.starts;
     a.startMatches += 1;
@@ -466,12 +541,77 @@ function fold(
   if (a.recent.length > FORM_ROUNDS * 2) a.recent.shift();
 }
 
+/**
+ * The decayed counterpart of the rate fields in `Accumulator` (B-041, plan 028 task 1).
+ *
+ * A SECOND accumulator rather than a decay applied to the existing one, and the separation is
+ * load-bearing: `matches`, `appearances`, `startMatches` and `starts` are counts that other parts of
+ * the model define thresholds on — B-010's appearance floor, the start curve's denominator, the
+ * sample sizes a report prints. Decaying those would silently move a floor and a fitted curve while
+ * claiming to change a rate. Only the quantities a per-90 rate is built from are carried here.
+ */
+interface DecayedRates {
+  minutes: number;
+  xg: number;
+  xa: number;
+  xgMinutes: number;
+  defcon: number;
+  defconMinutes: number;
+  saves: number;
+  bps: number;
+}
+
+const emptyDecayed = (): DecayedRates => ({
+  minutes: 0,
+  xg: 0,
+  xa: 0,
+  xgMinutes: 0,
+  defcon: 0,
+  defconMinutes: 0,
+  saves: 0,
+  bps: 0,
+});
+
+function foldDecayed(acc: Map<number, DecayedRates>, row: HistoryRow): void {
+  let a = acc.get(row.playerCode);
+  if (!a) acc.set(row.playerCode, (a = emptyDecayed()));
+  a.minutes += row.minutes;
+  if (row.expectedGoals !== null) {
+    a.xg += row.expectedGoals;
+    a.xa += row.expectedAssists ?? 0;
+    a.xgMinutes += row.minutes;
+  }
+  if (row.defensiveContribution !== null) {
+    a.defcon += row.defensiveContribution;
+    a.defconMinutes += row.minutes;
+  }
+  a.saves += row.saves;
+  a.bps += row.bps;
+}
+
+/** Age every player's decayed evidence by one round. */
+function decayAll(acc: Map<number, DecayedRates>, factor: number): void {
+  if (factor >= 1) return;
+  for (const a of acc.values()) {
+    a.minutes *= factor;
+    a.xg *= factor;
+    a.xa *= factor;
+    a.xgMinutes *= factor;
+    a.defcon *= factor;
+    a.defconMinutes *= factor;
+    a.saves *= factor;
+    a.bps *= factor;
+  }
+}
+
 function featuresFor(
   row: HistoryRow,
   career: Map<number, Accumulator>,
   seasonAcc: Map<number, Accumulator>,
   lastSeason: Map<number, LastSeason>,
   round: number,
+  rateParams?: RateParams,
+  decayed?: Map<number, DecayedRates>,
 ): PlayerFeatures {
   const c = career.get(row.playerCode) ?? empty();
   const s = seasonAcc.get(row.playerCode) ?? empty();
@@ -479,8 +619,12 @@ function featuresFor(
   // Rates from the whole career so far, shrunk toward the positional mean while the sample is thin.
   // A promoted-club player or a new signing has nothing, and gets the positional mean rather than a
   // rate invented from three appearances.
-  const mins = Math.max(c.minutes, 0);
-  const weight = mins / (mins + RATE_SHRINK_MINUTES);
+  // Which record the rates are built from, and how hard they are shrunk. Absent `rateParams`, both
+  // are exactly what they were before B-041: the flat career totals and a hand-written 270 minutes.
+  const r = (rateParams ? decayed?.get(row.playerCode) : undefined) ?? c;
+  const shrink = rateParams?.shrinkMinutes ?? RATE_SHRINK_MINUTES;
+  const mins = Math.max(r.minutes, 0);
+  const weight = mins / (mins + shrink);
   const league = LEAGUE_RATES[row.position];
 
   const per90 = (total: number, minutes: number) =>
@@ -489,18 +633,46 @@ function featuresFor(
   // xG and xA are divided by the minutes in which they were RECORDED, and shrunk on that same
   // sample. Using `mins` would spread six seasons of missing chance data across the denominator and
   // report every pre-2022 career as chanceless.
-  const xgWeight = c.xgMinutes / (c.xgMinutes + RATE_SHRINK_MINUTES);
+  const xgWeight = r.xgMinutes / (r.xgMinutes + shrink);
   const rates: PlayerRates = {
-    xg90: blend(per90(c.xg, c.xgMinutes), league.xg90, xgWeight),
-    xa90: blend(per90(c.xa, c.xgMinutes), league.xa90, xgWeight),
+    xg90: blend(per90(r.xg, r.xgMinutes), league.xg90, xgWeight),
+    xa90: blend(per90(r.xa, r.xgMinutes), league.xa90, xgWeight),
     defcon90: blend(
-      per90(c.defcon, c.defconMinutes),
+      per90(r.defcon, r.defconMinutes),
       league.defcon90,
-      c.defconMinutes / (c.defconMinutes + RATE_SHRINK_MINUTES),
+      r.defconMinutes / (r.defconMinutes + shrink),
     ),
-    saves90: blend(per90(c.saves, mins), league.saves90, weight),
-    bps90: blend(per90(c.bps, mins), league.bps90, weight),
+    saves90: blend(per90(r.saves, mins), league.saves90, weight),
+    bps90: blend(per90(r.bps, mins), league.bps90, weight),
   };
+
+  // Per-player start behaviour, season first and career behind, shrunk toward the league constants.
+  // The shrink target is written here rather than threaded from the fitted params for the reason
+  // `SUB_RATE_PRIOR` gives: a smoothing target that moves with the fit makes the fitted curve a
+  // function of its own output.
+  const startBehaviour = (
+    pick: Accumulator,
+  ): { minutes: number; sixty: number } | null => {
+    if (pick.startedWeight <= 0) return null;
+    const w =
+      pick.startedWeight / (pick.startedWeight + START_BEHAVIOUR_SHRINK);
+    return {
+      minutes: blend(
+        pick.startedMinutes / pick.startedWeight,
+        MINUTES_GIVEN_START_PRIOR,
+        w,
+      ),
+      sixty: blend(
+        pick.startedSixty / pick.startedWeight,
+        SIXTY_GIVEN_START_PRIOR,
+        w,
+      ),
+    };
+  };
+  const behaviour =
+    (s.startedWeight >= START_BEHAVIOUR_SHRINK
+      ? startBehaviour(s)
+      : startBehaviour(c)) ?? null;
 
   const recent = s.recent.filter((r) => r.round >= round - FORM_ROUNDS);
   const form =
@@ -524,6 +696,13 @@ function featuresFor(
           ? c.starts / c.startMatches
           : 0.3,
     laggedSubRate: laggedSubRate(s, c),
+    // Under a finite rate half-life this is the DECAYED minute count — the effective sample the
+    // rates actually rest on, which is what the field has always claimed to be. Unread anywhere else
+    // in the codebase (checked), so nothing downstream silently changes meaning with it.
+    startMinutes: behaviour ? behaviour.minutes : null,
+    startSixty: behaviour ? behaviour.sixty : null,
+    startsSample: (s.startedWeight >= START_BEHAVIOUR_SHRINK ? s : c)
+      .startedWeight,
     minutesSample: mins,
     matchesSample: c.matches,
     appearancesSample: c.appearances,
@@ -573,6 +752,18 @@ function blend(own: number, league: number, weight: number): number {
  * smoothing target that moves with the fit makes the fitted curve a function of its own output.
  */
 const SUB_RATE_PRIOR = 0.15;
+/**
+ * The league behaviour a thin start record is shrunk toward, and how many starts it takes to
+ * outweigh it.
+ *
+ * The two values are the fitted constants as of the incumbent (`fitted.ts`: 82.8 minutes and 0.934),
+ * written here as smoothing targets rather than read from the params — same argument as
+ * `SUB_RATE_PRIOR`. Ten starts is roughly where a mean minute count stops being dominated by one
+ * early substitution.
+ */
+const MINUTES_GIVEN_START_PRIOR = 82.8;
+const SIXTY_GIVEN_START_PRIOR = 0.934;
+const START_BEHAVIOUR_SHRINK = 10;
 /** Non-starts before a player's own rate outweighs the prior — a Beta(k) pseudo-count. */
 const SUB_RATE_SHRINK = 8;
 

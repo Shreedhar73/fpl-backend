@@ -10,6 +10,7 @@
  *   pnpm referee:rolling --imputed        let pre-2023-24 seasons fit minutes on imputed labels
  *   pnpm referee:rolling --imputed --compare-imputed   pair the two fits directly, per round
  *   pnpm referee:rolling --select-window  choose window and decay per fold, on the season before it
+ *   pnpm referee:rolling --select-rates   choose the player-rate half-life and shrinkage per fold
  *   pnpm referee:rolling --availability unflagged-base --vs-availability none
  *                                         the hybrid against the incumbent's hand rule, paired
  *
@@ -63,6 +64,14 @@ async function main(): Promise<void> {
     }
     return value;
   };
+  // Plan 028 tasks 1-2: choose how much of a player's own past counts toward his rate, per fold, on
+  // the season before it.
+  const selectRates = process.argv.includes('--select-rates');
+  const compareRates = process.argv.includes('--compare-rates');
+  const perPlayerStart = process.argv.includes('--per-player-start');
+  const comparePerPlayerStart = process.argv.includes('--compare-start');
+  const compareIncumbent = process.argv.includes('--compare-incumbent');
+  const selectBonusTau = process.argv.includes('--select-bonus');
   const availabilityMode = modeFlag('availability');
   const compareAvailabilityMode = modeFlag('vs-availability');
 
@@ -78,6 +87,12 @@ async function main(): Promise<void> {
       k,
       compareImputed,
       selectWindow,
+      selectRates,
+      compareRates,
+      perPlayerStart,
+      comparePerPlayerStart,
+      compareIncumbent,
+      selectBonusTau,
       availabilityMode,
       compareAvailabilityMode,
     });

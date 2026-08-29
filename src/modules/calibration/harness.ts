@@ -18,6 +18,11 @@ import {
 import { HORIZON_DECAY } from '../optimizer/policy';
 import { Observation } from './metrics';
 import { exportFeatures } from './feature-export';
+import {
+  BONUS_POINTS_PER_FIXTURE,
+  BonusRanks,
+  fixtureBonus,
+} from '../projections/bonus-rank';
 
 /**
  * Runs a model over history and collects what it predicted beside what happened.
@@ -253,12 +258,81 @@ export function runBacktest(
       : availabilityMultiplier(row.deadlineStatus, row.deadlineChance ?? null));
   const minutesFor = (row: HistoryRow, features: PlayerFeatures) =>
     minutesDistribution(
-      { startRate: features.laggedStartRate, subRate: features.laggedSubRate },
+      {
+        startRate: features.laggedStartRate,
+        subRate: features.laggedSubRate,
+        // Read only when `params.minutes.perPlayerStart` says so (B-041); carried always, so the
+        // harness and the serving path hand the model the same shape.
+        startMinutes: features.startMinutes,
+        startSixty: features.startSixty,
+      },
       legacyMultiplier(row),
       params,
       row.position,
       availInput(row),
     );
+
+  /**
+   * Bonus ranks for one round's fixtures (B-041, plan 028 task 4).
+   *
+   * A pre-pass, because a rank needs the field: the model cannot compute this player's bonus without
+   * the other twenty-one in his match. Built from the SAME minutes distribution and BPS rate the
+   * projection then uses, so the two cannot disagree about the player they are both about.
+   *
+   * Returns an empty map when the params carry no `bonus.tau`, which is the incumbent — the clipped
+   * linear term stays and nothing here runs.
+   */
+  /** Bonus points the rank model issued, and over how many fixtures — checked after the walk. */
+  let bonusPointsIssued = 0;
+  let bonusFixtures = 0;
+
+  const bonusFor = (items: readonly ScoredRow[]): Map<string, BonusRanks> => {
+    const tau = params.bonus.tau;
+    const out = new Map<string, BonusRanks>();
+    if (tau === undefined) return out;
+    const byFixture = new Map<string, ScoredRow[]>();
+    for (const item of items) {
+      const key = `${item.row.season}|${item.row.round}|${item.row.fixture}`;
+      const at = byFixture.get(key);
+      if (at) at.push(item);
+      else byFixture.set(key, [item]);
+    }
+    for (const [, group] of byFixture) {
+      const candidates = group.map(({ row, features }) => {
+        const minutes = minutesFor(row, features);
+        return {
+          key: row.playerCode,
+          pPlay: minutes.pPlay,
+          // E[BPS | played], which is what the rank is over — not E[BPS], which would double-count
+          // the chance of featuring that already sits in `pPlay`.
+          expectedBps:
+            ((minutes.pPlay > 0 ? minutes.expectedMinutes / minutes.pPlay : 0) /
+              90) *
+            features.rates.bps90,
+        };
+      });
+      const fixture = fixtureBonus(candidates, tau);
+      // The arithmetic that says the pre-pass actually saw a whole match. A fixture has six bonus
+      // points; if the harness were handing this function half a fixture, or dropping the rows it
+      // later declines to score, the total would come back short and nothing else would show it.
+      // Accumulated rather than asserted per fixture — a genuinely empty fixture returns 0 by design.
+      if (fixture.totalExpected > 0) {
+        bonusFixtures += 1;
+        bonusPointsIssued += fixture.totalExpected;
+      }
+      const ranks = fixture.ranks;
+      for (const item of group) {
+        const r = ranks.get(item.row.playerCode);
+        if (r) {
+          out.set(
+            `${item.row.season}|${item.row.round}|${item.row.fixture}|${item.row.playerCode}`,
+            r,
+          );
+        }
+      }
+    }
+    return out;
+  };
 
   // One projection path for the round being scored and for every round in its horizon. Two would be
   // two models, and the horizon one would drift from the one the reports measure.
@@ -266,6 +340,7 @@ export function runBacktest(
     row: HistoryRow,
     features: PlayerFeatures,
     goalRates: ScoredRow['goalRates'],
+    ranks?: Map<string, BonusRanks>,
   ) =>
     projectFixtureV2(
       row.position,
@@ -274,21 +349,24 @@ export function runBacktest(
       goalRates,
       scoringFor(row.season),
       params,
+      ranks?.get(`${row.season}|${row.round}|${row.fixture}|${row.playerCode}`),
     );
 
   for (const context of walkRounds(rows, params, { horizon })) {
+    const roundBonus = bonusFor(context.items);
     // The horizon tail, per player: rounds after this one, discounted, summed over each player's
     // fixtures in them. A player absent from a round had no fixture and contributes nothing.
     const tail = new Map<number, number>();
     for (const [i, ahead] of context.future.entries()) {
       const weight = decay ** (i + 1);
+      const aheadBonus = bonusFor(ahead.items);
       for (const { row, features, goalRates } of ahead.items) {
         if (row.teamCode === null || row.opponentTeamCode === null) continue;
         if (features.matchesSample === 0) continue;
         tail.set(
           row.playerCode,
           (tail.get(row.playerCode) ?? 0) +
-            weight * project(row, features, goalRates).ep,
+            weight * project(row, features, goalRates, aheadBonus).ep,
         );
       }
     }
@@ -309,7 +387,7 @@ export function runBacktest(
       }
 
       const minutes = minutesFor(row, features);
-      const projection = project(row, features, goalRates);
+      const projection = project(row, features, goalRates, roundBonus);
 
       out.push({
         season: row.season,
@@ -337,6 +415,20 @@ export function runBacktest(
         horizonEp:
           horizon > 1 ? projection.ep + (tail.get(row.playerCode) ?? 0) : null,
       });
+    }
+  }
+
+  // The rank model's own invariant, checked once over the whole run rather than trusted: every
+  // fixture it priced must have paid out six bonus points. A shortfall means the pre-pass was handed
+  // part of a match — the failure mode that would otherwise look like a slightly worse model.
+  if (bonusFixtures > 0) {
+    const perFixture = bonusPointsIssued / bonusFixtures;
+    if (Math.abs(perFixture - BONUS_POINTS_PER_FIXTURE) > 0.05) {
+      throw new Error(
+        `the rank-bonus pre-pass issued ${perFixture.toFixed(3)} bonus points per fixture over ` +
+          `${bonusFixtures} fixtures, and a fixture has exactly ${BONUS_POINTS_PER_FIXTURE}. It was ` +
+          `handed part of a match: the ranks and the rows being scored are not the same field.`,
+      );
     }
   }
 
@@ -511,12 +603,10 @@ function v4Predict(
         }
       >
     | undefined,
-  features:
-    | Map<
-        string,
-        { position: string; v3ep: number; features: Map<string, number | null> }
-      >
-    | null,
+  features: Map<
+    string,
+    { position: string; v3ep: number; features: Map<string, number | null> }
+  > | null,
   row: HistoryRow,
 ): number | null {
   if (!scorers || !features) return null;

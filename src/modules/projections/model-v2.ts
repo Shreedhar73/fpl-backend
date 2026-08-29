@@ -4,6 +4,7 @@ import { DEFCON_THRESHOLD } from './points';
 import {
   bernoulliPmf,
   bonusPmf,
+  bonusRankPmf,
   convolve,
   countPmf,
   expectedFloorDiv,
@@ -40,6 +41,24 @@ import { FittedParams } from './fitted';
 export interface MinutesDistribution {
   pStart: number;
   pSub: number;
+  /**
+   * `P(60+ | started)` this distribution was built with — the league constant, or the player's own.
+   *
+   * Carried for the same reason as `minutesGivenStart` below, and it is the one the DISTRIBUTION
+   * path reads: the pmf is mixed over the minutes states and each state needs the same P(60+) the
+   * analytic mean used, or `distribution.mean` and `ep` stop agreeing and the test that asserts they
+   * do goes red — correctly.
+   */
+  sixtyGivenStart: number;
+  /**
+   * `E[minutes | started]` this distribution was built with — the league constant, or the player's
+   * own when the params ask for it.
+   *
+   * Carried out of here so `projectFixtureV2` prices its minutes states with the SAME number the
+   * sixty-minute probability was computed from. Reading one from the params and the other from the
+   * player is how a model comes to contradict itself about a player it has already decided about.
+   */
+  minutesGivenStart: number;
   /** P(featuring at all) = pStart + pSub */
   pPlay: number;
   /** P(playing 60 minutes or more) — what the appearance and clean-sheet rules actually ask */
@@ -126,6 +145,15 @@ export function projectFixtureV2(
   goals: GoalRates,
   scoring: Scoring,
   params: FittedParams,
+  /**
+   * This player's bonus, computed against the other players in the same match (B-041, plan 028
+   * task 4).
+   *
+   * Optional, and its absence is the incumbent: a clipped linear function of the player's own BPS,
+   * which hands out 8.5 bonus points in a fixture that has 6 to give. It cannot be computed here —
+   * a rank needs the field — so the caller works it out per fixture and passes it in.
+   */
+  bonusRanks?: { first: number; second: number; third: number },
 ): FixtureProjectionV2 {
   const ninetieths = minutes.expectedMinutes / 90;
 
@@ -145,7 +173,10 @@ export function projectFixtureV2(
   // Two states, not a finer grid, because two is what the minutes model has fitted. Inventing a
   // smoother minutes distribution here would be structure the parameters do not carry.
   const states: { p: number; ninetieths: number }[] = [
-    { p: minutes.pStart, ninetieths: params.minutes.minutesGivenStart / 90 },
+    // The starter state is priced with the minutes THIS distribution was built from, not with the
+    // league constant — otherwise a player whose P(60+) came from his own record has his rate terms
+    // computed for somebody else's match length (B-041).
+    { p: minutes.pStart, ninetieths: minutes.minutesGivenStart / 90 },
     { p: minutes.pSub, ninetieths: params.minutes.minutesGivenSub / 90 },
   ];
   /** `Σ_s P(state s) × f(rate in state s)` — the mixture, rather than `f` at the mean. */
@@ -204,8 +235,9 @@ export function projectFixtureV2(
     position === 'GKP' ? saveRate(rates, ninetieths, goals, params.saves) : 0;
   const savePoints =
     position === 'GKP'
-      ? overStates((n) => expectedFloorDiv(saveRate(rates, n, goals, params.saves), 3)) *
-        scoring.savePoint()
+      ? overStates((n) =>
+          expectedFloorDiv(saveRate(rates, n, goals, params.saves), 3),
+        ) * scoring.savePoint()
       : 0;
 
   // --- Defensive contribution: a tail probability, not a linear ramp. The ramp over-paid exactly the
@@ -240,7 +272,9 @@ export function projectFixtureV2(
           params.bonus.bonusPerBps * (n * rates.bps90),
       ),
     );
-  const expectedBonus = overStates(bonusInState);
+  const expectedBonus = bonusRanks
+    ? 3 * bonusRanks.first + 2 * bonusRanks.second + bonusRanks.third
+    : overStates(bonusInState);
   const bonusPoints = expectedBonus * scoring.bonus();
 
   const components = {
@@ -262,6 +296,9 @@ export function projectFixtureV2(
   // independent — a much weaker assumption than independence overall, and its residual is named:
   // goals and bonus move together (a goalscorer collects BPS), and a clean sheet and a conceded goal
   // are mutually exclusive. Both make the true spread WIDER than this, so `sd` is a floor.
+  /** P(featuring at all), floored so the conditioning below cannot divide by zero. */
+  const playScale = Math.max(1e-9, minutes.pPlay);
+
   const pmfForState = (n: number, pSixtyGivenState: number): PointsPmf => {
     const appearance = bernoulliPmf(
       pSixtyGivenState,
@@ -295,7 +332,11 @@ export function projectFixtureV2(
     if (position === 'GKP') {
       pmf = convolve(
         pmf,
-        floorDivPmf(saveRate(rates, n, goals, params.saves), 3, scoring.savePoint()),
+        floorDivPmf(
+          saveRate(rates, n, goals, params.saves),
+          3,
+          scoring.savePoint(),
+        ),
       );
     }
     if (threshold > 0) {
@@ -313,23 +354,47 @@ export function projectFixtureV2(
     }
     // `bonusInState / MEAN_BONUS_GIVEN_ANY` is P(any bonus), the same identity the reported
     // `bonusAtLeastOne` uses — so the distribution's bonus mean equals the analytic one exactly.
+    // With ranks, the bonus is a fixture-level quantity and does not vary by minutes state — it
+    // already integrates over whether this player featured, because P(play) is inside his weight.
+    // The mean of this pmf is exactly the analytic bonus above, which is what keeps
+    // `distribution.mean === ep` true.
+    // The rank probabilities are UNCONDITIONAL — `P(play)` is already inside the weight that
+    // produced them — while this pmf is built inside a state where the player did feature and is
+    // then mixed by state, which multiplies by `P(play)` a second time. So the ranks are divided by
+    // it here. Without this the distribution's bonus mean is `pPlay × expected` and `ep` is
+    // `expected`: the two disagree by a fraction of a point and `distribution.mean === ep` goes red,
+    // which is exactly what that test is for.
+    const conditioned = bonusRanks
+      ? {
+          first: Math.min(1, bonusRanks.first / playScale),
+          second: Math.min(1, bonusRanks.second / playScale),
+          third: Math.min(1, bonusRanks.third / playScale),
+        }
+      : null;
     pmf = convolve(
       pmf,
-      bonusPmf(
-        Math.min(1, bonusInState(n) / MEAN_BONUS_GIVEN_ANY),
-        scoring.bonus(),
-      ),
+      conditioned
+        ? bonusRankPmf(
+            conditioned.first,
+            conditioned.second,
+            conditioned.third,
+            scoring.bonus(),
+          )
+        : bonusPmf(
+            Math.min(1, bonusInState(n) / MEAN_BONUS_GIVEN_ANY),
+            scoring.bonus(),
+          ),
     );
     return pmf;
   };
 
   const distribution = mixPmf([
     {
+      // The SAME two numbers the analytic mean was composed from, not the league constants: with
+      // per-player start behaviour on (B-041) they differ, and `distribution.mean === ep` is the
+      // test that would catch it.
       weight: minutes.pStart,
-      pmf: pmfForState(
-        params.minutes.minutesGivenStart / 90,
-        params.minutes.sixtyGivenStart,
-      ),
+      pmf: pmfForState(minutes.minutesGivenStart / 90, minutes.sixtyGivenStart),
     },
     {
       weight: minutes.pSub,
@@ -355,10 +420,17 @@ export function projectFixtureV2(
       sixtyPlus: minutes.pSixtyPlus,
       cleanSheet: pCleanSheet,
       defcon: pDefcon,
-      bonusAtLeastOne: Math.max(
-        0,
-        Math.min(1, expectedBonus / MEAN_BONUS_GIVEN_ANY),
-      ),
+      // Exact under the rank model — first + second + third IS P(any bonus), and no identity is
+      // needed. The fallback is the incumbent's only route to it and is an approximation.
+      bonusAtLeastOne: bonusRanks
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              bonusRanks.first + bonusRanks.second + bonusRanks.third,
+            ),
+          )
+        : Math.max(0, Math.min(1, expectedBonus / MEAN_BONUS_GIVEN_ANY)),
     },
     expected: {
       goals: expectedGoals,
@@ -412,6 +484,17 @@ export interface LaggedMinutes {
   startRate: number;
   /** appearances-off-the-bench / non-starts so far, smoothed toward the population prior */
   subRate: number;
+  /**
+   * This player's own `E[minutes | started]` and `P(60+ | started)`, already shrunk toward the league
+   * constants (B-041, plan 028 task 3).
+   *
+   * Optional, and read ONLY when `params.minutes.perPlayerStart` says so — absent or ignored, the
+   * league constants apply and the model is exactly what it was. Two players who both start are not
+   * the same bet: over 591 players with ten or more starts the mean runs 69.1 to 90.0 minutes, and
+   * every rate term in this file is multiplied by it.
+   */
+  startMinutes?: number | null;
+  startSixty?: number | null;
 }
 
 /**
@@ -517,6 +600,20 @@ export function minutesDistribution(
           subIntercept: m.subIntercept,
           subSlope: m.subSlope,
         };
+  // Which `E[minutes | started]` and `P(60+ | started)` this player is priced with. Off — the params
+  // shape B-041 predates — both are the league constants and every number here is unchanged.
+  const perPlayer = m.perPlayerStart === true;
+  const startMinutes =
+    perPlayer &&
+    lagged.startMinutes !== null &&
+    lagged.startMinutes !== undefined
+      ? lagged.startMinutes
+      : m.minutesGivenStart;
+  const startSixty =
+    perPlayer && lagged.startSixty !== null && lagged.startSixty !== undefined
+      ? lagged.startSixty
+      : m.sixtyGivenStart;
+
   const fitted = m.availability;
   if (fitted !== undefined) {
     // Fitted-availability regime (plan 024). The flags are the input; the scalar argument is dead.
@@ -529,6 +626,8 @@ export function minutesDistribution(
         pPlay: 0,
         pSixtyPlus: 0,
         expectedMinutes: 0,
+        sixtyGivenStart: startSixty,
+        minutesGivenStart: startMinutes,
       };
     }
     const inj = sig?.inj ?? 0;
@@ -553,12 +652,20 @@ export function minutesDistribution(
     const pPlay = clamp01(pStart + pSub);
     // A doubtful starter is managed differently once on the pitch — measured over flagged starters
     // as group constants rather than interpolated, because the sample cannot support a curve.
-    const sixtyStart = inj > 0 ? fitted.sixtyGivenStartFlagged : m.sixtyGivenStart;
+    const sixtyStart = inj > 0 ? fitted.sixtyGivenStartFlagged : startSixty;
     const minutesStart =
-      inj > 0 ? fitted.minutesGivenStartFlagged : m.minutesGivenStart;
+      inj > 0 ? fitted.minutesGivenStartFlagged : startMinutes;
     const pSixtyPlus = clamp01(pStart * sixtyStart + pSub * m.sixtyGivenSub);
     const expectedMinutes = pStart * minutesStart + pSub * m.minutesGivenSub;
-    return { pStart, pSub, pPlay, pSixtyPlus, expectedMinutes };
+    return {
+      pStart,
+      pSub,
+      pPlay,
+      pSixtyPlus,
+      expectedMinutes,
+      sixtyGivenStart: sixtyStart,
+      minutesGivenStart: minutesStart,
+    };
   }
 
   const rawStart = logistic(
@@ -573,13 +680,18 @@ export function minutesDistribution(
   const pStart = clamp01(availability * rawStart);
   const pSub = clamp01(availability * (1 - rawStart) * rawSub);
   const pPlay = clamp01(pStart + pSub);
-  const pSixtyPlus = clamp01(
-    pStart * m.sixtyGivenStart + pSub * m.sixtyGivenSub,
-  );
-  const expectedMinutes =
-    pStart * m.minutesGivenStart + pSub * m.minutesGivenSub;
+  const pSixtyPlus = clamp01(pStart * startSixty + pSub * m.sixtyGivenSub);
+  const expectedMinutes = pStart * startMinutes + pSub * m.minutesGivenSub;
 
-  return { pStart, pSub, pPlay, pSixtyPlus, expectedMinutes };
+  return {
+    pStart,
+    pSub,
+    pPlay,
+    pSixtyPlus,
+    expectedMinutes,
+    sixtyGivenStart: startSixty,
+    minutesGivenStart: startMinutes,
+  };
 }
 
 function logistic(x: number): number {
