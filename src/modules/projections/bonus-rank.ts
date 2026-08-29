@@ -25,6 +25,19 @@
  * The weight is `P(play) × exp(E[BPS | played] / τ)`. τ is the one free parameter: large τ flattens
  * the field toward a lottery, small τ hands the bonus to whoever has the highest projected BPS with
  * near-certainty. It is chosen on validation like every other parameter here, never assumed.
+ *
+ * **What "six by construction" costs, stated where it is advertised.** The six survives the candidate
+ * cap because each award is renormalised across the candidates, and that redistribution lands in
+ * `any` — measured on the archive, `P(bonus ≥ 1)` comes out at 0.045 against a base rate of 0.041,
+ * where the incumbent's derived identity matched it exactly. The expected POINTS are right and the
+ * probability of getting any is a little high; a session looking at that reliability miss should
+ * start here rather than re-deriving it.
+ *
+ * **Measured and declined (D-036).** On the rolling-origin referee this cost −0.19% ± 0.19% of
+ * points captured@11 and the two folds disagreed about τ, one picking the incumbent outright. It is
+ * kept behind `params.bonus.tau`, off everywhere, because the accounting error it fixes is real and
+ * the next attempt should start from a per-position τ — BPS scales differ by position and this used
+ * one global value.
  */
 
 /** 3 + 2 + 1. Every fixture, always — the invariant the whole module exists to hold. */
