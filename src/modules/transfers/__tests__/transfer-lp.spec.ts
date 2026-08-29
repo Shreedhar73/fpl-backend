@@ -1,7 +1,12 @@
 import highsLoader from 'highs';
 import { Rules } from '../../optimizer/rules';
 import type { Candidate } from '../../optimizer/ilp';
-import { buildTransferLp, type OwnedCandidate } from '../transfer-lp';
+import {
+  buildTransferLp,
+  MAX_HITS,
+  maxTransfersFor,
+  type OwnedCandidate,
+} from '../transfer-lp';
 import {
   reconstructEntryState,
   reconstructPurchasePrices,
@@ -499,5 +504,103 @@ describe('free transfers, replayed from the season history', () => {
     const state = reconstructEntryState(history([]), 5);
     expect(state.freeTransfers).toBe(1);
     expect(state.throughGameweek).toBeNull();
+  });
+});
+
+/**
+ * The move cap (#97). It used to be a flat three, which made the reachable HIT depth a function of
+ * the manager's bank: with one free transfer, −8 was three moves and allowed; with two banked it was
+ * four and silently unreachable, even though the question — "is each hit up to −8 worth it" — had not
+ * changed. The cap is now everything free plus two hits.
+ */
+describe('how deep a plan may go', () => {
+  /** Four upgrades, each plainly worth taking, against a manager holding four free transfers. */
+  const fourUpgrades = () => {
+    const owned = ownedSquad((i) => (i >= 11 && i <= 14 ? 1 : 10));
+    const market = [
+      marketPlayer('up1', 'MID', 12, 50, 'tA'),
+      marketPlayer('up2', 'FWD', 12, 50, 'tB'),
+      marketPlayer('up3', 'FWD', 12, 50, 'tC'),
+      marketPlayer('up4', 'FWD', 12, 50, 'tD'),
+    ];
+    return { owned, market };
+  };
+
+  it('takes four free transfers when four are held and four are worth taking', async () => {
+    const { owned, market } = fourUpgrades();
+    const { taken } = await solve(
+      buildTransferLp({
+        owned,
+        market,
+        rules: RULES,
+        bank: 0,
+        freeTransfers: 4,
+        hitCost: 4,
+        maxTransfers: maxTransfersFor(4),
+      }),
+    );
+    // All four, and no hit paid for any of them. Under the old flat cap of three this test fails on
+    // the fourth — not because the fourth move is not worth it, but because it was never scored.
+    expect(['up1', 'up2', 'up3', 'up4'].every(taken)).toBe(true);
+  });
+
+  it('is the flat-three cap that would refuse the fourth, not the objective', async () => {
+    const { owned, market } = fourUpgrades();
+    const { taken } = await solve(
+      buildTransferLp({
+        owned,
+        market,
+        rules: RULES,
+        bank: 0,
+        freeTransfers: 4,
+        hitCost: 4,
+        maxTransfers: 3,
+      }),
+    );
+    // Exactly three of the four, at a cap of three: the plan is pressed against the count. This is
+    // the case the acceptance criterion asks for — it goes red if the cap silently narrows again.
+    expect(['up1', 'up2', 'up3', 'up4'].filter(taken)).toHaveLength(3);
+  });
+
+  it('lets the objective refuse a hit that is not worth it, rather than a count', async () => {
+    // Five free transfers, so the cap is seven — every move below is reachable. The sixth and
+    // seventh candidates are worth less than the four points a hit costs, and must be declined on
+    // that arithmetic rather than on the bound.
+    const owned = ownedSquad((i) => (i >= 9 && i <= 14 ? 1 : 10));
+    const market = [
+      marketPlayer('worth1', 'MID', 12, 50, 'tA'),
+      marketPlayer('worth2', 'MID', 12, 50, 'tB'),
+      marketPlayer('worth3', 'MID', 12, 50, 'tC'),
+      marketPlayer('worth4', 'FWD', 12, 50, 'tD'),
+      marketPlayer('worth5', 'FWD', 12, 50, 'tE'),
+      marketPlayer('thin6', 'FWD', 3, 50, 'tF'),
+    ];
+    const { taken } = await solve(
+      buildTransferLp({
+        owned,
+        market,
+        rules: RULES,
+        bank: 0,
+        freeTransfers: 5,
+        hitCost: 4,
+        maxTransfers: maxTransfersFor(5),
+      }),
+    );
+    expect(
+      ['worth1', 'worth2', 'worth3', 'worth4', 'worth5'].every(taken),
+    ).toBe(true);
+    // +2 EP for −4 is a loss, and the cap of seven did not stop it — the objective did.
+    expect(taken('thin6')).toBe(false);
+  });
+
+  it('always reaches −8 whatever the bank holds, which is what the flat cap could not', () => {
+    // The question "is each hit up to −8 worth it" is fixed; the bank is not. Before #97 the answer
+    // depended on the second.
+    expect(maxTransfersFor(1)).toBe(3);
+    expect(maxTransfersFor(2)).toBe(4);
+    expect(maxTransfersFor(5)).toBe(7);
+    for (const bank of [1, 2, 3, 4, 5]) {
+      expect(maxTransfersFor(bank) - bank).toBe(MAX_HITS);
+    }
   });
 });

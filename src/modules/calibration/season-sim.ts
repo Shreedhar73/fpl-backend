@@ -615,7 +615,13 @@ export function plannerPolicy(
   solve: (lp: string) => LpSolution,
   options: {
     hitCost: number;
-    maxTransfers: number;
+    /**
+     * The move cap, as a number or as the served rule read against the bank of the round (#97).
+     *
+     * A function is what the product now passes: everything free plus the hits the advice considers.
+     * A plain number stays accepted so an arm can pin a depth deliberately and say why.
+     */
+    maxTransfers: number | ((freeTransfers: number) => number);
     /** What a bench place is worth. Defaults to the served weight, as `buildTransferLp` does. */
     benchWeight?: number;
     /**
@@ -706,7 +712,10 @@ export function plannerPolicy(
           bank: state.bank,
           freeTransfers: state.freeTransfers,
           hitCost: options.hitCost,
-          maxTransfers: options.maxTransfers,
+          maxTransfers:
+            typeof options.maxTransfers === 'function'
+              ? options.maxTransfers(state.freeTransfers)
+              : options.maxTransfers,
           benchWeight: options.benchWeight,
           objective: options.objective,
           concentration:

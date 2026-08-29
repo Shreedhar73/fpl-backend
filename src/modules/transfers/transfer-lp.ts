@@ -72,10 +72,24 @@ import { POSITIONS, Rules } from '../optimizer/rules';
 export const HIT_COST = 4;
 
 /**
- * The most moves a single plan may propose.
+ * How many HITS a plan may take, beyond the free transfers the manager holds (#97).
  *
- * Three, not fifteen. Beyond about three a "transfer plan" is a wildcard by another name, and this
- * planner does not hold one — recommending eight moves would be recommending a chip without saying so.
+ * Two, which is −8 — the depth `plan-gameweek` says the comparison runs to ("no transfer, one
+ * transfer, and each hit up to −8"). The cap used to be a flat three moves, and the flat number made
+ * the reachable HIT depth a function of the bank: with one free transfer, −8 was three moves and
+ * allowed; with two banked it was four and silently unreachable. The question being asked did not
+ * change, only the manager's bank, which is the wrong thing for it to depend on.
+ *
+ * **The old bound was not a solve-time bound, measured before it was changed.** 15 owned against a
+ * 600-player market, HiGHS: 131 ms at a cap of two, 151 at three, 152 at four, 142 at five, 138 at
+ * six, 136 at eight. Flat. What moved was the objective — 65.22, 68.57, 71.78, 74.70, 74.70, 74.70:
+ * it improves to the fifth move and then **stops on its own**, because past the free transfers each
+ * move must clear four points and the marginal one does not. The count was excluding plans the
+ * objective was already rejecting, and a few it was not.
+ *
+ * The old comment argued three moves because "beyond about three a transfer plan is a wildcard by
+ * another name". That holds for HITS and not for free transfers: the bank caps at five, and a
+ * manager spending five free transfers is playing ordinary FPL, not a chip.
  *
  * **Both constants live here rather than in `transfers.service.ts`, where they were.** A harness that
  * walks this planner over a season has to use the numbers the planner is served with, and importing
@@ -83,7 +97,20 @@ export const HIT_COST = 4;
  * decorators — into a backtest. Copying them instead is how a harness ends up measuring a planner
  * nobody is served.
  */
-export const MAX_TRANSFERS = 3;
+export const MAX_HITS = 2;
+
+/**
+ * The move cap for a manager holding `freeTransfers`, which is what callers pass as `maxTransfers`.
+ *
+ * A function rather than a constant because the honest bound is "everything free, plus the hits the
+ * question asks about", and only the first half is a property of the manager.
+ */
+export function maxTransfersFor(
+  freeTransfers: number,
+  hits = MAX_HITS,
+): number {
+  return Math.max(1, Math.floor(freeTransfers)) + hits;
+}
 
 export interface OwnedCandidate extends Candidate {
   /**
