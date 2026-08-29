@@ -45,6 +45,16 @@ export interface MinutesParams {
   minutesGivenStart: number;
   minutesGivenSub: number;
   /**
+   * Price a starter with his OWN minute record rather than the league constant (B-041, plan 028
+   * task 3).
+   *
+   * Absent or false is the incumbent, exactly. True and the two constants above become fallbacks for
+   * players with no start history — everyone else is priced on what he actually does when he starts,
+   * which over 591 players with ten or more starts runs from 69.1 to 90.0 minutes against a single
+   * fitted 82.8.
+   */
+  perPlayerStart?: boolean;
+  /**
    * Keeper-specific minutes curves (B-021), absent in params fitted before they existed.
    *
    * Keepers are the one position whose bench behaviour is categorically different: a second-choice
@@ -124,6 +134,16 @@ export interface DefconParams {
 }
 
 export interface BonusParams {
+  /**
+   * The Plackett–Luce temperature for rank-based bonus (B-041, plan 028 task 4), in BPS.
+   *
+   * Absent is the incumbent — the clipped linear term below, which hands out about 8.5 bonus points
+   * in a fixture that has 6 to give. Present, the three awards are drawn in proportion to
+   * `P(play) × exp(E[BPS | played] / τ)` and a fixture pays exactly 6 by construction. Large τ
+   * flattens the field toward a lottery; small τ hands the bonus to the highest projected BPS with
+   * near-certainty. Chosen on validation, never assumed.
+   */
+  tau?: number;
   /** expected bonus points per BPS above the match's typical bonus line */
   bonusPerBps: number;
   bpsIntercept: number;
@@ -131,9 +151,50 @@ export interface BonusParams {
   maxBonus: number;
 }
 
+/**
+ * How a player's own history is turned into a rate (B-041, plan 028 task 1).
+ *
+ * **Optional, and its absence is the incumbent.** Without this block `features.ts` pools a whole
+ * career at equal weight and shrinks it toward the positional mean at a hand-written 270 minutes —
+ * which is what every number in this repository was produced under. Both defaults are reproduced
+ * exactly by `halfLifeRounds: Infinity, shrinkMinutes: 270`, and a test asserts it.
+ *
+ * The asymmetry this exists to close: team strength has had a fitted recency half-life since B-014,
+ * and the substitute-appearance rate has been season-first since B-019, while `xg90`, `xa90`,
+ * `bps90` and `saves90` count a player's football from three seasons ago exactly as heavily as last
+ * week's. Nothing measured that; D-035 measured a decay on the TRAINING CORPUS, which is a different
+ * lever — how much an old season counts when fitting global parameters, not how much an old match
+ * counts toward the player it was played by.
+ */
+export interface RateParams {
+  /**
+   * Half-life in ROUNDS for a player's own rate evidence; `Infinity` is the flat career mean.
+   *
+   * Rounds ELAPSED, not matches played, and the difference is a choice rather than an oversight: a
+   * player who misses eight weeks injured comes back with evidence eight rounds old under this
+   * bookkeeping, and with evidence as fresh as the day he was hurt under the alternative. Staleness
+   * is what a rate is at risk of; sample size is what the shrinkage already handles. The alternative
+   * — decay per match played — is recorded here rather than tried, so a later session can weigh it
+   * without re-deriving the distinction.
+   *
+   * The summer between seasons costs exactly one round of decay under this scheme, which understates
+   * it. Charging the break explicitly is a second knob and was not added.
+   */
+  halfLifeRounds: number;
+  /**
+   * Minutes of a player's own record before it outweighs the positional prior — a pseudo-count.
+   *
+   * 270 (three matches) was written by hand and never fitted. Under decay this is a weight rather
+   * than a count of minutes, so it is denominated in the same decayed units as the numerator.
+   */
+  shrinkMinutes: number;
+}
+
 export interface FittedParams {
   strength: StrengthParams;
   minutes: MinutesParams;
+  /** absent in every params set fitted before B-041; absent means the flat career mean */
+  rates?: RateParams;
   saves: SavesParams;
   attack: AttackParams;
   defcon: DefconParams;
@@ -246,69 +307,66 @@ export const UNFITTED_PARAMS: FittedParams = {
  *   before; that does not make every non-zero number that follows a strong one.
  */
 export const FITTED_PARAMS: FittedParams = {
-  "strength": {
-    "homeAdvantage": 1.118640838000319,
-    "confidenceMatches": 64,
-    "leagueGoalsPerTeamMatch": 1.5486291739894331,
-    "goalsWeight": 0.5,
-    "decayHalfLife": 6
+  strength: {
+    homeAdvantage: 1.118640838000319,
+    confidenceMatches: 64,
+    leagueGoalsPerTeamMatch: 1.5486291739894331,
+    goalsWeight: 0.5,
+    decayHalfLife: 6,
   },
-  "minutes": {
-    "startIntercept": -0.187900700795416,
-    "startSlope": 0.4849268629262445,
-    "subAppearanceRate": 0.15435726210350584,
-    "subIntercept": 0.574677247015025,
-    "subSlope": 1.384130123390548,
-    "sixtyGivenStart": 0.9339351334078926,
-    "sixtyGivenSub": 0.013411204845338524,
-    "minutesGivenStart": 82.83320019172392,
-    "minutesGivenSub": 18.151633138654553,
-    "gkp": {
-      "startIntercept": -0.26501428563368706,
-      "startSlope": 0.5598803671683812,
-      "subIntercept": -1.0818460458418615,
-      "subSlope": 1.4470795639568321,
-      "n": {
-        "start": 4627,
-        "sub": 3514
-      }
-    }
+  minutes: {
+    startIntercept: -0.187900700795416,
+    startSlope: 0.4849268629262445,
+    subAppearanceRate: 0.15435726210350584,
+    subIntercept: 0.574677247015025,
+    subSlope: 1.384130123390548,
+    sixtyGivenStart: 0.9339351334078926,
+    sixtyGivenSub: 0.013411204845338524,
+    minutesGivenStart: 82.83320019172392,
+    minutesGivenSub: 18.151633138654553,
+    gkp: {
+      startIntercept: -0.26501428563368706,
+      startSlope: 0.5598803671683812,
+      subIntercept: -1.0818460458418615,
+      subSlope: 1.4470795639568321,
+      n: {
+        start: 4627,
+        sub: 3514,
+      },
+    },
   },
-  "saves": {
-    "elasticity": 0.5
+  saves: {
+    elasticity: 0.5,
   },
-  "attack": {
-    "xgFixtureElasticity": 0.75,
-    "xaFixtureElasticity": 2,
-    "goalsPerXg": 0.9890259541292117,
-    "assistsPerXa": 1.3951956123013414
+  attack: {
+    xgFixtureElasticity: 0.75,
+    xaFixtureElasticity: 2,
+    goalsPerXg: 0.9890259541292117,
+    assistsPerXa: 1.3951956123013414,
   },
-  "defcon": {
-    "dispersion": 1.5,
-    "ratePer90ToMatch": 1
+  defcon: {
+    dispersion: 1.5,
+    ratePer90ToMatch: 1,
   },
-  "bonus": {
-    "bonusPerBps": 0.04173248388494878,
-    "bpsIntercept": -0.2839231900427406,
-    "maxBonus": 3
+  bonus: {
+    bonusPerBps: 0.04173248388494878,
+    bpsIntercept: -0.2839231900427406,
+    maxBonus: 3,
   },
-  "provenance": {
-    "fittedOn": [
-      "2023-24",
-      "2024-25"
+  provenance: {
+    fittedOn: ['2023-24', '2024-25'],
+    rows: 56133,
+    date: '2026-08-27-gkp',
+    objective:
+      'frequencies measured directly; shape parameters by MAE on held-out 2024-25 rounds 20+',
+    heldOut: '2025-26 (whole season), live 2026/27 (untouched)',
+    notes: [
+      'defensive contribution is fitted on 2025-26 rounds 1-19 \u2014 the category exists in no earlier season, so that term alone is not held out',
+      'the availability multiplier is NOT fitted: the archive carries no per-gameweek status or chance_of_playing (B-007 Phase 2 must accumulate first)',
+      'B-021: keeper minutes curves fitted on GKP rows alone (n start 4627, sub 3514) and saves elasticity 0.5 - an interior optimum on keeper validation rows; every global parameter reproduced the incumbent byte-for-byte',
     ],
-    "rows": 56133,
-    "date": "2026-08-27-gkp",
-    "objective": "frequencies measured directly; shape parameters by MAE on held-out 2024-25 rounds 20+",
-    "heldOut": "2025-26 (whole season), live 2026/27 (untouched)",
-    "notes": [
-      "defensive contribution is fitted on 2025-26 rounds 1-19 \u2014 the category exists in no earlier season, so that term alone is not held out",
-      "the availability multiplier is NOT fitted: the archive carries no per-gameweek status or chance_of_playing (B-007 Phase 2 must accumulate first)",
-      "B-021: keeper minutes curves fitted on GKP rows alone (n start 4627, sub 3514) and saves elasticity 0.5 - an interior optimum on keeper validation rows; every global parameter reproduced the incumbent byte-for-byte"
-    ]
-  }
+  },
 };
-
 
 /**
  * The availability candidate (plan 024, B-015) — the full minutes refit with deadline-time flags as
@@ -331,81 +389,79 @@ export const FITTED_PARAMS: FittedParams = {
  *   nearly a normal starter — the doubt is about whether he plays, not how long.
  */
 export const AVAILABILITY_CANDIDATE_PARAMS: FittedParams = {
-  "strength": {
-    "homeAdvantage": 1.1186408380003192,
-    "confidenceMatches": 64,
-    "leagueGoalsPerTeamMatch": 1.5486291739894333,
-    "goalsWeight": 0.5,
-    "decayHalfLife": 6
+  strength: {
+    homeAdvantage: 1.1186408380003192,
+    confidenceMatches: 64,
+    leagueGoalsPerTeamMatch: 1.5486291739894333,
+    goalsWeight: 0.5,
+    decayHalfLife: 6,
   },
-  "minutes": {
-    "startIntercept": 0.28333945570574204,
-    "startSlope": 0.4759093585027032,
-    "subAppearanceRate": 0.15435726210350584,
-    "subIntercept": 0.9838312990192988,
-    "subSlope": 1.2696915951918024,
-    "sixtyGivenStart": 0.9339351334078926,
-    "sixtyGivenSub": 0.013411204845338524,
-    "minutesGivenStart": 82.83320019172392,
-    "minutesGivenSub": 18.151633138654553,
-    "gkp": {
-      "startIntercept": -0.039863485257263825,
-      "startSlope": 0.5656804586773112,
-      "subIntercept": -1.1918864772747522,
-      "subSlope": 1.311291115267632,
-      "n": {
-        "start": 3711,
-        "sub": 2599
-      }
+  minutes: {
+    startIntercept: 0.28333945570574204,
+    startSlope: 0.4759093585027032,
+    subAppearanceRate: 0.15435726210350584,
+    subIntercept: 0.9838312990192988,
+    subSlope: 1.2696915951918024,
+    sixtyGivenStart: 0.9339351334078926,
+    sixtyGivenSub: 0.013411204845338524,
+    minutesGivenStart: 82.83320019172392,
+    minutesGivenSub: 18.151633138654553,
+    gkp: {
+      startIntercept: -0.039863485257263825,
+      startSlope: 0.5656804586773112,
+      subIntercept: -1.1918864772747522,
+      subSlope: 1.311291115267632,
+      n: {
+        start: 3711,
+        sub: 2599,
+      },
     },
-    "availability": {
-      "startInj": -2.699156183864384,
-      "startInjX": -0.33553083469134565,
-      "startUnknown": -0.3896037181756922,
-      "subInj": -1.291664062643681,
-      "subUnknown": -0.46557321183438605,
-      "sixtyGivenStartFlagged": 0.9246987951807228,
-      "minutesGivenStartFlagged": 82.36144578313252,
-      "n": {
-        "startFlagged": 1762,
-        "subFlagged": 1430,
-        "unknown": 2026,
-        "flaggedStarts": 332
-      }
-    }
+    availability: {
+      startInj: -2.699156183864384,
+      startInjX: -0.33553083469134565,
+      startUnknown: -0.3896037181756922,
+      subInj: -1.291664062643681,
+      subUnknown: -0.46557321183438605,
+      sixtyGivenStartFlagged: 0.9246987951807228,
+      minutesGivenStartFlagged: 82.36144578313252,
+      n: {
+        startFlagged: 1762,
+        subFlagged: 1430,
+        unknown: 2026,
+        flaggedStarts: 332,
+      },
+    },
   },
-  "saves": {
-    "elasticity": 0.75
+  saves: {
+    elasticity: 0.75,
   },
-  "attack": {
-    "xgFixtureElasticity": 0.5,
-    "xaFixtureElasticity": 2,
-    "goalsPerXg": 0.9890259541292121,
-    "assistsPerXa": 1.3951956123013414
+  attack: {
+    xgFixtureElasticity: 0.5,
+    xaFixtureElasticity: 2,
+    goalsPerXg: 0.9890259541292121,
+    assistsPerXa: 1.3951956123013414,
   },
-  "defcon": {
-    "dispersion": 1.5,
-    "ratePer90ToMatch": 1.1
+  defcon: {
+    dispersion: 1.5,
+    ratePer90ToMatch: 1.1,
   },
-  "bonus": {
-    "bonusPerBps": 0.04173248388494878,
-    "bpsIntercept": -0.2839231900427406,
-    "maxBonus": 3
+  bonus: {
+    bonusPerBps: 0.04173248388494878,
+    bpsIntercept: -0.2839231900427406,
+    maxBonus: 3,
   },
-  "provenance": {
-    "fittedOn": [
-      "2023-24",
-      "2024-25"
+  provenance: {
+    fittedOn: ['2023-24', '2024-25'],
+    rows: 56133,
+    date: '2026-08-27-avail',
+    objective:
+      'frequencies measured directly; minutes curves refit jointly with availability terms (fitLogisticK); shape parameters by RMSE on held-out 2024-25 rounds 20+',
+    heldOut: '2025-26 (whole season), live 2026/27 (untouched)',
+    notes: [
+      'defensive contribution is fitted on 2025-26 rounds 1-19 — the category exists in no earlier season, so that term alone is not held out',
+      'availability IS fitted here (plan 024): deadline-time flags from Wayback captures of bootstrap-static, joined within a 72h staleness bound; 2024-25 GW8-10 have no capture in bound and trained as unknown',
+      'base minutes curves are conditional on not-ruled-out — u/n/s and effective-0% rows are excluded from the fit and zeroed by rule at prediction',
+      "NOT SERVED: candidate rows ride pnpm project under v3-avail; the adoption call is plan 024's bar, one TEST reading",
     ],
-    "rows": 56133,
-    "date": "2026-08-27-avail",
-    "objective": "frequencies measured directly; minutes curves refit jointly with availability terms (fitLogisticK); shape parameters by RMSE on held-out 2024-25 rounds 20+",
-    "heldOut": "2025-26 (whole season), live 2026/27 (untouched)",
-    "notes": [
-      "defensive contribution is fitted on 2025-26 rounds 1-19 — the category exists in no earlier season, so that term alone is not held out",
-      "availability IS fitted here (plan 024): deadline-time flags from Wayback captures of bootstrap-static, joined within a 72h staleness bound; 2024-25 GW8-10 have no capture in bound and trained as unknown",
-      "base minutes curves are conditional on not-ruled-out — u/n/s and effective-0% rows are excluded from the fit and zeroed by rule at prediction",
-      "NOT SERVED: candidate rows ride pnpm project under v3-avail; the adoption call is plan 024's bar, one TEST reading"
-    ]
-  }
+  },
 };

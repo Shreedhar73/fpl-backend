@@ -232,6 +232,8 @@ export function exportFeatures(
           {
             startRate: features.laggedStartRate,
             subRate: features.laggedSubRate,
+            startMinutes: features.startMinutes,
+            startSixty: features.startSixty,
           },
           1,
           params,

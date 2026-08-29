@@ -316,6 +316,9 @@ describe('verdict', () => {
       seasonHalfLife: Infinity,
       selectedWindow: false,
       availabilityMode: 'joint' as const,
+      selectedRates: false,
+      perPlayerStart: false,
+      selectedBonusTau: false,
       trainWindow: null,
       folds: [
         ...perFold.map((d, i) => mk(seasons[i], d, true)),

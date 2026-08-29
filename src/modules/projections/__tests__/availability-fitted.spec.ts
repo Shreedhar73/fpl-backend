@@ -28,7 +28,12 @@ const fittedParams = (): FittedParams => ({
       subUnknown: -0.2,
       sixtyGivenStartFlagged: 0.8,
       minutesGivenStartFlagged: 70,
-      n: { startFlagged: 1000, subFlagged: 400, unknown: 100, flaggedStarts: 300 },
+      n: {
+        startFlagged: 1000,
+        subFlagged: 400,
+        unknown: 100,
+        flaggedStarts: 300,
+      },
     },
   },
 });
@@ -74,6 +79,11 @@ describe('minutesDistribution — fitted-availability regime', () => {
       pPlay: 0,
       pSixtyPlus: 0,
       expectedMinutes: 0,
+      // Every probability is zero by rule; `minutesGivenStart` is not a probability but the match
+      // length this player WOULD have been priced at (B-041), and `projectFixtureV2` reads it to
+      // size its minutes states. It is carried through the zero case so the field is never absent.
+      minutesGivenStart: fittedParams().minutes.minutesGivenStart,
+      sixtyGivenStart: fittedParams().minutes.sixtyGivenStart,
     });
   });
 
@@ -143,11 +153,17 @@ describe('minutesDistribution — fitted-availability regime', () => {
 
   it('params without the block keep the legacy multiplier behaviour byte-for-byte', () => {
     const legacy = minutesDistribution(lagged, 0.5, FITTED_PARAMS, 'MID');
-    const legacyWithFlags = minutesDistribution(lagged, 0.5, FITTED_PARAMS, 'MID', {
-      status: 'd',
-      chance: 50,
-      known: true,
-    });
+    const legacyWithFlags = minutesDistribution(
+      lagged,
+      0.5,
+      FITTED_PARAMS,
+      'MID',
+      {
+        status: 'd',
+        chance: 50,
+        known: true,
+      },
+    );
     // The avail argument must be inert for legacy params — the incumbent's behaviour is pinned.
     expect(legacy).toEqual(legacyWithFlags);
   });
