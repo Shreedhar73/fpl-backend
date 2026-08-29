@@ -141,7 +141,38 @@ describe('a held squad', () => {
     expect(result.rounds[0].points).toBe(24);
   });
 
-  it('banks free transfers up to the cap and no further', () => {
+  /**
+   * Pinned per round, not by its maximum (#99).
+   *
+   * `Math.max(...) === 5` over a saturating series measured nothing: seeded at 1 the bank saturates
+   * after round 4, seeded at 0 after round 5, and the cap absorbs the difference either way. It would
+   * also have passed a simulator that granted two transfers a gameweek. The series distinguishes
+   * every one of those at its first element.
+   */
+  it('banks one free transfer a round from a season that opens at gameweek 2', () => {
+    const rounds = Array.from({ length: 8 }, (_, i) => squadOf(i + 2));
+    const result = simulateSeason(
+      asRounds(...rounds),
+      opening,
+      'model',
+      RULES,
+      NO_TRANSFER,
+      OPTIONS,
+    );
+    // Entering GW2 a manager holds one, and `freeTransfersAfter` is the bank as that round ends —
+    // the next grant lands at the following deadline. So: one, then one more each round, capped.
+    expect(result.rounds.map((r) => r.freeTransfersAfter)).toEqual([
+      1, 2, 3, 4, 5, 5, 5, 5,
+    ]);
+  });
+
+  /**
+   * The other half of the seed, and the case the old coupling hid. A walk that opens at gameweek 1
+   * is inside the unlimited squad-selection window, where a free transfer means nothing — so the
+   * bank is empty during it and the ordinary grant makes it one entering gameweek 2. Seeded at 1
+   * instead, every arm would carry an extra transfer for the whole season.
+   */
+  it('holds no free transfer through the unlimited gameweek-1 window', () => {
     const rounds = Array.from({ length: 8 }, (_, i) => squadOf(i + 1));
     const result = simulateSeason(
       asRounds(...rounds),
@@ -151,7 +182,24 @@ describe('a held squad', () => {
       NO_TRANSFER,
       OPTIONS,
     );
-    expect(Math.max(...result.rounds.map((r) => r.freeTransfersAfter))).toBe(5);
+    // Zero through the unlimited window, and one entering gameweek 2 — the whole series is shifted
+    // by exactly the transfer the old seed handed out for free.
+    expect(result.rounds.map((r) => r.freeTransfersAfter)).toEqual([
+      0, 1, 2, 3, 4, 5, 5, 5,
+    ]);
+  });
+
+  it('refuses a mid-season start rather than guessing its bank', () => {
+    expect(() =>
+      simulateSeason(
+        asRounds(squadOf(12), squadOf(13)),
+        opening,
+        'model',
+        RULES,
+        NO_TRANSFER,
+        OPTIONS,
+      ),
+    ).toThrow(/opening at gameweek 12/);
   });
 });
 
@@ -414,28 +462,63 @@ describe('chips', () => {
 
   it('leaves the season untouched when no chips are configured', () => {
     const rounds = asRounds(squadOf(1), squadOf(2), squadOf(3));
-    const plain = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, OPTIONS);
+    const plain = simulateSeason(
+      rounds,
+      squadOf(1),
+      'model',
+      RULES,
+      NO_TRANSFER,
+      OPTIONS,
+    );
     expect(plain.rounds.every((r) => !r.chip)).toBe(true);
   });
 
   it('spends each chip at most once in a season', () => {
     const rounds = asRounds(squadOf(1), squadOf(2), squadOf(3));
-    const out = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, CHIPS);
+    const out = simulateSeason(
+      rounds,
+      squadOf(1),
+      'model',
+      RULES,
+      NO_TRANSFER,
+      CHIPS,
+    );
     const played = out.rounds.map((r) => r.chip).filter(Boolean);
     expect(new Set(played).size).toBe(played.length);
   });
 
   it('plays at most one chip in a round', () => {
     const rounds = asRounds(squadOf(1), squadOf(2), squadOf(3));
-    const out = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, CHIPS);
+    const out = simulateSeason(
+      rounds,
+      squadOf(1),
+      'model',
+      RULES,
+      NO_TRANSFER,
+      CHIPS,
+    );
     // one entry per round, never two — the type enforces it, the count states it
     expect(out.rounds.filter((r) => r.chip).length).toBeLessThanOrEqual(2);
   });
 
   it('scores more with chips than without, on the same squad and the same rounds', () => {
     const rounds = asRounds(squadOf(1), squadOf(2), squadOf(3));
-    const plain = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, OPTIONS);
-    const chipped = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, CHIPS);
+    const plain = simulateSeason(
+      rounds,
+      squadOf(1),
+      'model',
+      RULES,
+      NO_TRANSFER,
+      OPTIONS,
+    );
+    const chipped = simulateSeason(
+      rounds,
+      squadOf(1),
+      'model',
+      RULES,
+      NO_TRANSFER,
+      CHIPS,
+    );
     expect(chipped.rounds.reduce((t, r) => t + r.points, 0)).toBeGreaterThan(
       plain.rounds.reduce((t, r) => t + r.points, 0),
     );
@@ -445,7 +528,14 @@ describe('chips', () => {
     // every player blanks: the armband pays nothing, so the chip must pay nothing either
     const blank = (r: number) => squadOf(r, () => ({ actual: 0, minutes: 0 }));
     const rounds = asRounds(blank(1), blank(2), blank(3));
-    const out = simulateSeason(rounds, squadOf(1), 'model', RULES, NO_TRANSFER, CHIPS);
+    const out = simulateSeason(
+      rounds,
+      squadOf(1),
+      'model',
+      RULES,
+      NO_TRANSFER,
+      CHIPS,
+    );
     for (const r of out.rounds) {
       if (r.chip === 'TC') expect(r.points).toBe(0);
     }
