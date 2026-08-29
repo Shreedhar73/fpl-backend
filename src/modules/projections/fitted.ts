@@ -388,6 +388,44 @@ export const FITTED_PARAMS: FittedParams = {
  * - `sixtyGivenStartFlagged` 0.925 vs 0.934 global (n=332): a flagged player who starts anyway is
  *   nearly a normal starter — the doubt is about whether he plays, not how long.
  */
+/**
+ * The plan 028 shape candidate (B-041, D-036) — the incumbent's fitted numbers, with the two model
+ * shapes that measured positive switched on.
+ *
+ * **Why this exists at all.** D-036 says the live season is what settles a two-fold direction. A
+ * candidate that is not projected weekly cannot be settled by anything: "the prospective record will
+ * judge it" is a check that cannot fail unless something is actually running. This is that something,
+ * riding `pnpm project` beside the incumbent and the availability candidate, scored by
+ * `pnpm score:gameweek` under its own version. Serving stays pinned to the incumbent.
+ *
+ * **What is on, and what is deliberately off.**
+ *
+ * - `rates` — a 19-round half-life at the incumbent's 270-minute shrinkage. The two folds disagreed
+ *   (2024-25 chose the flat career mean at 540, 2025-26 chose this), so the choice is PRE-COMMITTED
+ *   here with its reason: 2025-26 is the fold adjacent to the season that will referee it, and there
+ *   is no season-before-this-one to select on at serve time. Recorded so the next session reads a
+ *   decision rather than a leftover.
+ * - `minutes.perPlayerStart` — on. +0.7% ± 0.3% across folds, the one reading that cleared twice the
+ *   between-fold error, and it improves `P(60+)` on its own reliability curve.
+ * - `bonus.tau` — **off**. The rank model is right by construction and measured −0.19% ± 0.19%; it is
+ *   not in the candidate. It also cannot be served without wiring the fixture pre-pass into
+ *   `forecast.service` and the `v3ep` export, which is the second reason not to put it here.
+ */
+export const SHAPE_CANDIDATE_PARAMS: FittedParams = {
+  ...FITTED_PARAMS,
+  rates: { halfLifeRounds: 19, shrinkMinutes: 270 },
+  minutes: { ...FITTED_PARAMS.minutes, perPlayerStart: true },
+  provenance: {
+    ...FITTED_PARAMS.provenance,
+    notes: [
+      ...FITTED_PARAMS.provenance.notes,
+      'plan 028 shape candidate (D-036): rate half-life 19 rounds at shrink 270, and per-player ' +
+        'E[minutes | started] / P(60+ | started). The bonus rank model is NOT included — it ' +
+        'measured -0.19% +/- 0.19% and is not served anywhere.',
+    ],
+  },
+};
+
 export const AVAILABILITY_CANDIDATE_PARAMS: FittedParams = {
   strength: {
     homeAdvantage: 1.1186408380003192,

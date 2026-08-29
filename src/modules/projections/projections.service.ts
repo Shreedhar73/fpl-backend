@@ -2,7 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ProjectionsRepository, ProjectionRow } from './projections.repository';
 import { ForecastService, PlayerForecast } from './forecast.service';
 import { CandidateService } from './candidate.service';
-import { AVAILABILITY_CANDIDATE_PARAMS, FITTED_PARAMS } from './fitted';
+import {
+  AVAILABILITY_CANDIDATE_PARAMS,
+  FittedParams,
+  FITTED_PARAMS,
+  SHAPE_CANDIDATE_PARAMS,
+} from './fitted';
 
 /**
  * The ONE thing that writes projections.
@@ -48,6 +53,12 @@ export const MODEL_VERSION = `v3-fitted-${FITTED_PARAMS.provenance.date}`;
  * beside the incumbent on the live season, which is the prospective half of plan 024's referee.
  */
 export const AVAILABILITY_MODEL_VERSION = `v3-${AVAILABILITY_CANDIDATE_PARAMS.provenance.date}`;
+
+/**
+ * The plan 028 shape candidate's version (B-041, D-036). Never served — the optimizer's version is
+ * pinned — and written weekly so the live season can referee a direction that two folds could not.
+ */
+export const SHAPE_MODEL_VERSION = 'v3-shape-2026-08-29';
 
 const HORIZON = 5;
 
@@ -135,46 +146,24 @@ export class ProjectionsService {
       );
     }
 
+    // The plan 028 shape candidate (D-036) rides the same run for the same reason the availability
+    // one does. D-036's verdict is that two folds are a direction and the live season settles it;
+    // a candidate nobody projects can never be settled, so this is what makes that sentence real.
+    await this.writeCandidate(
+      gameweekIds,
+      SHAPE_CANDIDATE_PARAMS,
+      SHAPE_MODEL_VERSION,
+      'shape',
+    );
+
     // The availability candidate (plan 024) rides the same run, through the SAME forecast machinery
     // with its own params — one feature engine, one projection path, a second version of rows.
-    try {
-      const availResults = await this.forecast.forecastMany(
-        gameweekIds,
-        AVAILABILITY_CANDIDATE_PARAMS,
-      );
-      const availRows: ProjectionRow[] = [];
-      for (const { summary, players } of availResults) {
-        for (const p of players) {
-          if (p.playerId === null) continue;
-          availRows.push({
-            playerId: p.playerId,
-            gameweekId: summary.gameweekId,
-            modelVersion: AVAILABILITY_MODEL_VERSION,
-            expectedPoints: round(p.expectedPoints, 2),
-            expectedMinutes: round(p.expectedMinutes, 2),
-            playProbability: round(p.playProbability, 3),
-            components: {
-              ...Object.fromEntries(
-                Object.entries(p.components).map(([k, v]) => [k, round(v, 3)]),
-              ),
-              fixtures: p.fixtures,
-            },
-            sd: round(p.distribution.sd, 3),
-            pBlank: round(p.distribution.pBlank, 3),
-            pHaul: round(p.distribution.pHaul, 3),
-          });
-        }
-      }
-      const availWritten = await this.repo.writeProjections(availRows);
-      this.log.log(
-        `${AVAILABILITY_MODEL_VERSION}: ${availWritten} candidate rows — scored weekly beside the ` +
-          `incumbent; never served (the optimizer's version is pinned)`,
-      );
-    } catch (err) {
-      this.log.warn(
-        `availability-candidate projections failed (incumbent rows are written): ${err instanceof Error ? err.message : err}`,
-      );
-    }
+    await this.writeCandidate(
+      gameweekIds,
+      AVAILABILITY_CANDIDATE_PARAMS,
+      AVAILABILITY_MODEL_VERSION,
+      'availability',
+    );
 
     const next = results[0];
 
@@ -194,6 +183,61 @@ export class ProjectionsService {
       withoutHistory: next.summary.withoutHistory,
       top: topPlayers(next.players, horizonEp),
     };
+  }
+
+  /**
+   * Project one candidate's rows through the same forecast machinery the incumbent uses.
+   *
+   * One projection path, several params sets, several version strings — a second implementation per
+   * candidate is how two models come to disagree for a reason nobody can name. Failures are logged
+   * and swallowed on purpose: the incumbent's rows are already written by the time this runs, and a
+   * candidate must never be able to take the served projection down with it.
+   *
+   * Never served. The optimizer resolves its version to the incumbent's constant, and the sabotage
+   * test for that pin is the one that used to be a hijack (B-037).
+   */
+  private async writeCandidate(
+    gameweekIds: number[],
+    params: FittedParams,
+    modelVersion: string,
+    label: string,
+  ): Promise<void> {
+    try {
+      const results = await this.forecast.forecastMany(gameweekIds, params);
+      const rows: ProjectionRow[] = [];
+      for (const { summary, players } of results) {
+        for (const p of players) {
+          if (p.playerId === null) continue;
+          rows.push({
+            playerId: p.playerId,
+            gameweekId: summary.gameweekId,
+            modelVersion,
+            expectedPoints: round(p.expectedPoints, 2),
+            expectedMinutes: round(p.expectedMinutes, 2),
+            playProbability: round(p.playProbability, 3),
+            components: {
+              ...Object.fromEntries(
+                Object.entries(p.components).map(([k, v]) => [k, round(v, 3)]),
+              ),
+              fixtures: p.fixtures,
+            },
+            sd: round(p.distribution.sd, 3),
+            pBlank: round(p.distribution.pBlank, 3),
+            pHaul: round(p.distribution.pHaul, 3),
+          });
+        }
+      }
+      const written = await this.repo.writeProjections(rows);
+      this.log.log(
+        `${modelVersion}: ${written} candidate rows — scored weekly beside the incumbent; ` +
+          `never served (the optimizer's version is pinned)`,
+      );
+    } catch (err) {
+      this.log.warn(
+        `${label}-candidate projections failed (incumbent rows are written): ` +
+          `${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 }
 
