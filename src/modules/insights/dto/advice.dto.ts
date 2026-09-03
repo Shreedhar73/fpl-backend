@@ -73,6 +73,28 @@ export class AdvicePlayerDto {
   nowCost!: number;
 
   @ApiProperty({
+    description:
+      'a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad. Only "a" is ' +
+      'safe to start. Carried here so a flag can sit on the shirt without a second fetch (plan 030).',
+  })
+  status!: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'The availability note, when there is one.',
+  })
+  news!: string | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'FPL’s own chance of playing next round, as a percentage. Null when FPL has published none.',
+  })
+  chanceOfPlayingNextRound!: number | null;
+
+  @ApiProperty({
     enum: ['captain', 'vice', 'starter', 'bench'],
     description:
       'What this player should do, not what the manager currently has them doing.',
@@ -240,7 +262,9 @@ export class AppearanceFloorDto {
 }
 
 export class DefencePairDto {
-  @ApiProperty({ description: 'The club both play for — e.g. "BHA". Never a team id.' })
+  @ApiProperty({
+    description: 'The club both play for — e.g. "BHA". Never a team id.',
+  })
   club!: string;
 
   @ApiProperty({

@@ -239,6 +239,10 @@ export class InsightsService {
       position: p.position,
       teamShortName: pick?.teamShortName ?? m?.teamShortName ?? '',
       nowCost: p.cost,
+      // 'a' when the meta row is missing — the same absence the list renders as no flag.
+      status: m?.status ?? 'a',
+      news: m?.news ?? null,
+      chanceOfPlayingNextRound: m?.chanceOfPlayingNextRound ?? null,
       role: p.role,
       benchOrder: p.benchOrder ?? null,
       epNextGw: round2(projection?.expectedPoints ?? 0),

@@ -6,7 +6,9 @@ import { ApiProperty } from '@nestjs/swagger';
  * inputs, not a picker's, and shipping them would triple the payload for nobody.
  */
 export class PlayerListItemDto {
-  @ApiProperty({ description: 'Our internal id (cuid) — what the squad endpoints take.' })
+  @ApiProperty({
+    description: 'Our internal id (cuid) — what the squad endpoints take.',
+  })
   playerId!: string;
 
   @ApiProperty()
@@ -50,7 +52,8 @@ export class PlayerListItemDto {
   @ApiProperty({
     type: Number,
     nullable: true,
-    description: 'P(features at all) next gameweek. The term that dominates every other one.',
+    description:
+      'P(features at all) next gameweek. The term that dominates every other one.',
   })
   playProbability!: number | null;
 }

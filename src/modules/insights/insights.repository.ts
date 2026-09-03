@@ -5,6 +5,9 @@ export interface PlayerMeta {
   playerId: string;
   fplId: number;
   teamShortName: string;
+  status: string;
+  news: string | null;
+  chanceOfPlayingNextRound: number | null;
 }
 
 export interface NextGwProjection {
@@ -43,12 +46,26 @@ export class InsightsRepository {
   async playerMeta(playerIds: string[]): Promise<Map<string, PlayerMeta>> {
     const rows = await this.prisma.player.findMany({
       where: { id: { in: playerIds } },
-      select: { id: true, fplId: true, team: { select: { shortName: true } } },
+      select: {
+        id: true,
+        fplId: true,
+        status: true,
+        news: true,
+        chanceOfPlayingNextRound: true,
+        team: { select: { shortName: true } },
+      },
     });
     return new Map(
       rows.map((r) => [
         r.id,
-        { playerId: r.id, fplId: r.fplId, teamShortName: r.team.shortName },
+        {
+          playerId: r.id,
+          fplId: r.fplId,
+          teamShortName: r.team.shortName,
+          status: r.status,
+          news: r.news,
+          chanceOfPlayingNextRound: r.chanceOfPlayingNextRound,
+        },
       ]),
     );
   }
