@@ -7,6 +7,7 @@ import {
   FittedParams,
   FITTED_PARAMS,
   SHAPE_CANDIDATE_PARAMS,
+  V3_INCUMBENT_PARAMS,
 } from './fitted';
 
 /**
@@ -45,7 +46,21 @@ import {
  * Two models that disagree about a player's expected points must not share a name in a table that
  * is queried by name.
  */
-export const MODEL_VERSION = `v3-fitted-${FITTED_PARAMS.provenance.date}`;
+/**
+ * **v5 (D-037).** v4 is the gradient-boosted candidate's family name and is not reused. v5 differs
+ * from v3 in corpus (2024-25 + 2025-26), in shape (recency-weighted rates and per-player starter
+ * minutes, the plan 028 candidate) and in the regime its minutes curves were fitted under; two
+ * models that disagree about a player must not share a name in a table queried by name.
+ */
+export const MODEL_VERSION = `v5-fitted-${FITTED_PARAMS.provenance.date}`;
+
+/**
+ * The v3 incumbent's version, kept exactly as it was so its rows keep landing under the name the
+ * live season has been scoring since GW2. Written weekly as a candidate now (D-020: the successor
+ * has not beaten it until the prospective record says so, and a predecessor that stops producing
+ * rows cannot be beaten by anything).
+ */
+export const V3_MODEL_VERSION = `v3-fitted-${V3_INCUMBENT_PARAMS.provenance.date}`;
 
 /**
  * The availability candidate's version (plan 024). Never served — the optimizer's version is pinned
@@ -145,6 +160,15 @@ export class ProjectionsService {
         `candidate projections failed (incumbent rows are written): ${err instanceof Error ? err.message : err}`,
       );
     }
+
+    // The model this one replaced (D-037) rides the same run under its old name, so the live
+    // season's scoreboard keeps a column for it and the adoption stays checkable.
+    await this.writeCandidate(
+      gameweekIds,
+      V3_INCUMBENT_PARAMS,
+      V3_MODEL_VERSION,
+      'v3-incumbent',
+    );
 
     // The plan 028 shape candidate (D-036) rides the same run for the same reason the availability
     // one does. D-036's verdict is that two folds are a direction and the live season settles it;

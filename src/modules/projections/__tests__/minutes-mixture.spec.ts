@@ -1,5 +1,8 @@
 import { minutesDistribution, projectFixtureV2 } from '../model-v2';
-import { FITTED_PARAMS } from '../fitted';
+// The v3 incumbent, deliberately: these specs are about a flag being INERT when absent, and since
+// D-037 the served `FITTED_PARAMS` carries the flags on. The params set with nothing switched on is
+// the incumbent, which is kept for exactly this kind of comparison.
+import { V3_INCUMBENT_PARAMS as FITTED_PARAMS } from '../fitted';
 import { Scoring } from '../scoring';
 import { scoringForSeason } from '../../archive/archive-scoring';
 

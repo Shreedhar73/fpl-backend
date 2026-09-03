@@ -1,6 +1,6 @@
 # Rolling-origin referee
 
-Generated 2026-09-02T17:50:52.669Z over 10 seasons (2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26), 253,568 archive rows. Training window: every earlier season. Season half-life: none — every season counts equally. Imputed start labels: not used. Window and decay: fixed for every fold. Player rates: the flat career mean. Bonus: a clipped linear function of the player's own BPS. Starter minutes: the two league constants. Availability: plan 024's fitted flags. Market blend (plan 029): off. Season-start strength prior: off — every club starts at the league average. Start rate: the season step (incumbent).
+Generated 2026-09-02T18:04:17.478Z over 10 seasons (2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26), 253,568 archive rows. Training window: every earlier season. Season half-life: none — every season counts equally. Imputed start labels: not used. Window and decay: fixed for every fold. Player rates: the flat career mean. Bonus: a clipped linear function of the player's own BPS. Starter minutes: the two league constants. Availability: plan 024's fitted flags. Market blend (plan 029): off. Season-start strength prior: off — every club starts at the league average. Start rate: season record shrunk toward the career rate.
 
 Each fold fits on the seasons BEFORE its evaluation season and scores that season once. The incumbent is refitted per fold like every other arm — scoring the served parameters, which were fitted on 2023-24 and 2024-25, against the 2024-25 fold would hand it its own training season. The quantity paired is points captured @11 per round (D-020), the pairing is per round (D-033), and the number a single holdout could never produce is the last table: the spread ACROSS folds.
 
@@ -30,6 +30,35 @@ A refused fold is a result. The minutes curves fall back to their unfitted defau
 - **2022-23** — no start labels in 2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22 — the minutes curves would fall back to their unfitted defaults and the fold would report a number from a model that was never fitted
 - **2023-24** — no start labels in 2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23 — the minutes curves would fall back to their unfitted defaults and the fold would report a number from a model that was never fitted
 
+### What each fold chose for the plan 029 knobs
+
+Each chosen inside the fold on the season before it, with the incumbent (0) in every grid so "leave it alone" can win. `spread` is best minus worst across candidates on that validation season: a flat grid means the objective could not tell them apart.
+
+| eval season | knob | chosen | validate captured | spread |
+|---|---|---|---:|---:|
+| 2024-25 | start-rate shrink | season step (incumbent) | 42.1% | 2.13pp |
+| 2025-26 | start-rate shrink | 16 career pseudo-matches | 40.0% | 2.60pp |
+
+**2024-25 — every start-rate shrink candidate**
+
+| candidate | rounds | validate captured |
+|---|---:|---:|
+| season step (incumbent) | 19 | 42.1% |
+| 2 career pseudo-matches | 19 | 41.7% |
+| 4 career pseudo-matches | 19 | 42.0% |
+| 8 career pseudo-matches | 19 | 40.4% |
+| 16 career pseudo-matches | 19 | 39.9% |
+
+**2025-26 — every start-rate shrink candidate**
+
+| candidate | rounds | validate captured |
+|---|---:|---:|
+| season step (incumbent) | 19 | 39.2% |
+| 2 career pseudo-matches | 19 | 37.4% |
+| 4 career pseudo-matches | 19 | 37.7% |
+| 8 career pseudo-matches | 19 | 39.7% |
+| 16 career pseudo-matches | 19 | 40.0% |
+
 ### What the refit actually moved
 
 Carried because "refitted per fold" is a claim a report should be able to lose. Identical rows here would mean the folds shared a fit.
@@ -46,9 +75,10 @@ Carried because "refitted per fold" is a claim a report should be able to lose. 
 | model vs form | 2024-25 | 37 | +2.9% | 1.7% | no |
 | model vs priorSeason | 2024-25 | 38 | +11.9% | 1.7% | yes |
 | model vs epNext | 2024-25 | 35 | +0.5% | 1.9% | no |
-| model vs form | 2025-26 | 19 | +4.0% | 2.2% | no |
-| model vs priorSeason | 2025-26 | 19 | +24.9% | 2.0% | yes |
-| model vs epNext | 2025-26 | 19 | +1.9% | 3.0% | no |
+| model vs form | 2025-26 | 19 | +3.8% | 2.1% | no |
+| model vs priorSeason | 2025-26 | 19 | +24.2% | 2.1% | yes |
+| model vs epNext | 2025-26 | 19 | +1.6% | 3.1% | no |
+| shrunk start rate vs season step | 2025-26 | 19 | -0.8% | 2.1% | no |
 
 ## Across folds
 
@@ -56,16 +86,19 @@ The mean of the fold means, with the standard error of the spread BETWEEN folds.
 
 | comparison | folds | mean of fold means | se across folds | clears 2se | per fold |
 |---|---:|---:|---:|---|---|
-| model vs form | 2 | +3.4% | 0.6% | yes | 2024-25 +2.9%, 2025-26 +4.0% |
-| model vs priorSeason | 2 | +18.4% | 6.5% | yes | 2024-25 +11.9%, 2025-26 +24.9% |
-| model vs epNext | 2 | +1.2% | 0.7% | no | 2024-25 +0.5%, 2025-26 +1.9% |
+| model vs form | 2 | +3.3% | 0.5% | yes | 2024-25 +2.9%, 2025-26 +3.8% |
+| model vs priorSeason | 2 | +18.0% | 6.2% | yes | 2024-25 +11.9%, 2025-26 +24.2% |
+| model vs epNext | 2 | +1.1% | 0.6% | no | 2024-25 +0.5%, 2025-26 +1.6% |
+| shrunk start rate vs season step | 1 | -0.8% | — (one fold) | undecidable on one fold | 2025-26 -0.8% |
 
 ## What this run says
 
 2 of 9 planned folds ran. 7 were refused: 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24. Until the archive carries a start label for those seasons, the referee is 2-fold for anything the minutes model touches, whatever it is for the rate components.
 
-**model vs form** — +3.4% captured@11 across 2 folds, se 0.6%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+**model vs form** — +3.3% captured@11 across 2 folds, se 0.5%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
 
-**model vs priorSeason** — +18.4% captured@11 across 2 folds, se 6.5%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+**model vs priorSeason** — +18.0% captured@11 across 2 folds, se 6.2%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
 
-**model vs epNext** — +1.2% captured@11 across 2 folds, se 0.7%. Does NOT clear twice the between-fold error, so this comparison is undecided at this fold count however the mean points. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+**model vs epNext** — +1.1% captured@11 across 2 folds, se 0.6%. Does NOT clear twice the between-fold error, so this comparison is undecided at this fold count however the mean points. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+
+**shrunk start rate vs season step** — one fold, mean -0.8%. A spread over one season does not exist, so this is a point estimate with no scale — exactly the state every verdict in this repository was in before this harness.

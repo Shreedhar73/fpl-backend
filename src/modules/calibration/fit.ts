@@ -86,6 +86,15 @@ export interface FitInput {
    * Defaults to `joint`, which is what `fitParams` did before this option existed.
    */
   availabilityMode?: 'joint' | 'unflagged-base' | 'none';
+  /**
+   * Career pseudo-matches blended into the season start rate (B-042, plan 029 task 5).
+   *
+   * The start and sub curves are regressions ON the lagged start rate, so a candidate value here
+   * changes the feature the curves are fitted to and is a refit, not a rescore. Passed through to
+   * the walk the fit reads and written into the fitted params, so the model is scored under the
+   * same feature it was fitted on. Absent or 0 is the incumbent.
+   */
+  startRateShrink?: number;
 }
 
 export interface FitReport {
@@ -232,11 +241,13 @@ export function fitParams(input: FitInput): FitReport {
   const halfLife = input.seasonHalfLife ?? SEASON_HALF_LIFE;
   const availabilityMode = input.availabilityMode ?? 'joint';
 
+  const startRateShrink = input.startRateShrink ?? 0;
   const measured = measureDirect(
     train,
     imputedStarts,
     halfLife,
     availabilityMode,
+    startRateShrink,
   );
   const leagueRates = measureLeagueRates(train);
 
@@ -257,6 +268,10 @@ export function fitParams(input: FitInput): FitReport {
       sixtyGivenSub: measured.sixtyGivenSub,
       minutesGivenStart: measured.minutesGivenStart,
       minutesGivenSub: measured.minutesGivenSub,
+      // Written into the params so `walkRounds` builds the SAME feature at scoring time that the
+      // curves were regressed on. Left off entirely at 0, so the incumbent's params shape is
+      // byte-identical to what it was.
+      ...(startRateShrink > 0 ? { startRateShrink } : {}),
       gkp: measured.gkp,
       // Only the joint regime emits the availability block, and emitting it is what SWITCHES the
       // model's regime — `minutesDistribution` reads the flags directly when it is present and
@@ -454,6 +469,7 @@ function measureDirect(
   imputed = false,
   halfLife: number = SEASON_HALF_LIFE,
   mode: 'joint' | 'unflagged-base' | 'none' = 'joint',
+  startRateShrink = 0,
 ) {
   let started = 0;
   let startedSixty = 0;
@@ -562,7 +578,7 @@ function measureDirect(
     leagueGoalsPerTeamMatch: (homePerMatch + awayPerMatch) / 2,
     // The start model is fitted as a calibration of the lagged rate onto the realised one; see
     // fitMinutesCurves for why each is a two-parameter logistic rather than the identity v1 assumed.
-    ...fitMinutesCurves(rows, imputed, halfLife, mode),
+    ...fitMinutesCurves(rows, imputed, halfLife, mode, startRateShrink),
   };
 }
 
@@ -590,6 +606,7 @@ function fitMinutesCurves(
   imputed = false,
   halfLife: number = SEASON_HALF_LIFE,
   mode: 'joint' | 'unflagged-base' | 'none' = 'joint',
+  startRateShrink = 0,
 ): {
   startIntercept: number;
   startSlope: number;
@@ -652,7 +669,16 @@ function fitMinutesCurves(
 
   const curveWeights = seasonWeights(rows, halfLife);
 
-  for (const context of walkRounds(rows, UNFITTED_PARAMS)) {
+  // The walk the curves are regressed on carries the same start-rate shrinkage the fitted params
+  // will (plan 029 task 5); at 0 this is `UNFITTED_PARAMS` exactly.
+  const walkParams: FittedParams =
+    startRateShrink > 0
+      ? {
+          ...UNFITTED_PARAMS,
+          minutes: { ...UNFITTED_PARAMS.minutes, startRateShrink },
+        }
+      : UNFITTED_PARAMS;
+  for (const context of walkRounds(rows, walkParams)) {
     for (const { row, features } of context.items) {
       if (features.matchesSample === 0) continue;
       const known =

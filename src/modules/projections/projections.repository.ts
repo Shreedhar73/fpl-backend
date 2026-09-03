@@ -91,6 +91,11 @@ export class ProjectionsRepository {
             update: data,
           });
         }),
+        // Prisma's default is 5 s, and a batch of 200 upserts took 25 s on 2026-09-02 while four
+        // candidate versions were being written in one run — the availability candidate's rows were
+        // lost with a warning and nothing else. The bound is generous because the failure it guards
+        // is a silent partial write, not a hang.
+        { timeout: 120_000 },
       );
     }
     return rows.length;

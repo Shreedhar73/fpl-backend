@@ -74,6 +74,24 @@ async function main(): Promise<void> {
   const selectBonusTau = process.argv.includes('--select-bonus');
   const availabilityMode = modeFlag('availability');
   const compareAvailabilityMode = modeFlag('vs-availability');
+  // Plan 029. Three knobs, each with select / fixed / compare forms:
+  //   --select-crowd | --crowd <w> | --compare-crowd          the ep_next blend weight
+  //   --select-prior | --prior <w> | --compare-prior          the season-start strength prior
+  //   --select-start-shrink | --start-shrink <k> | --compare-start-shrink   the shrunk start rate
+  // `model vs epNext` is paired on every run whose rows carry a deadline capture; no flag needed.
+  const selectCrowd = process.argv.includes('--select-crowd');
+  const crowdWeight = numberFlag('crowd');
+  const compareCrowd = process.argv.includes('--compare-crowd');
+  const selectPrior = process.argv.includes('--select-prior');
+  const priorWeight = numberFlag('prior');
+  const comparePrior = process.argv.includes('--compare-prior');
+  const selectStartShrink = process.argv.includes('--select-start-shrink');
+  const startShrink = numberFlag('start-shrink');
+  const compareStartShrink = process.argv.includes('--compare-start-shrink');
+  //   --select-confidence | --confidence <m> | --compare-confidence   strength shrinkage by ordering
+  const selectConfidence = process.argv.includes('--select-confidence');
+  const confidence = numberFlag('confidence');
+  const compareConfidence = process.argv.includes('--compare-confidence');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
@@ -95,6 +113,18 @@ async function main(): Promise<void> {
       selectBonusTau,
       availabilityMode,
       compareAvailabilityMode,
+      selectCrowd,
+      crowdWeight,
+      compareCrowd,
+      selectPrior,
+      priorWeight,
+      comparePrior,
+      selectStartShrink,
+      startShrink,
+      compareStartShrink,
+      selectConfidence,
+      confidence,
+      compareConfidence,
     });
     log.log(`report: ${report.path}`);
     for (const [label, across] of Object.entries(report.across)) {

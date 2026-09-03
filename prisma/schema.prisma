@@ -563,6 +563,51 @@ model ArchiveAvailabilitySnapshot {
   @@map("archive_availability_snapshot")
 }
 
+/// DEADLINE-TIME MARKET FIELDS for past seasons, from the same Wayback captures of
+/// `bootstrap-static` that `ArchiveAvailabilitySnapshot` reads (B-043, plan 029).
+///
+/// What FPL itself published BEFORE each deadline: its own projection for the next round
+/// (`ep_next`), the trailing form, the price, and ownership. The register believed none of this
+/// existed for past seasons — the community archive carries `xP` scraped after the match (D-016) —
+/// and so `ep_next` had never been a baseline, and never a candidate input. Every capture under
+/// `.archive-cache/wayback/` had it all along.
+///
+/// The same leak rule as the availability table: the LAST capture strictly before the deadline.
+/// `epNextEvent` is the id of the event the capture called `is_next` — `ep_next` describes THAT
+/// round, and a capture keyed to a round it did not describe must be visible, not joined.
+///
+/// `selectedBy` is stored for the template squad in `decision-quality` and for nothing else.
+/// Ownership is not a quality signal and never reaches `PlayerFeatures` (fpl-agent-guide §2.1).
+model ArchiveDeadlineMarket {
+  id     String @id @default(cuid())
+  season String
+  round  Int
+
+  /// STABLE across seasons — the join key to `Player.code` and `ArchivePlayerGameweek.playerCode`
+  playerCode Int
+
+  /// FPL's own expected points for the NEXT round at capture time; null when FPL published none
+  epNext     Decimal? @db.Decimal(6, 2)
+  epThis     Decimal? @db.Decimal(6, 2)
+  form       Decimal? @db.Decimal(6, 2)
+  /// price in tenths at capture
+  nowCost    Int
+  /// `selected_by_percent` at capture
+  selectedBy Decimal  @db.Decimal(5, 2)
+  /// the event id the capture's `events[].is_next` pointed at — which round `epNext` is ABOUT
+  epNextEvent Int?
+
+  snapshotAt DateTime
+  deadlineAt DateTime
+  gapHours   Decimal  @db.Decimal(7, 2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([season, round, playerCode])
+  @@index([season, round])
+  @@map("archive_deadline_market")
+}
+
 /// DEADLINE SNAPSHOT — the only record of what was knowable BEFORE a gameweek.
 ///
 /// `players` is a snapshot table: `status`, `chanceOfPlayingNextRound`, `epNext`, `epThis`, `form`,

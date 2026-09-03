@@ -112,6 +112,60 @@ export class CalibrationService {
 
   constructor(private readonly repo: CalibrationRepository) {}
 
+  /**
+   * Fit on an explicit window (B-043, plan 029 task 8): every season named trains, the last of them
+   * lends its rounds from `VALIDATE_FROM_ROUND` to the shape search, and the defensive-contribution
+   * term is fitted on whichever of those rows carry the category — the same split the rolling-origin
+   * referee uses for a fold whose training seasons already have it.
+   *
+   * Exists because `fit()` above is pinned to 2023-24 + 2024-25 with 2025-26 held out, and that
+   * holdout is spent (D-034): the season to serve is 2026-27, and D-035 chose a two-season window on
+   * both folds, so the served fit is the two most recent seasons with nothing held out but the live
+   * one.
+   */
+  async fitOn(
+    trainSeasons: string[],
+    options: {
+      startRateShrink?: number;
+      /** defaults to `none` — the served model applies FPL's percentage by hand (D-032, D-035) */
+      availabilityMode?: 'joint' | 'unflagged-base' | 'none';
+    } = {},
+  ): Promise<FitReport> {
+    if (trainSeasons.length === 0) throw new Error('fitOn: no seasons');
+    const scoringFor = await this.scoringResolver(trainSeasons);
+    const all = await this.repo.history(trainSeasons);
+    const validateSeason = [...trainSeasons].sort().at(-1)!;
+    const train = all.filter(
+      (r) => r.season !== validateSeason || r.round < VALIDATE_FROM_ROUND,
+    );
+    const validate = all.filter(
+      (r) => r.season === validateSeason && r.round >= VALIDATE_FROM_ROUND,
+    );
+    const defconTrain = train.filter((r) => r.defensiveContribution !== null);
+    const defconValidate = validate.filter(
+      (r) => r.defensiveContribution !== null,
+    );
+    if (defconTrain.length === 0) {
+      throw new Error(
+        `fitOn(${trainSeasons.join(', ')}): no season carries the defensive-contribution category`,
+      );
+    }
+    this.log.log(
+      `fitting on ${trainSeasons.join(' + ')}: ${train.length} rows, validating on ` +
+        `${validateSeason} rounds ${VALIDATE_FROM_ROUND}+ (${validate.length} rows); ` +
+        `defcon ${defconTrain.length} fit / ${defconValidate.length} validate`,
+    );
+    return fitParams({
+      train,
+      defconTrain,
+      validate,
+      defconValidate,
+      scoringFor,
+      startRateShrink: options.startRateShrink,
+      availabilityMode: options.availabilityMode ?? 'none',
+    });
+  }
+
   /** Fit on the training seasons and print what changed. Writes no parameters — the caller does. */
   async fit(): Promise<FitReport> {
     const scoringFor = await this.scoringResolver();

@@ -4,7 +4,9 @@ import {
   fixtureGoalRates,
   GoalRates,
   League,
+  seasonPriors,
   StrengthInputRow,
+  TeamPrior,
 } from './strength';
 import { FittedParams, RateParams } from './fitted';
 import { PlayerRates } from './model-v2';
@@ -83,6 +85,13 @@ export interface HistoryRow {
    */
   deadlineStatus?: string | null;
   deadlineChance?: number | null;
+  /**
+   * FPL's own `ep_next` as published BEFORE this round's deadline (B-043, plan 029), joined from
+   * `archive_deadline_market` inside the staleness bound and only where the capture's `is_next`
+   * event is this round. Null where there is no such capture. A BASELINE and, under `params.crowd`,
+   * one input to the blend — never a target, never a feature of the projection model itself.
+   */
+  deadlineEpNext?: number | null;
 }
 
 /** What the model is allowed to know about a player before a round it has not seen. */
@@ -347,6 +356,19 @@ export function* walkRounds(
   let currentSeason: string | null = null;
   /** playerCode → accumulator within the current season only */
   let seasonAcc = new Map<number, Accumulator>();
+  /**
+   * Last season's final club ratings, carried into this one as the shrinkage target (plan 029
+   * task 4). Null until a season has ended, and inert unless `params.strength.priorSeasonWeight`
+   * says otherwise — with the weight absent `fixtureGoalRates` never reads it.
+   */
+  let priors: { teams: Map<number, TeamPrior>; promoted: TeamPrior } | null =
+    null;
+  const withPriors = (l: League): League => {
+    if (!priors) return l;
+    l.prior = priors.teams;
+    l.promotedPrior = priors.promoted;
+    return l;
+  };
 
   let i = 0;
   while (i < sorted.length) {
@@ -370,9 +392,15 @@ export function* walkRounds(
           });
         }
       }
+      // What the season that just ended says about each club, kept before the reset wipes it. The
+      // ratings themselves still start from nothing — promotion, relegation and squad turnover are
+      // real — but the TARGET they are shrunk toward can be last season rather than the average.
+      if (currentSeason !== null) {
+        priors = seasonPriors(league, params.strength);
+      }
       seasonAcc = new Map();
       strengthRows = [];
-      league = buildLeague([]);
+      league = withPriors(buildLeague([]));
       currentSeason = season;
     }
 
@@ -403,6 +431,7 @@ export function* walkRounds(
         round,
         params.rates,
         decayed,
+        params.minutes.startRateShrink,
       ),
       goalRates: fixtureGoalRates(
         row.teamCode === null ? undefined : league.teams.get(row.teamCode),
@@ -412,6 +441,7 @@ export function* walkRounds(
         row.wasHome,
         league,
         params.strength,
+        { team: row.teamCode, opponent: row.opponentTeamCode },
       ),
     }));
 
@@ -434,6 +464,7 @@ export function* walkRounds(
             round,
             params.rates,
             decayed,
+            params.minutes.startRateShrink,
           ),
           goalRates: fixtureGoalRates(
             row.teamCode === null ? undefined : league.teams.get(row.teamCode),
@@ -443,6 +474,7 @@ export function* walkRounds(
             row.wasHome,
             league,
             params.strength,
+            { team: row.teamCode, opponent: row.opponentTeamCode },
           ),
         })),
       });
@@ -475,10 +507,8 @@ export function* walkRounds(
     // Built AS OF the round after the one just folded in, which is the round it will be asked about.
     // The decay is a function of that distance, so passing the wrong reference round would weight
     // every match by one round too many and no output would look wrong.
-    league = buildLeague(
-      strengthRows,
-      round + 1,
-      params.strength.decayHalfLife,
+    league = withPriors(
+      buildLeague(strengthRows, round + 1, params.strength.decayHalfLife),
     );
   }
 }
@@ -612,6 +642,8 @@ function featuresFor(
   round: number,
   rateParams?: RateParams,
   decayed?: Map<number, DecayedRates>,
+  /** career pseudo-matches blended into the season start rate (B-042); 0 or absent is the incumbent */
+  startRateShrink?: number,
 ): PlayerFeatures {
   const c = career.get(row.playerCode) ?? empty();
   const s = seasonAcc.get(row.playerCode) ?? empty();
@@ -689,12 +721,7 @@ function featuresFor(
     // Denominated on matches where `starts` was recorded, so a career that straddles 2022-23 is
     // rated on the half of it the archive actually describes rather than diluted by the half it
     // does not.
-    laggedStartRate:
-      s.startMatches > 0
-        ? s.starts / s.startMatches
-        : c.startMatches > 0
-          ? c.starts / c.startMatches
-          : 0.3,
+    laggedStartRate: laggedStartRate(s, c, startRateShrink ?? 0),
     laggedSubRate: laggedSubRate(s, c),
     // Under a finite rate half-life this is the DECAYED minute count — the effective sample the
     // rates actually rest on, which is what the field has always claimed to be. Unread anywhere else
@@ -782,6 +809,38 @@ const SIXTY_GIVEN_START_PRIOR = 0.934;
 const START_BEHAVIOUR_SHRINK = 3;
 /** Non-starts before a player's own rate outweighs the prior — a Beta(k) pseudo-count. */
 const SUB_RATE_SHRINK = 8;
+
+/**
+ * `P(start)` as the record so far says it, this season first and career behind.
+ *
+ * With `shrink` 0 this is exactly what it was: the season's own rate the moment it has one match,
+ * the career's before that, and 0.3 for a player with no history — a squad player rather than a
+ * starter, because assuming a stranger starts is what makes a model recommend every new signing.
+ *
+ * With `shrink` k > 0 (B-042, plan 029 task 5) the season record is a Beta-style update on the
+ * career rate: `(season starts + k × career) / (season matches + k)`. One match into a season it
+ * moves the rate by about 1/(k+1) of the way from career to observed, instead of all of it.
+ */
+function laggedStartRate(
+  season: Accumulator,
+  career: Accumulator,
+  shrink: number,
+): number {
+  const careerRate =
+    career.startMatches > 0 ? career.starts / career.startMatches : 0.3;
+  if (shrink <= 0) {
+    return season.startMatches > 0
+      ? season.starts / season.startMatches
+      : careerRate;
+  }
+  // The career BEFORE this season is the prior; the career accumulator has already folded this
+  // season's rows in, and blending the season against a rate that contains it counts every start
+  // twice. A player with no earlier season is shrunk toward the same 0.3 a stranger gets.
+  const priorMatches = career.startMatches - season.startMatches;
+  const priorRate =
+    priorMatches > 0 ? (career.starts - season.starts) / priorMatches : 0.3;
+  return (season.starts + shrink * priorRate) / (season.startMatches + shrink);
+}
 
 /**
  * `P(appeared | did not start)` from what is already folded in, this season first and career behind.

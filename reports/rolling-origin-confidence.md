@@ -1,6 +1,6 @@
 # Rolling-origin referee
 
-Generated 2026-09-02T17:50:52.669Z over 10 seasons (2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26), 253,568 archive rows. Training window: every earlier season. Season half-life: none — every season counts equally. Imputed start labels: not used. Window and decay: fixed for every fold. Player rates: the flat career mean. Bonus: a clipped linear function of the player's own BPS. Starter minutes: the two league constants. Availability: plan 024's fitted flags. Market blend (plan 029): off. Season-start strength prior: off — every club starts at the league average. Start rate: the season step (incumbent).
+Generated 2026-09-02T18:07:33.119Z over 10 seasons (2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26), 253,568 archive rows. Training window: every earlier season. Season half-life: none — every season counts equally. Imputed start labels: not used. Window and decay: fixed for every fold. Player rates: the flat career mean. Bonus: a clipped linear function of the player's own BPS. Starter minutes: the two league constants. Availability: plan 024's fitted flags. Market blend (plan 029): off. Season-start strength prior: off — every club starts at the league average. Start rate: the season step (incumbent). Strength confidence: CHOSEN by ordering on the season before the fold.
 
 Each fold fits on the seasons BEFORE its evaluation season and scores that season once. The incumbent is refitted per fold like every other arm — scoring the served parameters, which were fitted on 2023-24 and 2024-25, against the 2024-25 fold would hand it its own training season. The quantity paired is points captured @11 per round (D-020), the pairing is per round (D-033), and the number a single holdout could never produce is the last table: the spread ACROSS folds.
 
@@ -29,6 +29,37 @@ A refused fold is a result. The minutes curves fall back to their unfitted defau
 - **2021-22** — no start labels in 2016-17, 2017-18, 2018-19, 2019-20, 2020-21 — the minutes curves would fall back to their unfitted defaults and the fold would report a number from a model that was never fitted
 - **2022-23** — no start labels in 2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22 — the minutes curves would fall back to their unfitted defaults and the fold would report a number from a model that was never fitted
 - **2023-24** — no start labels in 2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23 — the minutes curves would fall back to their unfitted defaults and the fold would report a number from a model that was never fitted
+
+### What each fold chose for the plan 029 knobs
+
+Each chosen inside the fold on the season before it, with the incumbent (0) in every grid so "leave it alone" can win. `spread` is best minus worst across candidates on that validation season: a flat grid means the objective could not tell them apart.
+
+| eval season | knob | chosen | validate captured | spread |
+|---|---|---|---:|---:|
+| 2024-25 | strength confidence (matches) | 16 matches | 42.1% | 1.92pp |
+| 2025-26 | strength confidence (matches) | 96 matches | 39.2% | 2.59pp |
+
+**2024-25 — every strength confidence (matches) candidate**
+
+| candidate | rounds | validate captured |
+|---|---:|---:|
+| 4 matches | 19 | 40.1% |
+| 8 matches | 19 | 41.0% |
+| 16 matches | 19 | 42.1% |
+| 32 matches | 19 | 41.7% |
+| 64 matches | 19 | 40.6% |
+| 96 matches | 19 | 40.3% |
+
+**2025-26 — every strength confidence (matches) candidate**
+
+| candidate | rounds | validate captured |
+|---|---:|---:|
+| 4 matches | 19 | 36.6% |
+| 8 matches | 19 | 37.0% |
+| 16 matches | 19 | 37.7% |
+| 32 matches | 19 | 39.0% |
+| 64 matches | 19 | 38.4% |
+| 96 matches | 19 | 39.2% |
 
 ### What the refit actually moved
 

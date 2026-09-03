@@ -2,10 +2,12 @@ import { OptimizerRepository } from '../optimizer.repository';
 import {
   MODEL_VERSION,
   SHAPE_MODEL_VERSION,
+  V3_MODEL_VERSION,
 } from '../../projections/projections.service';
 import {
   FITTED_PARAMS,
   SHAPE_CANDIDATE_PARAMS,
+  V3_INCUMBENT_PARAMS,
 } from '../../projections/fitted';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 
@@ -57,11 +59,20 @@ describe('the served model version is pinned', () => {
     expect(version).toBe(MODEL_VERSION);
   });
 
-  it('is a different model from the incumbent, not a relabelled one', () => {
+  it('is a different model from the v3 incumbent, not a relabelled one', () => {
     expect(SHAPE_CANDIDATE_PARAMS.rates).toBeDefined();
     expect(SHAPE_CANDIDATE_PARAMS.minutes.perPlayerStart).toBe(true);
-    expect(FITTED_PARAMS.rates).toBeUndefined();
-    expect(FITTED_PARAMS.minutes.perPlayerStart).toBeUndefined();
+    expect(V3_INCUMBENT_PARAMS.rates).toBeUndefined();
+    expect(V3_INCUMBENT_PARAMS.minutes.perPlayerStart).toBeUndefined();
+    // And since D-037 the SERVED params carry the shape too — on a different corpus, under a
+    // different version string. The v3 rows keep landing under their own name (V3_MODEL_VERSION).
+    expect(FITTED_PARAMS.rates).toEqual(SHAPE_CANDIDATE_PARAMS.rates);
+    expect(FITTED_PARAMS.minutes.perPlayerStart).toBe(true);
+    expect(FITTED_PARAMS.provenance.fittedOn).not.toEqual(
+      V3_INCUMBENT_PARAMS.provenance.fittedOn,
+    );
+    expect(V3_MODEL_VERSION).not.toBe(MODEL_VERSION);
+    expect(V3_MODEL_VERSION).toBe('v3-fitted-2026-08-27-gkp');
     // The rank bonus lost on the referee and is in no candidate. If this ever becomes defined,
     // `forecast.service` and the v3ep export need the fixture pre-pass first — without it the
     // candidate would serve the incumbent's bonus term under its own version string.

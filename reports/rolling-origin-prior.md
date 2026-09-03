@@ -1,6 +1,6 @@
 # Rolling-origin referee
 
-Generated 2026-09-02T17:50:52.669Z over 10 seasons (2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26), 253,568 archive rows. Training window: every earlier season. Season half-life: none — every season counts equally. Imputed start labels: not used. Window and decay: fixed for every fold. Player rates: the flat career mean. Bonus: a clipped linear function of the player's own BPS. Starter minutes: the two league constants. Availability: plan 024's fitted flags. Market blend (plan 029): off. Season-start strength prior: off — every club starts at the league average. Start rate: the season step (incumbent).
+Generated 2026-09-02T17:57:08.400Z over 10 seasons (2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26), 253,568 archive rows. Training window: every earlier season. Season half-life: none — every season counts equally. Imputed start labels: not used. Window and decay: fixed for every fold. Player rates: the flat career mean. Bonus: a clipped linear function of the player's own BPS. Starter minutes: the two league constants. Availability: plan 024's fitted flags. Market blend (plan 029): off. Season-start strength prior: ON — last season's ratios as the shrinkage target. Start rate: the season step (incumbent).
 
 Each fold fits on the seasons BEFORE its evaluation season and scores that season once. The incumbent is refitted per fold like every other arm — scoring the served parameters, which were fitted on 2023-24 and 2024-25, against the 2024-25 fold would hand it its own training season. The quantity paired is points captured @11 per round (D-020), the pairing is per round (D-033), and the number a single holdout could never produce is the last table: the spread ACROSS folds.
 
@@ -43,12 +43,14 @@ Carried because "refitted per fold" is a claim a report should be able to lose. 
 
 | comparison | eval season | rounds | mean Δ captured@11 | 1 se | clears 2se |
 |---|---|---:|---:|---:|---|
-| model vs form | 2024-25 | 37 | +2.9% | 1.7% | no |
-| model vs priorSeason | 2024-25 | 38 | +11.9% | 1.7% | yes |
+| model vs form | 2024-25 | 37 | +2.9% | 1.8% | no |
+| model vs priorSeason | 2024-25 | 38 | +12.1% | 1.5% | yes |
 | model vs epNext | 2024-25 | 35 | +0.5% | 1.9% | no |
-| model vs form | 2025-26 | 19 | +4.0% | 2.2% | no |
-| model vs priorSeason | 2025-26 | 19 | +24.9% | 2.0% | yes |
-| model vs epNext | 2025-26 | 19 | +1.9% | 3.0% | no |
+| strength prior vs league-average target | 2024-25 | 37 | +0.1% | 0.7% | no |
+| model vs form | 2025-26 | 19 | +2.2% | 2.0% | no |
+| model vs priorSeason | 2025-26 | 19 | +25.8% | 2.2% | yes |
+| model vs epNext | 2025-26 | 19 | +0.1% | 2.7% | no |
+| strength prior vs league-average target | 2025-26 | 19 | -1.8% | 1.5% | no |
 
 ## Across folds
 
@@ -56,16 +58,19 @@ The mean of the fold means, with the standard error of the spread BETWEEN folds.
 
 | comparison | folds | mean of fold means | se across folds | clears 2se | per fold |
 |---|---:|---:|---:|---|---|
-| model vs form | 2 | +3.4% | 0.6% | yes | 2024-25 +2.9%, 2025-26 +4.0% |
-| model vs priorSeason | 2 | +18.4% | 6.5% | yes | 2024-25 +11.9%, 2025-26 +24.9% |
-| model vs epNext | 2 | +1.2% | 0.7% | no | 2024-25 +0.5%, 2025-26 +1.9% |
+| model vs form | 2 | +2.6% | 0.3% | yes | 2024-25 +2.9%, 2025-26 +2.2% |
+| model vs priorSeason | 2 | +19.0% | 6.8% | yes | 2024-25 +12.1%, 2025-26 +25.8% |
+| model vs epNext | 2 | +0.3% | 0.2% | no | 2024-25 +0.5%, 2025-26 +0.1% |
+| strength prior vs league-average target | 2 | -0.9% | 0.9% | no | 2024-25 +0.1%, 2025-26 -1.8% |
 
 ## What this run says
 
 2 of 9 planned folds ran. 7 were refused: 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24. Until the archive carries a start label for those seasons, the referee is 2-fold for anything the minutes model touches, whatever it is for the rate components.
 
-**model vs form** — +3.4% captured@11 across 2 folds, se 0.6%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+**model vs form** — +2.6% captured@11 across 2 folds, se 0.3%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
 
-**model vs priorSeason** — +18.4% captured@11 across 2 folds, se 6.5%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+**model vs priorSeason** — +19.0% captured@11 across 2 folds, se 6.8%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
 
-**model vs epNext** — +1.2% captured@11 across 2 folds, se 0.7%. Does NOT clear twice the between-fold error, so this comparison is undecided at this fold count however the mean points. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+**model vs epNext** — +0.3% captured@11 across 2 folds, se 0.2%. Does NOT clear twice the between-fold error, so this comparison is undecided at this fold count however the mean points. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+
+**strength prior vs league-average target** — -0.9% captured@11 across 2 folds, se 0.9%. Does NOT clear twice the between-fold error, so this comparison is undecided at this fold count however the mean points. The per-fold means do not agree on a sign, which is the thing a single holdout cannot show you. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**

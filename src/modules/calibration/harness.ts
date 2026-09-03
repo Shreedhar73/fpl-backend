@@ -52,7 +52,17 @@ import {
  * The incumbent stays `model` until a D-numbered decision says otherwise — a name is not an adoption.
  */
 export const PREDICTORS = ['model', 'form', 'priorSeason', 'v4'] as const;
-export type Predictor = (typeof PREDICTORS)[number];
+/**
+ * The two predictors that exist only where a deadline-time capture does (B-043, plan 029):
+ * `epNext` is FPL's own projection as published before the round, and `blend` is the model mixed
+ * with it under `params.crowd`. Optional on the row — a season with no capture carries neither, and
+ * the decision harness's loops over `PREDICTORS` do not see them, so no report changes shape until
+ * one asks for them by name.
+ */
+export const MARKET_PREDICTORS = ['epNext', 'blend'] as const;
+export type BasePredictor = (typeof PREDICTORS)[number];
+export type MarketPredictor = (typeof MARKET_PREDICTORS)[number];
+export type Predictor = BasePredictor | MarketPredictor;
 
 /**
  * What every predictor said about one player in one round, beside what happened.
@@ -83,7 +93,8 @@ export interface PredictionRow {
   actual: number;
   /** realised minutes — what auto-substitution turns on, so the decision phases need it here */
   minutes: number;
-  predicted: Record<Predictor, number | null>;
+  predicted: Record<BasePredictor, number | null> &
+    Partial<Record<MarketPredictor, number | null>>;
   /**
    * The model's P(featuring at all), for bench order.
    *
@@ -406,6 +417,10 @@ export function runBacktest(
           form: features.form,
           priorSeason: features.priorSeasonPointsPer90,
           v4: v4Predict(options.v4, v4Features, row),
+          epNext: row.deadlineEpNext ?? null,
+          // Filled by `applyCrowdBlend` below once the round is complete — the level match needs
+          // the whole round's rows, not one.
+          blend: null,
         },
         pPlay: minutes.pPlay,
         appearances: features.appearancesSample,
@@ -432,10 +447,64 @@ export function runBacktest(
     }
   }
 
+  applyCrowdBlend(out, params.crowd);
+
   return {
     rows: sortRows(out),
     skipped: [...skipped.entries()].map(([reason, n]) => ({ reason, n })),
   };
+}
+
+/**
+ * The market blend, per round (B-043, plan 029 task 3).
+ *
+ * `blend = (1 − w) × model + w × scale × epNext`, where `scale` is the ratio of the model's mean to
+ * `ep_next`'s mean over the rows of that round that carry both. The rescale is the point: the two
+ * numbers sit on different levels (FPL's is lower for the premium head, D-020 measured the model's
+ * own level against realised points), and a blend that moved the level would tilt the near round
+ * against a horizon tail that has no `ep_next` at all. What the blend is allowed to change is the
+ * ORDER.
+ *
+ * A row with no `ep_next` keeps the model alone, so `blend` is defined on every row the model is
+ * and the comparison against the model is on identical rows. With no `crowd` block the predictor is
+ * left null — absent, not zero — and every pairing that names it drops out.
+ */
+export function applyCrowdBlend(
+  rows: PredictionRow[],
+  crowd: FittedParams['crowd'],
+): void {
+  if (!crowd) return;
+  const w = Math.max(0, Math.min(1, crowd.epNextWeight));
+  const byRound = new Map<string, PredictionRow[]>();
+  for (const r of rows) {
+    const key = `${r.season}|${r.round}`;
+    const at = byRound.get(key);
+    if (at) at.push(r);
+    else byRound.set(key, [r]);
+  }
+  for (const group of byRound.values()) {
+    let modelSum = 0;
+    let epSum = 0;
+    for (const r of group) {
+      const ep = r.predicted.epNext;
+      if (ep === null || ep === undefined) continue;
+      modelSum += r.predicted.model ?? 0;
+      epSum += ep;
+    }
+    const scale = epSum > 0 ? modelSum / epSum : 1;
+    for (const r of group) {
+      const model = r.predicted.model;
+      const ep = r.predicted.epNext;
+      if (model === null) {
+        r.predicted.blend = null;
+        continue;
+      }
+      r.predicted.blend =
+        ep === null || ep === undefined
+          ? model
+          : (1 - w) * model + w * scale * ep;
+    }
+  }
 }
 
 /**
@@ -487,7 +556,11 @@ export function commonRows(
   rows: PredictionRow[],
   predictors: readonly Predictor[] = PREDICTORS,
 ): PredictionRow[] {
-  return rows.filter((r) => predictors.every((p) => r.predicted[p] !== null));
+  return rows.filter((r) =>
+    predictors.every(
+      (p) => r.predicted[p] !== null && r.predicted[p] !== undefined,
+    ),
+  );
 }
 
 /** The complement of `commonRows` — the rows the restriction costs, kept so they can be described. */
@@ -495,7 +568,11 @@ export function excludedRows(
   rows: PredictionRow[],
   predictors: readonly Predictor[] = PREDICTORS,
 ): PredictionRow[] {
-  return rows.filter((r) => predictors.some((p) => r.predicted[p] === null));
+  return rows.filter((r) =>
+    predictors.some(
+      (p) => r.predicted[p] === null || r.predicted[p] === undefined,
+    ),
+  );
 }
 
 /**
@@ -511,7 +588,7 @@ export function observationsFor(
   const out: Observation[] = [];
   for (const r of rows) {
     const p = r.predicted[predictor];
-    if (p === null) continue;
+    if (p === null || p === undefined) continue;
     out.push({
       predicted: p,
       actual: r.actual,

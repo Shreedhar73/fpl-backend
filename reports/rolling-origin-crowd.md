@@ -1,6 +1,6 @@
 # Rolling-origin referee
 
-Generated 2026-09-02T17:50:52.669Z over 10 seasons (2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26), 253,568 archive rows. Training window: every earlier season. Season half-life: none — every season counts equally. Imputed start labels: not used. Window and decay: fixed for every fold. Player rates: the flat career mean. Bonus: a clipped linear function of the player's own BPS. Starter minutes: the two league constants. Availability: plan 024's fitted flags. Market blend (plan 029): off. Season-start strength prior: off — every club starts at the league average. Start rate: the season step (incumbent).
+Generated 2026-09-02T17:54:20.620Z over 10 seasons (2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26), 253,568 archive rows. Training window: every earlier season. Season half-life: none — every season counts equally. Imputed start labels: not used. Window and decay: fixed for every fold. Player rates: the flat career mean. Bonus: a clipped linear function of the player's own BPS. Starter minutes: the two league constants. Availability: plan 024's fitted flags. Market blend (plan 029): ON — the model mixed with level-matched ep_next. Season-start strength prior: off — every club starts at the league average. Start rate: the season step (incumbent).
 
 Each fold fits on the seasons BEFORE its evaluation season and scores that season once. The incumbent is refitted per fold like every other arm — scoring the served parameters, which were fitted on 2023-24 and 2024-25, against the 2024-25 fold would hand it its own training season. The quantity paired is points captured @11 per round (D-020), the pairing is per round (D-033), and the number a single holdout could never produce is the last table: the spread ACROSS folds.
 
@@ -30,6 +30,39 @@ A refused fold is a result. The minutes curves fall back to their unfitted defau
 - **2022-23** — no start labels in 2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22 — the minutes curves would fall back to their unfitted defaults and the fold would report a number from a model that was never fitted
 - **2023-24** — no start labels in 2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23 — the minutes curves would fall back to their unfitted defaults and the fold would report a number from a model that was never fitted
 
+### What each fold chose for the plan 029 knobs
+
+Each chosen inside the fold on the season before it, with the incumbent (0) in every grid so "leave it alone" can win. `spread` is best minus worst across candidates on that validation season: a flat grid means the objective could not tell them apart.
+
+| eval season | knob | chosen | validate captured | spread |
+|---|---|---|---:|---:|
+| 2024-25 | ep_next blend weight | model alone | 42.1% | 6.19pp |
+| 2025-26 | ep_next blend weight | 25% ep_next | 40.1% | 3.16pp |
+
+**2024-25 — every ep_next blend weight candidate**
+
+| candidate | rounds | validate captured |
+|---|---:|---:|
+| model alone | 19 | 42.1% |
+| 25% ep_next | 19 | 38.8% |
+| 40% ep_next | 19 | 37.4% |
+| 50% ep_next | 19 | 37.5% |
+| 60% ep_next | 19 | 37.8% |
+| 75% ep_next | 19 | 36.4% |
+| 100% ep_next | 19 | 35.9% |
+
+**2025-26 — every ep_next blend weight candidate**
+
+| candidate | rounds | validate captured |
+|---|---:|---:|
+| model alone | 19 | 39.2% |
+| 25% ep_next | 19 | 40.1% |
+| 40% ep_next | 19 | 40.0% |
+| 50% ep_next | 19 | 39.1% |
+| 60% ep_next | 19 | 38.6% |
+| 75% ep_next | 19 | 37.1% |
+| 100% ep_next | 19 | 37.0% |
+
 ### What the refit actually moved
 
 Carried because "refitted per fold" is a claim a report should be able to lose. Identical rows here would mean the folds shared a fit.
@@ -46,9 +79,13 @@ Carried because "refitted per fold" is a claim a report should be able to lose. 
 | model vs form | 2024-25 | 37 | +2.9% | 1.7% | no |
 | model vs priorSeason | 2024-25 | 38 | +11.9% | 1.7% | yes |
 | model vs epNext | 2024-25 | 35 | +0.5% | 1.9% | no |
+| blend vs epNext | 2024-25 | 35 | +0.5% | 1.9% | no |
+| blend vs model alone | 2024-25 | 38 | +0.0% | 0.0% | no |
 | model vs form | 2025-26 | 19 | +4.0% | 2.2% | no |
 | model vs priorSeason | 2025-26 | 19 | +24.9% | 2.0% | yes |
 | model vs epNext | 2025-26 | 19 | +1.9% | 3.0% | no |
+| blend vs epNext | 2025-26 | 19 | +1.2% | 1.9% | no |
+| blend vs model alone | 2025-26 | 19 | -0.6% | 2.7% | no |
 
 ## Across folds
 
@@ -59,6 +96,8 @@ The mean of the fold means, with the standard error of the spread BETWEEN folds.
 | model vs form | 2 | +3.4% | 0.6% | yes | 2024-25 +2.9%, 2025-26 +4.0% |
 | model vs priorSeason | 2 | +18.4% | 6.5% | yes | 2024-25 +11.9%, 2025-26 +24.9% |
 | model vs epNext | 2 | +1.2% | 0.7% | no | 2024-25 +0.5%, 2025-26 +1.9% |
+| blend vs epNext | 2 | +0.9% | 0.4% | yes | 2024-25 +0.5%, 2025-26 +1.2% |
+| blend vs model alone | 2 | -0.3% | 0.3% | no | 2024-25 +0.0%, 2025-26 -0.6% |
 
 ## What this run says
 
@@ -69,3 +108,7 @@ The mean of the fold means, with the standard error of the spread BETWEEN folds.
 **model vs priorSeason** — +18.4% captured@11 across 2 folds, se 6.5%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
 
 **model vs epNext** — +1.2% captured@11 across 2 folds, se 0.7%. Does NOT clear twice the between-fold error, so this comparison is undecided at this fold count however the mean points. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+
+**blend vs epNext** — +0.9% captured@11 across 2 folds, se 0.4%. Clears twice the between-fold error. Every fold agrees on the sign. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**
+
+**blend vs model alone** — -0.3% captured@11 across 2 folds, se 0.3%. Does NOT clear twice the between-fold error, so this comparison is undecided at this fold count however the mean points. The per-fold means do not agree on a sign, which is the thing a single holdout cannot show you. **Read the clearance with the fold count in front of it: an error estimated from 2 numbers is itself barely estimated, and two folds that happen to agree produce a small standard error whether or not the effect is real. This is a direction, not a decision.**

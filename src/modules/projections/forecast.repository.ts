@@ -62,6 +62,32 @@ export class ForecastRepository {
         { status: a.status, chance: a.chanceOfPlayingNextRound },
       ]),
     );
+    // FPL's `ep_next` as it stood before each deadline (B-043, plan 029). Same staleness bound as
+    // the flags, and joined ONLY where the capture's `is_next` event is the round it is keyed to —
+    // a capture taken before FPL rolled the event over describes the round just played, and that
+    // number joined here would be a projection of a different match.
+    const market = await this.prisma.archiveDeadlineMarket.findMany({
+      where: {
+        season: { in: seasons },
+        gapHours: { lte: AVAILABILITY_MAX_GAP_HOURS },
+        epNext: { not: null },
+      },
+      select: {
+        season: true,
+        round: true,
+        playerCode: true,
+        epNext: true,
+        epNextEvent: true,
+      },
+    });
+    const epNextByKey = new Map<string, number>();
+    for (const m of market) {
+      if (m.epNextEvent !== m.round || m.epNext === null) continue;
+      epNextByKey.set(
+        `${m.season}|${m.round}|${m.playerCode}`,
+        Number(m.epNext),
+      );
+    }
     const rows = await this.prisma.archivePlayerGameweek.findMany({
       where: { season: { in: seasons } },
       // A TOTAL order, not just the one the walk needs (B-039). `season, round` alone leaves the
@@ -116,6 +142,8 @@ export class ForecastRepository {
       ...r,
       deadlineStatus: flags?.status ?? null,
       deadlineChance: flags === undefined ? null : flags.chance,
+      deadlineEpNext:
+        epNextByKey.get(`${r.season}|${r.round}|${r.playerCode}`) ?? null,
       position: r.position,
       // `Number(null)` is 0, not null, and TypeScript accepts it because `Number` returns `number`.
       // Every guard downstream tests for null and would therefore never fire: six seasons of real
@@ -362,6 +390,45 @@ export class ForecastRepository {
         chance: s.chanceOfPlayingNextRound,
         fromSnapshot: true,
       });
+    }
+    return out;
+  }
+
+  /**
+   * FPL's `ep_next` per player code for ONE gameweek, or an empty map when nothing FPL has published
+   * describes it (B-043, plan 029 task 8).
+   *
+   * Two sources, in order of trust: the captured deadline snapshot for that gameweek — the number
+   * as it stood when the decision was open — and, failing that, the live `players` row, which is
+   * only about this gameweek while upstream calls it `isNext`. A later gameweek in the horizon gets
+   * nothing, because FPL publishes one round ahead and nothing here invents the rest.
+   */
+  async epNextByCode(gameweekId: number): Promise<Map<number, number>> {
+    const out = new Map<number, number>();
+    const snapshots = await this.prisma.playerDeadlineSnapshot.findMany({
+      where: { gameweekId, epNext: { not: null } },
+      select: { playerId: true, epNext: true },
+    });
+    const players = await this.prisma.player.findMany({
+      select: { id: true, code: true, epNext: true },
+    });
+    const codeById = new Map(players.map((p) => [p.id, p.code]));
+    if (snapshots.length > 0) {
+      for (const s of snapshots) {
+        const code = codeById.get(s.playerId);
+        if (code !== undefined && s.epNext !== null) {
+          out.set(code, Number(s.epNext));
+        }
+      }
+      return out;
+    }
+    const gw = await this.prisma.gameweek.findUnique({
+      where: { id: gameweekId },
+      select: { isNext: true },
+    });
+    if (!gw?.isNext) return out;
+    for (const p of players) {
+      if (p.epNext !== null) out.set(p.code, Number(p.epNext));
     }
     return out;
   }

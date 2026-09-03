@@ -54,11 +54,31 @@ export interface StrengthInputRow {
   round: number;
 }
 
+/**
+ * A club's attack and defence as multiples of the league average, carried across a season boundary
+ * (B-043, plan 029 task 4). `attack` above 1 scores more than average; `defence` above 1 CONCEDES
+ * more than average — both are the raw ratios `fixtureGoalRates` shrinks, before shrinkage.
+ */
+export interface TeamPrior {
+  attack: number;
+  defence: number;
+}
+
 export interface League {
   averageXgPerTeamMatch: number;
   /** the same average over ACTUAL goals, decay-weighted the same way the team rates are */
   averageGoalsPerTeamMatch: number;
   teams: Map<number, TeamStrength>;
+  /**
+   * Where a club's rating is shrunk TOWARD while its own sample is thin, when the walk carries one.
+   *
+   * Absent is the incumbent: every club is shrunk toward 1.0, the league average — which at the
+   * first deadline of a season makes the champions and the promoted side the same fixture, and at
+   * `confidenceMatches` 64 keeps them nearly so until October. Set by `walkRounds` from the previous
+   * season's final ratios; a club with no entry (promoted) takes `promotedPrior`.
+   */
+  prior?: Map<number, TeamPrior>;
+  promotedPrior?: TeamPrior;
 }
 
 /**
@@ -214,6 +234,14 @@ export interface StrengthParams {
    */
   goalsWeight: number;
   /**
+   * How much of last season's final rating a club starts this season with (B-043, plan 029 task 4).
+   *
+   * The shrinkage target becomes `1 + w × (prior − 1)`: 0 (or absent) is the incumbent's league
+   * average, 1 is last season's ratio in full. Applied only where the walk has carried a prior in;
+   * with none, the target is 1.0 whatever this says.
+   */
+  priorSeasonWeight?: number;
+  /**
    * Recency half-life in rounds for the goals-based rates. 0 disables decay entirely.
    *
    * Only the goals side decays. The xG side is left undecayed so that `goalsWeight = 0` reproduces
@@ -237,6 +265,15 @@ export function fixtureGoalRates(
   isHome: boolean,
   league: League,
   params: StrengthParams,
+  /**
+   * The two club codes, for the season-start prior (plan 029 task 4). Needed separately because at
+   * the first deadline of a season neither club has a `TeamStrength` yet — which is exactly when
+   * the prior does its work. Optional, and with no prior on the league they are never read.
+   */
+  codes: { team: number | null; opponent: number | null } = {
+    team: team?.teamCode ?? null,
+    opponent: opponent?.teamCode ?? null,
+  },
 ): GoalRates {
   const xgAvg =
     league.averageXgPerTeamMatch > 0
@@ -258,33 +295,49 @@ export function fixtureGoalRates(
     xgValue: number | undefined,
     goalsValue: number | undefined,
     matches: number | undefined,
+    target: number,
   ): number => {
     const w = Math.max(0, Math.min(1, params.goalsWeight));
-    const fromXg = shrunkRatio(xgValue, matches, xgAvg, params);
+    const fromXg = shrunkRatio(xgValue, matches, xgAvg, params, target);
     if (w === 0) return fromXg;
-    const fromGoals = shrunkRatio(goalsValue, matches, goalsAvg, params);
+    const fromGoals = shrunkRatio(goalsValue, matches, goalsAvg, params, target);
     return (1 - w) * fromXg + w * fromGoals;
+  };
+
+  // The shrinkage target per side: the league average, or last season's ratio pulled toward it by
+  // `priorSeasonWeight`. A team the walk has no prior for — promoted, or a season with nothing
+  // before it — takes the promoted prior, and with no prior carried at all this is exactly 1.
+  const targetFor = (code: number | null, side: keyof TeamPrior): number => {
+    const w = params.priorSeasonWeight ?? 0;
+    if (w <= 0 || !league.prior || code === null) return 1;
+    const prior = league.prior.get(code) ?? league.promotedPrior;
+    if (!prior) return 1;
+    return 1 + w * (prior[side] - 1);
   };
 
   const attack = ratio(
     team?.xgForPerMatch,
     team?.goalsForPerMatch,
     team?.matches,
+    targetFor(codes.team, 'attack'),
   );
   const defence = ratio(
     opponent?.xgAgainstPerMatch,
     opponent?.goalsAgainstPerMatch,
     opponent?.matches,
+    targetFor(codes.opponent, 'defence'),
   );
   const oppAttack = ratio(
     opponent?.xgForPerMatch,
     opponent?.goalsForPerMatch,
     opponent?.matches,
+    targetFor(codes.opponent, 'attack'),
   );
   const ownDefence = ratio(
     team?.xgAgainstPerMatch,
     team?.goalsAgainstPerMatch,
     team?.matches,
+    targetFor(codes.team, 'defence'),
   );
 
   const home = isHome ? params.homeAdvantage : 1 / params.homeAdvantage;
@@ -303,17 +356,65 @@ export function fixtureGoalRates(
   };
 }
 
-/** A team's rate as a multiple of the league average, shrunk toward 1 while the sample is thin. */
+/**
+ * A team's rate as a multiple of the league average, shrunk toward `target` while the sample is
+ * thin. `target` is 1 — the league average — unless the walk carries a prior for this club.
+ *
+ * A team with no record at all returns the target rather than 1: at the first deadline of a season
+ * that is the whole difference between "every club is average" and "the champions are the
+ * champions until proven otherwise".
+ */
 function shrunkRatio(
   value: number | undefined,
   matches: number | undefined,
   leagueAverage: number,
   params: StrengthParams,
+  target = 1,
 ): number {
-  if (value === undefined || !matches || leagueAverage <= 0) return 1;
+  if (value === undefined || !matches || leagueAverage <= 0) return target;
   const raw = value / leagueAverage;
   const confidence = matches / (matches + params.confidenceMatches);
-  return confidence * raw + (1 - confidence) * 1;
+  return confidence * raw + (1 - confidence) * target;
+}
+
+/**
+ * What one season leaves behind for the next: each club's UNSHRUNK blended attack and defence
+ * ratios at the season's end, and the prior a promoted club inherits — the mean of the three clubs
+ * that finished with the worst goal-ratio difference, which is the shape of a side that has just
+ * come up. A league with fewer than three clubs, or none, leaves no priors at all.
+ *
+ * Unshrunk on purpose: a full season is 38 matches, and shrinking it again at the point of use is
+ * `priorSeasonWeight`'s job, chosen on the referee rather than assumed here.
+ */
+export function seasonPriors(
+  league: League,
+  params: StrengthParams,
+): { teams: Map<number, TeamPrior>; promoted: TeamPrior } | null {
+  const xgAvg = league.averageXgPerTeamMatch;
+  const goalsAvg = league.averageGoalsPerTeamMatch;
+  const w = Math.max(0, Math.min(1, params.goalsWeight));
+  const teams = new Map<number, TeamPrior>();
+  for (const t of league.teams.values()) {
+    if (t.matches === 0) continue;
+    const blend = (xgValue: number, goalsValue: number): number => {
+      const fromXg = xgAvg > 0 ? xgValue / xgAvg : 1;
+      const fromGoals = goalsAvg > 0 ? goalsValue / goalsAvg : 1;
+      return (1 - w) * fromXg + w * fromGoals;
+    };
+    teams.set(t.teamCode, {
+      attack: blend(t.xgForPerMatch, t.goalsForPerMatch),
+      defence: blend(t.xgAgainstPerMatch, t.goalsAgainstPerMatch),
+    });
+  }
+  if (teams.size < 3) return null;
+  const bottom = [...teams.values()]
+    .sort((a, b) => a.attack - a.defence - (b.attack - b.defence))
+    .slice(0, 3);
+  const promoted: TeamPrior = {
+    attack: bottom.reduce((s, t) => s + t.attack, 0) / bottom.length,
+    defence: bottom.reduce((s, t) => s + t.defence, 0) / bottom.length,
+  };
+  return { teams, promoted };
 }
 
 /** P(clean sheet) — the team concedes nothing, straight off the same lambda that prices conceding. */
