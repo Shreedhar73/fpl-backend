@@ -19,7 +19,7 @@ describe('one projection writer', () => {
 
   it('serves a version derived from the fitted parameters, never a hardcoded label', () => {
     // A hand-typed version string is how two builds end up claiming to be the same model.
-    expect(MODEL_VERSION).toBe(`v3-fitted-${FITTED_PARAMS.provenance.date}`);
+    expect(MODEL_VERSION).toBe(`v5-fitted-${FITTED_PARAMS.provenance.date}`);
     // The MAJOR number is asserted loosely on purpose: it moves when the model's structure changes
     // (v2 -> v3 at B-019/B-020/B-014), and pinning it exactly turns every honest structural change
     // into a red test that says nothing. What must never drift is the DATE half — that is the part

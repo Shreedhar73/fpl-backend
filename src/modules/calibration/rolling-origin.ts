@@ -592,3 +592,41 @@ export function describeTau(tau: number | undefined): string {
     ? 'the incumbent clipped-linear term'
     : `rank model, tau ${tau}`;
 }
+
+/**
+ * The three plan 029 grids. Written before the first run and not edited after a result is seen —
+ * that is the whole of what makes a per-fold selection on the season before a selection rather than
+ * a peek. Each has the incumbent (0) in it, so "leave it alone" can win.
+ */
+
+/** Share of the served number taken from FPL's level-matched `ep_next` (task 3). */
+export const CROWD_WEIGHT_CANDIDATES: number[] = [0, 0.25, 0.4, 0.5, 0.6, 0.75, 1];
+
+/** How much of last season's final club rating survives the summer as the shrinkage target (task 4). */
+export const PRIOR_WEIGHT_CANDIDATES: number[] = [0, 0.25, 0.5, 0.75, 1];
+
+/** Career pseudo-matches blended into the season start rate (task 5). 0 is the step function. */
+export const START_SHRINK_CANDIDATES: number[] = [0, 2, 4, 8, 16];
+
+export function describeCrowd(w: number): string {
+  return w === 0 ? 'model alone' : `${(100 * w).toFixed(0)}% ep_next`;
+}
+export function describePrior(w: number): string {
+  return w === 0 ? 'league average (incumbent)' : `${(100 * w).toFixed(0)}% of last season`;
+}
+export function describeStartShrink(k: number): string {
+  return k === 0 ? 'season step (incumbent)' : `${k} career pseudo-matches`;
+}
+
+/**
+ * Matches of a club's own record before its rating is trusted over the shrinkage target (plan 029,
+ * follow-up). The RMSE search in `fit.ts` has put this at the top of its grid on every corpus it has
+ * been run on — 64, then 96 — which is the fixture term being shrunk out of a per-player error the
+ * minutes noise dominates. D-020 says the model is judged on decisions; this grid lets the ordering
+ * metric choose the same knob, on the season before the fold, with the fit's own choice in the grid.
+ */
+export const CONFIDENCE_CANDIDATES: number[] = [4, 8, 16, 32, 64, 96];
+
+export function describeConfidence(m: number): string {
+  return `${m} matches`;
+}

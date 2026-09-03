@@ -208,6 +208,8 @@ export function arrangeSquad(
   );
   // Only the started ones are charged — the charge keys off `y`, and a benched player carries no
   // variance. That is the difference from B-011, where benching answered nothing.
+  // Reported in horizon points, the unit `lambda` is declared in — the enumeration scales the
+  // charge into this week's units to choose, and this is what it costs over the horizon.
   const concentrationPenalty =
     concentration.lambda * heldPairs.filter((h) => h.bothStarted).length;
 
@@ -218,7 +220,11 @@ export function arrangeSquad(
     // Tie-broken on the LP key (B-039), which is `p_<playerId>` and unique. Bench order is
     // auto-substitution priority, and two equally-rated bench players resolved by candidate array
     // order means the served recommendation can differ between two identical solves.
-    .sort((a, b) => b.pPlay * b.ep - a.pPlay * a.ep || a.key.localeCompare(b.key));
+    .sort(
+      (a, b) =>
+        b.pPlay * (b.epNext ?? b.ep) - a.pPlay * (a.epNext ?? a.ep) ||
+        a.key.localeCompare(b.key),
+    );
   const benchOrdered = [...benchGk, ...benchOut];
 
   const squad: SquadPlayer[] = inSquad.map((c) => {
@@ -314,6 +320,10 @@ export class OptimizerService {
       teamShortName: p.teamShortName,
       cost: p.nowCost,
       ep: horizonEp(p.id),
+      // This gameweek alone, for the eleven and the armband. Absent (a player with no row for the
+      // next gameweek — a blank) rather than 0, so the fallback is the horizon and not a zero that
+      // would bench him under every rule at once.
+      epNext: epByPlayer.get(p.id)?.get(nextGw),
       pPlay: ppByPlayer.get(p.id) ?? 0,
       appearances: appearances.get(p.id) ?? 0,
     }));
@@ -394,13 +404,19 @@ export class OptimizerService {
       concentration,
     );
 
-    // The LP already chose an XI and an armband. `arrangeSquad` chooses them again, by exact
-    // enumeration over the same expression, and the two must agree — that is what makes the second
-    // one a verification rather than a competing optimisation. A disagreement means the LP's rows
-    // and the enumeration's scoring have drifted apart, which neither would report on its own.
-    const chosenXi = new Set(
-      squad.filter((p) => p.role !== 'bench').map((p) => `p_${p.playerId}`),
+    // The LP already chose an XI and an armband on the horizon. The enumeration below re-derives
+    // them over the SAME expression — with `epNext` stripped, because the served arrangement above
+    // prices the eleven on this gameweek and the LP's columns on the horizon, and a check that
+    // compared the two would fire on every solve and prove nothing. What must agree is the LP and
+    // an enumeration of its own objective; a disagreement there means a constraint row and the
+    // scoring have drifted apart, which neither would report on its own.
+    const { starters: horizonXi } = pickBestXi(
+      inSquad.map((c) => ({ ...c, epNext: undefined })),
+      rules,
+      BENCH_WEIGHT,
+      concentration,
     );
+    const chosenXi = horizonXi;
     if (
       lpXi.size === chosenXi.size &&
       ![...lpXi].every((k) => chosenXi.has(k))

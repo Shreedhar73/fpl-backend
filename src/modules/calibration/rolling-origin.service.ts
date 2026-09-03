@@ -26,6 +26,14 @@ import {
   MIN_COMPONENT_ROWS,
   BONUS_TAU_CANDIDATES,
   describeTau,
+  CONFIDENCE_CANDIDATES,
+  describeConfidence,
+  CROWD_WEIGHT_CANDIDATES,
+  PRIOR_WEIGHT_CANDIDATES,
+  START_SHRINK_CANDIDATES,
+  describeCrowd,
+  describePrior,
+  describeStartShrink,
   RATE_CANDIDATES,
   RateCandidate,
   describeRates,
@@ -99,6 +107,12 @@ export class RollingOriginService {
       selectedRates: options.selectRates ?? false,
       perPlayerStart: options.perPlayerStart ?? false,
       selectedBonusTau: options.selectBonusTau ?? false,
+      crowd: (options.selectCrowd ?? false) || options.crowdWeight !== undefined,
+      prior: (options.selectPrior ?? false) || options.priorWeight !== undefined,
+      startShrink:
+        (options.selectStartShrink ?? false) || options.startShrink !== undefined,
+      confidence:
+        (options.selectConfidence ?? false) || options.confidence !== undefined,
       folds,
       across: this.summarise(folds, arms),
     };
@@ -141,7 +155,7 @@ export class RollingOriginService {
       ? this.selectWindow(rows, plan, split, scoringFor, imputedStarts, options)
       : null;
 
-    const fit = fitParams({
+    const fitInput = {
       train: selection
         ? split.train.filter((r) => selection.seasons.includes(r.season))
         : split.train,
@@ -152,23 +166,106 @@ export class RollingOriginService {
       imputedStarts,
       seasonHalfLife: selection?.candidate.seasonHalfLife,
       availabilityMode: options.availabilityMode,
-    });
+    };
+    const fit = fitParams(fitInput);
     const params: FittedParams = options.transform
       ? options.transform(fit.params, plan)
       : fit.params;
+
+    // Plan 029 task 5: the season start rate's shrinkage toward the career rate. A property of the
+    // feature the minutes curves are regressed ON, so each candidate is a REFIT on the same rows,
+    // chosen on the validation season, and the winner is a second fit beside the incumbent's — the
+    // incumbent fit above is kept as it is so the pairing against it is on identical rows.
+    const scalarSelections: ScalarSelection[] = [];
+    const startSelection = options.selectStartShrink
+      ? this.selectScalar(
+          'start-rate shrink',
+          START_SHRINK_CANDIDATES,
+          describeStartShrink,
+          plan,
+          split,
+          options,
+          (k) => {
+            const trial = fitParams({ ...fitInput, startRateShrink: k });
+            return options.transform
+              ? options.transform(trial.params, plan)
+              : trial.params;
+          },
+          rows,
+          scoringFor,
+        )
+      : null;
+    if (startSelection) scalarSelections.push(startSelection);
+    const startShrink = startSelection?.value ?? options.startShrink ?? 0;
+    const shrunk: FittedParams =
+      startShrink > 0
+        ? (() => {
+            const trial = fitParams({ ...fitInput, startRateShrink: startShrink });
+            return options.transform
+              ? options.transform(trial.params, plan)
+              : trial.params;
+          })()
+        : params;
+
+    // Plan 029 task 4: last season's club ratings as the season-start shrinkage target. Read by
+    // the feature walk and not by the fit, so a candidate is a rescore of the same fit.
+    const priorSelection = options.selectPrior
+      ? this.selectScalar(
+          'season-start strength prior',
+          PRIOR_WEIGHT_CANDIDATES,
+          describePrior,
+          plan,
+          split,
+          options,
+          (w) => withPriorWeight(shrunk, w),
+          rows,
+          scoringFor,
+        )
+      : null;
+    if (priorSelection) scalarSelections.push(priorSelection);
+    const priorWeight = priorSelection?.value ?? options.priorWeight ?? 0;
+    const withPriorOnly = withPriorWeight(shrunk, priorWeight);
+
+    // The strength shrinkage chosen by ORDERING rather than by RMSE (plan 029 follow-up). A rescore:
+    // the fit's other parameters stand, only `confidenceMatches` moves.
+    const confidenceSelection = options.selectConfidence
+      ? this.selectScalar(
+          'strength confidence (matches)',
+          CONFIDENCE_CANDIDATES,
+          describeConfidence,
+          plan,
+          split,
+          options,
+          (m) => ({
+            ...withPriorOnly,
+            strength: { ...withPriorOnly.strength, confidenceMatches: m },
+          }),
+          rows,
+          scoringFor,
+        )
+      : null;
+    if (confidenceSelection) scalarSelections.push(confidenceSelection);
+    const confidence = confidenceSelection?.value ?? options.confidence;
+    const withPrior: FittedParams =
+      confidence === undefined
+        ? withPriorOnly
+        : {
+            ...withPriorOnly,
+            strength: { ...withPriorOnly.strength, confidenceMatches: confidence },
+          };
 
     // The rate half-life and its shrinkage (plan 028 task 2), chosen inside the fold on the season
     // before it. They are a property of the FEATURE, not of the fit — `fitParams` reads only the
     // lagged start and sub rates, which this does not touch — so a candidate needs a backtest and
     // not a refit, and the winner is applied to the params the fold scores under.
     const rateSelection = options.selectRates
-      ? this.selectRates(rows, plan, split, params, scoringFor, options)
+      ? this.selectRates(rows, plan, split, withPrior, scoringFor, options)
       : null;
     const withRatesOnly: FittedParams = rateSelection
-      ? { ...params, rates: rateSelection.candidate }
+      ? { ...withPrior, rates: rateSelection.candidate }
       : options.rates
-        ? { ...params, rates: options.rates }
-        : params;
+        ? { ...withPrior, rates: options.rates }
+        : withPrior;
     // The bonus temperature (plan 028 task 4), chosen on the season before the fold. `undefined` —
     // the incumbent's clipped-linear term — is in the grid, so the old way can win.
     const tauSelection = options.selectBonusTau
@@ -196,12 +293,35 @@ export class RollingOriginService {
               bonus: { ...withRatesOnly.bonus, tau: options.bonusTau },
             }
           : withRatesOnly;
-    const scoringParams: FittedParams = options.perPlayerStart
+    const shapeParams: FittedParams = options.perPlayerStart
       ? {
           ...withRates,
           minutes: { ...withRates.minutes, perPlayerStart: true },
         }
       : withRates;
+
+    // Plan 029 task 3: the market blend. A post-pass over the scored rows and not a model change,
+    // so a candidate is a rescore; chosen on the validation season like the others.
+    const crowdSelection = options.selectCrowd
+      ? this.selectScalar(
+          'ep_next blend weight',
+          CROWD_WEIGHT_CANDIDATES,
+          describeCrowd,
+          plan,
+          split,
+          options,
+          (w) => ({ ...shapeParams, crowd: { epNextWeight: w } }),
+          rows,
+          scoringFor,
+          'blend',
+        )
+      : null;
+    if (crowdSelection) scalarSelections.push(crowdSelection);
+    const crowdWeight = crowdSelection?.value ?? options.crowdWeight;
+    const scoringParams: FittedParams =
+      crowdWeight === undefined
+        ? shapeParams
+        : { ...shapeParams, crowd: { epNextWeight: crowdWeight } };
 
     // The walk is handed the training seasons and the evaluation season only. Nothing later exists
     // as far as this fold is concerned, which is what "rolling origin" means.
@@ -348,6 +468,102 @@ export class RollingOriginService {
       );
     }
 
+    // FPL's own projection as a baseline, wherever the fold's rows carry a deadline capture
+    // (plan 029 task 2). The headline of the plan: paired like every other baseline.
+    {
+      const common = commonRows(result.rows, ['model', 'epNext']);
+      if (common.length > 0) {
+        paired['model vs epNext'] = pairedByRound(
+          this.perRound(common, 'model', view, k),
+          this.perRound(common, 'epNext', view, k),
+        );
+        if (crowdWeight !== undefined) {
+          const both = commonRows(result.rows, ['blend', 'epNext']);
+          paired['blend vs epNext'] = pairedByRound(
+            this.perRound(both, 'blend', view, k),
+            this.perRound(both, 'epNext', view, k),
+          );
+        }
+      }
+    }
+
+    // The blend against the model it is blended from: the SAME rows, the same fit — the blend is a
+    // post-pass, so the two predictors sit side by side on one row and no second run is needed.
+    if (options.compareCrowd && crowdWeight !== undefined) {
+      const common = commonRows(result.rows, ['model', 'blend']);
+      paired['blend vs model alone'] = pairedByRound(
+        this.perRound(common, 'blend', view, k),
+        this.perRound(common, 'model', view, k),
+      );
+    }
+
+    // The ordering-chosen strength confidence against the fit's own RMSE choice: same fit, one
+    // number differs.
+    if (
+      options.compareConfidence &&
+      confidence !== undefined &&
+      confidence !== params.strength.confidenceMatches
+    ) {
+      const other = runBacktest(
+        upToFold,
+        {
+          ...scoringParams,
+          strength: {
+            ...scoringParams.strength,
+            confidenceMatches: params.strength.confidenceMatches,
+          },
+        },
+        scoringFor,
+        { evaluate: split.evaluate },
+      );
+      const mine = commonRows(result.rows, ['model', 'form']);
+      const theirs = commonRows(other.rows, ['model', 'form']);
+      paired[
+        `strength confidence ${confidence} vs the fit's ${params.strength.confidenceMatches}`
+      ] = pairedByRound(
+        this.perRound(mine, 'model', view, k),
+        this.perRound(theirs, 'model', view, k),
+      );
+    }
+
+    // The season-start prior against the league-average target: same fit, rescored once with the
+    // weight removed and everything else as chosen.
+    if (options.comparePrior && priorWeight > 0) {
+      const other = runBacktest(
+        upToFold,
+        withPriorWeight(scoringParams, 0),
+        scoringFor,
+        { evaluate: split.evaluate },
+      );
+      const mine = commonRows(result.rows, ['model', 'form']);
+      const theirs = commonRows(other.rows, ['model', 'form']);
+      paired['strength prior vs league-average target'] = pairedByRound(
+        this.perRound(mine, 'model', view, k),
+        this.perRound(theirs, 'model', view, k),
+      );
+    }
+
+    // The shrunk start rate against the step: a refit (the incumbent's, already in hand) rescored
+    // with every OTHER choice of this fold applied to it, so exactly one thing differs.
+    if (options.compareStartShrink && startShrink > 0) {
+      const other = runBacktest(
+        upToFold,
+        {
+          ...scoringParams,
+          minutes: { ...params.minutes, ...restOfMinutes(scoringParams) },
+          // the incumbent fit's curves, with this fold's other minutes flags carried across
+        },
+        scoringFor,
+        { evaluate: split.evaluate },
+      );
+      const mine = commonRows(result.rows, ['model', 'form']);
+      const theirs = commonRows(other.rows, ['model', 'form']);
+      paired['shrunk start rate vs season step'] = pairedByRound(
+        this.perRound(mine, 'model', view, k),
+        this.perRound(theirs, 'model', view, k),
+      );
+    }
+
     const scored = commonRows(result.rows, ['model', 'form']);
     this.log.log(
       `fold ${plan.evalSeason}: trained on ${plan.trainSeasons.join(', ')} ` +
@@ -362,6 +578,7 @@ export class RollingOriginService {
       selection,
       rateSelection,
       tauSelection,
+      scalarSelections,
       fittedMinutes: {
         startIntercept: params.minutes.startIntercept,
         startSlope: params.minutes.startSlope,
@@ -574,6 +791,70 @@ export class RollingOriginService {
     };
   }
 
+  /**
+   * Choose one scalar shape parameter on the fold's validation season (plan 029).
+   *
+   * The same nested rule as every other selection here: candidates are scored on the tail of the
+   * season BEFORE the fold, the winner is applied, and the fold is scored once. `paramsFor` is what
+   * makes a candidate — a rescore for a feature-level knob, a refit for one the curves are
+   * regressed on — and `predictor` is which column of the row the candidate is read from, since
+   * the market blend lives beside the model on the row rather than replacing it.
+   */
+  private selectScalar(
+    label: string,
+    candidates: number[],
+    describe: (v: number) => string,
+    plan: FoldPlan,
+    split: FoldSplit,
+    options: RunOptions,
+    paramsFor: (value: number) => FittedParams,
+    rows: HistoryRow[],
+    scoringFor: (season: string) => Scoring,
+    predictor: Predictor = 'model',
+  ): ScalarSelection | null {
+    if (split.validate.length === 0 || plan.validateSeason === null)
+      return null;
+    const view = options.view ?? ORDERING_VIEWS[0];
+    const k = options.k ?? RollingOriginService.PRIMARY_K;
+    const upToValidate = rows.filter((r) =>
+      plan.trainSeasons.includes(r.season),
+    );
+    const scored: ScalarScore[] = [];
+    for (const value of candidates) {
+      const result = runBacktest(upToValidate, paramsFor(value), scoringFor, {
+        evaluate: (row) =>
+          row.season === plan.validateSeason &&
+          row.round >= plan.validateFromRound,
+      });
+      const common = commonRows(result.rows, [predictor, 'form']);
+      const perRound = this.perRound(common, predictor, view, k);
+      const captured =
+        perRound.length === 0
+          ? null
+          : perRound.reduce((t, r) => t + r.value, 0) / perRound.length;
+      scored.push({ value, rounds: perRound.length, captured });
+    }
+    const usable = scored.filter(
+      (c): c is ScalarScore & { captured: number } => c.captured !== null,
+    );
+    if (usable.length === 0) return null;
+    const best = usable.reduce((a, b) => (b.captured > a.captured ? b : a));
+    const worst = usable.reduce((a, b) => (b.captured < a.captured ? b : a));
+    this.log.log(
+      `fold ${plan.evalSeason}: ${label} — chose ${describe(best.value)} on ` +
+        `${plan.validateSeason} (captured ${(100 * best.captured).toFixed(2)}%, ` +
+        `spread ${(100 * (best.captured - worst.captured)).toFixed(2)}pp)`,
+    );
+    return {
+      label,
+      value: best.value,
+      description: describe(best.value),
+      validateCaptured: best.captured,
+      spread: best.captured - worst.captured,
+      candidates: scored.map((c) => ({ ...c, description: describe(c.value) })),
+    };
+  }
+
   /** One predictor's points-captured@k, per round of the fold — the values that get paired. */
   private perRound(
     rows: ReturnType<typeof commonRows>,
@@ -645,6 +926,10 @@ export class RollingOriginService {
       report.selectedRates ? 'rates' : null,
       report.perPlayerStart ? 'startbehaviour' : null,
       report.selectedBonusTau ? 'bonusrank' : null,
+      report.startShrink ? 'startshrink' : null,
+      report.prior ? 'prior' : null,
+      report.crowd ? 'crowd' : null,
+      report.confidence ? 'confidence' : null,
     ].filter(Boolean);
     const path = join(
       dir,
@@ -690,6 +975,27 @@ export interface RunOptions {
   selectBonusTau?: boolean;
   /** apply one fixed bonus temperature to every fold, instead of selecting */
   bonusTau?: number;
+  /** choose the ep_next blend weight per fold, on the season before it (plan 029 task 3) */
+  selectCrowd?: boolean;
+  /** apply one fixed blend weight to every fold, instead of selecting */
+  crowdWeight?: number;
+  /** pair the blend against the model alone, on the same rows */
+  compareCrowd?: boolean;
+  /** choose the season-start strength prior weight per fold (plan 029 task 4) */
+  selectPrior?: boolean;
+  priorWeight?: number;
+  /** rescore each fold with the prior weight at 0 and pair */
+  comparePrior?: boolean;
+  /** choose the start-rate shrinkage per fold — each candidate is a refit (plan 029 task 5) */
+  selectStartShrink?: boolean;
+  startShrink?: number;
+  /** rescore each fold on the incumbent's fit (shrink 0) and pair */
+  compareStartShrink?: boolean;
+  /** choose `strength.confidenceMatches` per fold by ordering, on the season before it */
+  selectConfidence?: boolean;
+  confidence?: number;
+  /** rescore each fold at the fit's own RMSE-chosen confidence and pair */
+  compareConfidence?: boolean;
   /**
    * How the deadline-time flags enter the fit for the MAIN arm (plan 027 task 8).
    *
@@ -747,6 +1053,23 @@ export interface TauSelection {
   candidates: TauScore[];
 }
 
+export interface ScalarScore {
+  value: number;
+  rounds: number;
+  captured: number | null;
+}
+
+/** One plan 029 selection: which knob, what it chose, and what it chose between. */
+export interface ScalarSelection {
+  label: string;
+  value: number;
+  description: string;
+  validateCaptured: number;
+  /** best minus worst on validation — how much the choice was worth at all */
+  spread: number;
+  candidates: (ScalarScore & { description: string })[];
+}
+
 export interface RateScore {
   candidate: RateCandidate;
   rounds: number;
@@ -774,6 +1097,8 @@ export interface FoldResult {
   rateSelection?: RateSelection | null;
   /** the bonus temperature the fold chose, on the season before it */
   tauSelection?: TauSelection | null;
+  /** the plan 029 scalar knobs the fold chose, in the order they were chosen */
+  scalarSelections?: ScalarSelection[];
   /** the three minutes parameters, carried so a report can show the fit MOVED between folds */
   fittedMinutes?: {
     startIntercept: number;
@@ -817,6 +1142,12 @@ export interface RollingOriginReport {
   perPlayerStart: boolean;
   /** whether each fold chose its bonus temperature on the season before it */
   selectedBonusTau: boolean;
+  /** plan 029 arms: whether the run carried the market blend, the strength prior, the shrunk start rate */
+  crowd: boolean;
+  prior: boolean;
+  startShrink: boolean;
+  /** whether `strength.confidenceMatches` was chosen by ordering rather than taken from the fit */
+  confidence: boolean;
   folds: FoldResult[];
   across: Record<string, AcrossFolds | null>;
   path?: string;
@@ -872,7 +1203,11 @@ export function renderReport(report: RollingOriginReport): string {
           : report.availabilityMode === 'unflagged-base'
             ? "base curves on unflagged rows, FPL's percentage applied multiplicatively (the D-032 hybrid)"
             : "the incumbent's hand rule, flags unfitted"
-      }.`,
+      }. ` +
+      `Market blend (plan 029): ${report.crowd ? 'ON — the model mixed with level-matched ep_next' : 'off'}. ` +
+      `Season-start strength prior: ${report.prior ? "ON — last season's ratios as the shrinkage target" : 'off — every club starts at the league average'}. ` +
+      `Start rate: ${report.startShrink ? 'season record shrunk toward the career rate' : 'the season step (incumbent)'}. ` +
+      `Strength confidence: ${report.confidence ? 'CHOSEN by ordering on the season before the fold' : "the fit's RMSE choice"}.`,
   );
   lines.push('');
   lines.push(
@@ -1027,6 +1362,45 @@ export function renderReport(report: RollingOriginReport): string {
         );
       }
       lines.push('');
+    }
+  }
+  const scalarChosen = ran.filter(
+    (f) => f.scalarSelections && f.scalarSelections.length > 0,
+  );
+  if (scalarChosen.length > 0) {
+    lines.push('### What each fold chose for the plan 029 knobs');
+    lines.push('');
+    lines.push(
+      'Each chosen inside the fold on the season before it, with the incumbent (0) in every grid so ' +
+        '"leave it alone" can win. `spread` is best minus worst across candidates on that validation ' +
+        'season: a flat grid means the objective could not tell them apart.',
+    );
+    lines.push('');
+    lines.push('| eval season | knob | chosen | validate captured | spread |');
+    lines.push('|---|---|---|---:|---:|');
+    for (const f of scalarChosen) {
+      for (const sel of f.scalarSelections!) {
+        lines.push(
+          `| ${f.plan.evalSeason} | ${sel.label} | ${sel.description} | ` +
+            `${pct(sel.validateCaptured)} | ${(100 * sel.spread).toFixed(2)}pp |`,
+        );
+      }
+    }
+    lines.push('');
+    for (const f of scalarChosen) {
+      for (const sel of f.scalarSelections!) {
+        lines.push(`**${f.plan.evalSeason} — every ${sel.label} candidate**`);
+        lines.push('');
+        lines.push('| candidate | rounds | validate captured |');
+        lines.push('|---|---:|---:|');
+        for (const c of sel.candidates) {
+          lines.push(
+            `| ${c.description} | ${c.rounds} | ` +
+              `${c.captured === null ? '—' : pct(c.captured)} |`,
+          );
+        }
+        lines.push('');
+      }
     }
   }
   if (ran.length > 0 && ran[0].fittedMinutes) {
@@ -1191,4 +1565,27 @@ export function verdict(report: RollingOriginReport): string[] {
     );
   }
   return out;
+}
+
+/** The same params with the season-start prior weight set — or the block left as it was at 0. */
+function withPriorWeight(params: FittedParams, w: number): FittedParams {
+  if (w <= 0) {
+    if (params.strength.priorSeasonWeight === undefined) return params;
+    const { priorSeasonWeight: _dropped, ...rest } = params.strength;
+    void _dropped;
+    return { ...params, strength: rest };
+  }
+  return { ...params, strength: { ...params.strength, priorSeasonWeight: w } };
+}
+
+/**
+ * The minutes flags a fold chose that are NOT the fitted curves — `perPlayerStart` today — so the
+ * incumbent's curves can be rescored under the fold's other choices with exactly one thing differing.
+ */
+function restOfMinutes(
+  params: FittedParams,
+): Pick<FittedParams['minutes'], 'perPlayerStart'> {
+  return params.minutes.perPlayerStart === undefined
+    ? {}
+    : { perPlayerStart: params.minutes.perPlayerStart };
 }

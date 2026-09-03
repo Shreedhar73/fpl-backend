@@ -65,7 +65,17 @@ export const MIN_APPEARANCES = 11;
  * now has `pnpm replay:xi` — a harness that can actually see which eleven the solver picked — to
  * measure it on.
  */
-export const DEFENCE_CONCENTRATION_LAMBDA = 1.0;
+/**
+ * **0 since 2026-09-03 (D-037), and the machinery stays.** B-033 left this as a maintainer call
+ * with the numbers beside it: inert on the fifteen (`pnpm ab:objective`), and on the eleven it
+ * gave up **71.34 projected points** over a replayed season for **9 realised** — indistinguishable
+ * from 0 by every instrument this project has. The maintainer's standing instruction for the
+ * session that moved it was to maximise the points the squad scores; a charge that trades measured
+ * projection for an unmeasured variance benefit is the wrong side of that. On the live GW3 solve it
+ * was benching a 4.35 defender behind a 3.75 one. Every row, pair and report still exists, so
+ * turning it back on is this one number.
+ */
+export const DEFENCE_CONCENTRATION_LAMBDA = 0;
 
 /**
  * Defensive = DEF + GKP. A keeper and his defenders share ONE clean sheet, exactly, which is what

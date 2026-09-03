@@ -24,7 +24,18 @@ async function main(): Promise<void> {
     logger: ['error', 'warn', 'log'],
   });
   try {
-    const report = await app.get(CalibrationService).fit();
+    // `--train 2024-25,2025-26` fits an explicit window (plan 029 task 8); `--start-shrink k`
+    // carries the B-042 pseudo-count into the fit. Without flags this is the fit that shipped.
+    const trainFlag = process.argv.indexOf('--train');
+    const trainSeasons =
+      trainFlag === -1 ? null : process.argv[trainFlag + 1].split(',');
+    const shrinkFlag = process.argv.indexOf('--start-shrink');
+    const startRateShrink =
+      shrinkFlag === -1 ? undefined : Number(process.argv[shrinkFlag + 1]);
+    const service = app.get(CalibrationService);
+    const report = trainSeasons
+      ? await service.fitOn(trainSeasons, { startRateShrink })
+      : await service.fit();
 
     log.log('measured directly from training rows:');
     for (const [k, v] of Object.entries(report.measured)) {
@@ -79,7 +90,7 @@ async function main(): Promise<void> {
     const withProvenance = {
       ...report.params,
       provenance: {
-        fittedOn: TRAIN_SEASONS,
+        fittedOn: trainSeasons ?? TRAIN_SEASONS,
         rows: 0,
         date: process.env.FIT_DATE ?? 'set FIT_DATE when pasting',
         objective:

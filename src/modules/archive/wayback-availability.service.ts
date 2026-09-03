@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { Prisma } from '../../generated/prisma/client';
@@ -53,18 +53,48 @@ export interface SeasonIngestSummary {
   coverage: RoundCoverage[];
 }
 
+export interface MarketIngestSummary {
+  season: string;
+  roundsCaptured: number;
+  /** rounds whose capture called a different event `is_next` — written, never joined */
+  roundsMismatched: number;
+  rowsWritten: number;
+  rowsWithEpNext: number;
+}
+
+/** FPL decimals arrive as strings; an empty or absent one is null, never 0. */
+function parseDecimal(value: string | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function decimalOrNull(value: string | null | undefined): Prisma.Decimal | null {
+  const n = parseDecimal(value);
+  return n === null ? null : new Prisma.Decimal(n.toFixed(2));
+}
+
 interface BootstrapElement {
   code: number;
   element_type: number;
   status: string;
   chance_of_playing_next_round: number | null;
   news: string;
+  /** FPL's own projection for the next round — a STRING on the wire ("5.5"), like every FPL decimal */
+  ep_next: string | null;
+  ep_this: string | null;
+  form: string | null;
+  /** tenths of a million, the one FPL number that is an integer */
+  now_cost: number;
+  selected_by_percent: string;
 }
 
 interface BootstrapEvent {
   id: number;
   deadline_time: string;
   finished: boolean;
+  /** which round `ep_next` describes at capture time — the join has to check it, not assume it */
+  is_next?: boolean;
 }
 
 interface BootstrapPayload {
@@ -215,6 +245,124 @@ export class WaybackAvailabilityService {
         `${written} rows, max gap ${summary.maxGapHours.toFixed(1)}h`,
     );
     return summary;
+  }
+
+  /**
+   * The market fields of the same captures — `ep_next`, `ep_this`, `form`, `now_cost`,
+   * `selected_by_percent` — into `archive_deadline_market` (B-043, plan 029).
+   *
+   * A second pass over captures plan 024 already fetched, so it runs from the disk cache and asks
+   * the network for nothing it can avoid: the CDX index is consulted for the season's capture list,
+   * and if that call fails the list is taken from the cache directory instead. The cache holds, by
+   * construction, the last capture before every deadline of every ingested season plus each
+   * season-end capture — exactly the files this needs — so the fallback selects the same capture
+   * per round as the availability ingest did.
+   *
+   * `epNextEvent` records which event the capture called `is_next`. `ep_next` is FPL's projection
+   * for THAT round, and a capture taken before deadline r ordinarily says r — but a capture landing
+   * in the gap after r−1 has kicked off and before FPL rolls the event over can still point at r−1.
+   * Those rows are written with the mismatch visible; the reader joins only where the two agree.
+   */
+  async ingestMarket(season: ArchiveSeason | string): Promise<MarketIngestSummary> {
+    let timestamps: string[];
+    try {
+      timestamps = await this.captureTimestamps(season);
+    } catch (err) {
+      this.log.warn(
+        `${season}: CDX unavailable (${(err as Error).message}) — using the capture cache`,
+      );
+      timestamps = await this.cachedTimestamps(season);
+    }
+    if (timestamps.length === 0) {
+      throw new Error(`${season}: no captures listed and none cached`);
+    }
+    const endPayload = await this.fetchSnapshot(timestamps[timestamps.length - 1]);
+    const events = endPayload.events;
+    if (events.length !== 38 || events.some((e) => !e.finished)) {
+      throw new Error(`${season}: the season-end capture is not a finished 38-event season`);
+    }
+
+    const rows: Prisma.ArchiveDeadlineMarketCreateManyInput[] = [];
+    let roundsCaptured = 0;
+    let mismatched = 0;
+    let withEpNext = 0;
+    for (const event of events) {
+      const deadlineAt = new Date(event.deadline_time);
+      const ts = lastCaptureBefore(timestamps, deadlineAt);
+      if (ts === null) continue;
+      const snapshotAt = timestampToDate(ts);
+      const gapHours = (deadlineAt.getTime() - snapshotAt.getTime()) / 3_600_000;
+      const payload = await this.fetchSnapshot(ts);
+      const nextEvent = payload.events.find((e) => e.is_next === true)?.id ?? null;
+      if (nextEvent !== event.id) mismatched += 1;
+      roundsCaptured += 1;
+      const players = payload.elements.filter((e) => e.element_type >= 1 && e.element_type <= 4);
+      for (const p of players) {
+        const epNext = parseDecimal(p.ep_next);
+        if (epNext !== null) withEpNext += 1;
+        rows.push({
+          season,
+          round: event.id,
+          playerCode: p.code,
+          epNext: epNext === null ? null : new Prisma.Decimal(epNext.toFixed(2)),
+          epThis: decimalOrNull(p.ep_this),
+          form: decimalOrNull(p.form),
+          nowCost: p.now_cost,
+          selectedBy: new Prisma.Decimal((parseDecimal(p.selected_by_percent) ?? 0).toFixed(2)),
+          epNextEvent: nextEvent,
+          snapshotAt,
+          deadlineAt,
+          gapHours: new Prisma.Decimal(gapHours.toFixed(2)),
+        });
+      }
+    }
+
+    const written = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.archiveDeadlineMarket.deleteMany({ where: { season } });
+        const CHUNK = 2000;
+        let count = 0;
+        for (let i = 0; i < rows.length; i += CHUNK) {
+          const res = await tx.archiveDeadlineMarket.createMany({
+            data: rows.slice(i, i + CHUNK),
+          });
+          count += res.count;
+        }
+        return count;
+      },
+      { timeout: 120_000 },
+    );
+    if (written !== rows.length) {
+      throw new Error(`${season}: parsed ${rows.length} market rows but wrote ${written} — rolled back`);
+    }
+    const summary: MarketIngestSummary = {
+      season,
+      roundsCaptured,
+      roundsMismatched: mismatched,
+      rowsWritten: written,
+      rowsWithEpNext: withEpNext,
+    };
+    this.log.log(
+      `${season}: ${roundsCaptured}/38 rounds, ${written} market rows, ${withEpNext} with ep_next, ` +
+        `${mismatched} round(s) whose capture pointed at a different next event`,
+    );
+    return summary;
+  }
+
+  /** Capture timestamps already on disk for one season's window, ascending — the offline list. */
+  private async cachedTimestamps(season: string): Promise<string[]> {
+    const { from, to } = seasonWindow(season);
+    let files: string[] = [];
+    try {
+      files = await readdir(CACHE_DIR);
+    } catch {
+      return [];
+    }
+    return files
+      .map((f) => /^bs-(\d{14})\.json$/.exec(f)?.[1])
+      .filter((ts): ts is string => ts !== undefined)
+      .filter((ts) => ts.slice(0, 8) >= from && ts.slice(0, 8) <= to)
+      .sort();
   }
 
   /** All 200-status capture timestamps for one season's window, ascending. One CDX call. */

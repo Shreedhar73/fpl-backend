@@ -121,9 +121,14 @@ export class ForecastService {
     playerId: Map<number, string>,
     params: FittedParams,
   ): Promise<{ summary: ForecastSummary; players: PlayerForecast[] }> {
-    const [synthetic, availability] = await Promise.all([
+    const [synthetic, availability, epNext] = await Promise.all([
       this.repo.syntheticRowsFor(target),
       this.repo.availabilityByCode(target),
+      // Read only when the params carry a blend; an empty map otherwise, so the incumbent path
+      // does one query fewer and cannot be changed by what FPL published.
+      params.crowd
+        ? this.repo.epNextByCode(target)
+        : Promise.resolve(new Map<number, number>()),
     ]);
 
     if (synthetic.length === 0) {
@@ -220,6 +225,19 @@ export class ForecastService {
       if (entry && pmf) entry.distribution = summarise(pmf);
     }
 
+    const blended = params.crowd
+      ? applyServedBlend(byCode, epNext, params.crowd.epNextWeight)
+      : 0;
+    if (params.crowd) {
+      this.log.log(
+        `GW${target}: market blend at ${params.crowd.epNextWeight} on ${blended} of ` +
+          `${byCode.size} players` +
+          (blended === 0
+            ? ' — FPL has published no ep_next for this gameweek, the model stands alone'
+            : ''),
+      );
+    }
+
     const players = [...byCode.values()].sort(
       (a, b) => b.expectedPoints - a.expectedPoints,
     );
@@ -241,6 +259,46 @@ export class ForecastService {
       players,
     };
   }
+}
+
+/**
+ * The market blend at serve time (B-043, plan 029) — the same arithmetic `applyCrowdBlend` does
+ * for the harness, on the served entries: `ep_next` rescaled to the model's mean over the players
+ * that have one, then mixed in at the fitted weight. Returns how many entries were blended.
+ *
+ * The blend lands on `expectedPoints` and is carried as a `market` component, so the components
+ * still sum to the number served and the "why" panel can show what the market moved. The
+ * distribution is left as the model's own: `ep_next` is a point, and inventing a spread for it
+ * would be a claim nobody measured. `distribution.mean` therefore describes the model's mean, not
+ * the blended one, and the served row's `sd` is the model's.
+ */
+export function applyServedBlend(
+  entries: Map<number, PlayerForecast>,
+  epNext: Map<number, number>,
+  weight: number,
+): number {
+  const w = Math.max(0, Math.min(1, weight));
+  let modelSum = 0;
+  let epSum = 0;
+  for (const [code, entry] of entries) {
+    const ep = epNext.get(code);
+    if (ep === undefined) continue;
+    modelSum += entry.expectedPoints;
+    epSum += ep;
+  }
+  if (epSum <= 0) return 0;
+  const scale = modelSum / epSum;
+  let blended = 0;
+  for (const [code, entry] of entries) {
+    const ep = epNext.get(code);
+    if (ep === undefined) continue;
+    const before = entry.expectedPoints;
+    const after = (1 - w) * before + w * scale * ep;
+    entry.expectedPoints = after;
+    entry.components.market = (entry.components.market ?? 0) + (after - before);
+    blended += 1;
+  }
+  return blended;
 }
 
 /**

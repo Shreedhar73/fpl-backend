@@ -319,6 +319,10 @@ describe('verdict', () => {
       selectedRates: false,
       perPlayerStart: false,
       selectedBonusTau: false,
+    crowd: false,
+    prior: false,
+    startShrink: false,
+    confidence: false,
       trainWindow: null,
       folds: [
         ...perFold.map((d, i) => mk(seasons[i], d, true)),

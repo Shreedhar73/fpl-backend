@@ -28,6 +28,18 @@ export interface Candidate {
   teamShortName: string;
   cost: number; // tenths
   ep: number; // horizon expected points
+  /**
+   * NEXT-gameweek expected points, when the caller has them (D-037 follow-up, plan 029).
+   *
+   * The fifteen is a bet over the horizon and is priced on `ep`. The eleven, the armband and the
+   * bench order are decisions about ONE gameweek — a bench player scores only through an auto-sub
+   * this week, and a captain doubles this week's fixture — so `pickBestXi` and `arrangeSquad` read
+   * this when it is present and `ep` when it is not. Measured on 2026-09-02's live solve: the
+   * horizon armband went to a player 0.26 points a week behind the next-gameweek best. The decision
+   * harness (`decision-quality`) has always chosen its XI per round on that round's projection; the
+   * served product now does what was measured.
+   */
+  epNext?: number;
   pPlay: number;
   /** Premier League appearances (gameweek rows with minutes > 0), archive + this season — B-010. */
   appearances: number;
@@ -392,8 +404,12 @@ export function pickBestXi(
    */
   concentration: Concentration = NO_CONCENTRATION,
 ): XiResult {
+  // The eleven and the armband are priced on THIS gameweek where the candidates carry it.
+  const xiEp = (c: Candidate): number => c.epNext ?? c.ep;
   const byPos = (pos: PositionCode) =>
-    squad.filter((c) => c.position === pos).sort((a, b) => b.ep - a.ep);
+    squad
+      .filter((c) => c.position === pos)
+      .sort((a, b) => xiEp(b) - xiEp(a));
   const gk = byPos('GKP');
   const def = byPos('DEF');
   const mid = byPos('MID');
@@ -402,25 +418,35 @@ export function pickBestXi(
   // Only the pairs both of whose members this fifteen actually holds can ever be charged.
   const held = new Set(squad.map((c) => c.key));
   const heldPairs = pairsWithin(held, concentration.pairs);
+  // `lambda` is a POLICY number in HORIZON points (B-029, B-033: one point over five gameweeks per
+  // pair started together). When the eleven is priced on this gameweek alone the charge has to be
+  // brought into the same units, or a rule measured as "inert on the fifteen, 71 projected points
+  // over a season on the eleven" would silently become four times as strong. Scaled by the ratio of
+  // this week's projection to the horizon's over the fifteen, so its bite relative to a player's
+  // value is exactly what was measured; with no `epNext` anywhere the ratio is 1.
+  const horizonTotal = squad.reduce((s, c) => s + c.ep, 0);
+  const weekTotal = squad.reduce((s, c) => s + xiEp(c), 0);
+  const lambda =
+    concentration.lambda *
+    (horizonTotal > 0 && weekTotal > 0 ? weekTotal / horizonTotal : 1);
 
   let best: (XiResult & { score: number }) | null = null;
 
   const consider = (chosen: Candidate[], formation: string) => {
-    const baseEp = chosen.reduce((s, c) => s + c.ep, 0);
+    const baseEp = chosen.reduce((s, c) => s + xiEp(c), 0);
     const starting = new Set(chosen.map((c) => c.key));
-    const charge =
-      concentration.lambda * pairsWithin(starting, heldPairs).length;
+    const charge = lambda * pairsWithin(starting, heldPairs).length;
 
     // The armband goes to the best projection in the eleven. Nothing charges it since B-029 — the
     // captain's collision rows went with the rule they belonged to.
-    const scored = [...chosen].sort((a, b) => b.ep - a.ep);
+    const scored = [...chosen].sort((a, b) => xiEp(b) - xiEp(a));
     const captain = scored[0];
     const vice = scored[1];
     if (!captain) return;
 
     // The LP's expression exactly: (1 − w)·Σ EP·y + EP·captain − λ·Σ d. The constant w·Σ EP·x is
     // dropped because the fifteen is fixed here and a constant cannot change an argmax.
-    const score = (1 - benchWeight) * baseEp + captain.ep - charge;
+    const score = (1 - benchWeight) * baseEp + xiEp(captain) - charge;
 
     if (!best || score > best.score) {
       best = {
@@ -428,7 +454,7 @@ export function pickBestXi(
         formation,
         captainKey: captain.key,
         viceKey: vice?.key,
-        rawEp: baseEp + captain.ep,
+        rawEp: baseEp + xiEp(captain),
         score,
       };
     }
