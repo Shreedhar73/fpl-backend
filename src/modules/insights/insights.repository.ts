@@ -4,6 +4,7 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 export interface PlayerMeta {
   playerId: string;
   fplId: number;
+  teamId: string;
   teamShortName: string;
   status: string;
   news: string | null;
@@ -49,6 +50,7 @@ export class InsightsRepository {
       select: {
         id: true,
         fplId: true,
+        teamId: true,
         status: true,
         news: true,
         chanceOfPlayingNextRound: true,
@@ -61,6 +63,7 @@ export class InsightsRepository {
         {
           playerId: r.id,
           fplId: r.fplId,
+          teamId: r.teamId,
           teamShortName: r.team.shortName,
           status: r.status,
           news: r.news,
@@ -104,4 +107,95 @@ export class InsightsRepository {
       ]),
     );
   }
+
+  /**
+   * Expected points for a set of players over the horizon, under one version, in one query.
+   * Keyed by player then gameweek; a missing inner key is a gameweek the model has no row for,
+   * and the service keeps that as null.
+   */
+  async horizonProjections(
+    playerIds: string[],
+    gameweekIds: number[],
+    modelVersion: string,
+  ): Promise<Map<string, Map<number, number>>> {
+    if (playerIds.length === 0 || gameweekIds.length === 0) return new Map();
+    const rows = await this.prisma.projection.findMany({
+      where: {
+        playerId: { in: playerIds },
+        gameweekId: { in: gameweekIds },
+        modelVersion,
+      },
+      select: { playerId: true, gameweekId: true, expectedPoints: true },
+    });
+    const out = new Map<string, Map<number, number>>();
+    for (const r of rows) {
+      let inner = out.get(r.playerId);
+      if (!inner) {
+        inner = new Map();
+        out.set(r.playerId, inner);
+      }
+      inner.set(r.gameweekId, Number(r.expectedPoints));
+    }
+    return out;
+  }
+
+  /**
+   * Every fixture in the horizon for a set of clubs, one query, seen from each club's own side.
+   * `homeDifficulty` is FPL's `team_h_difficulty` — the difficulty FACED BY the home side — so a
+   * home team reads the home figure (confirmed in `fpl-sync/mappers.ts`, same as the players
+   * module's `fixturesForTeam`). A double gameweek is two rows under one (team, gameweek).
+   */
+  async fixturesForTeams(
+    teamIds: string[],
+    gameweekIds: number[],
+  ): Promise<Map<string, TeamHorizonFixture[]>> {
+    if (teamIds.length === 0 || gameweekIds.length === 0) return new Map();
+    const rows = await this.prisma.fixture.findMany({
+      where: {
+        gameweekId: { in: gameweekIds },
+        OR: [{ homeTeamId: { in: teamIds } }, { awayTeamId: { in: teamIds } }],
+      },
+      orderBy: [{ gameweekId: 'asc' }, { kickoffTime: 'asc' }],
+      select: {
+        gameweekId: true,
+        homeTeamId: true,
+        awayTeamId: true,
+        homeDifficulty: true,
+        awayDifficulty: true,
+        homeTeam: { select: { shortName: true } },
+        awayTeam: { select: { shortName: true } },
+      },
+    });
+    const wanted = new Set(teamIds);
+    const out = new Map<string, TeamHorizonFixture[]>();
+    const push = (teamId: string, f: TeamHorizonFixture) => {
+      if (!wanted.has(teamId)) return;
+      const list = out.get(teamId) ?? [];
+      list.push(f);
+      out.set(teamId, list);
+    };
+    for (const r of rows) {
+      const gameweekId = r.gameweekId as number;
+      push(r.homeTeamId, {
+        gameweekId,
+        opponentShortName: r.awayTeam.shortName,
+        isHome: true,
+        difficulty: r.homeDifficulty,
+      });
+      push(r.awayTeamId, {
+        gameweekId,
+        opponentShortName: r.homeTeam.shortName,
+        isHome: false,
+        difficulty: r.awayDifficulty,
+      });
+    }
+    return out;
+  }
+}
+
+export interface TeamHorizonFixture {
+  gameweekId: number;
+  opponentShortName: string;
+  isHome: boolean;
+  difficulty: number;
 }

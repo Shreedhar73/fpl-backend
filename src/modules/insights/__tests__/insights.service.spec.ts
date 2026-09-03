@@ -150,6 +150,7 @@ function build(mine: Candidate[], optimal: Candidate[], dto?: SquadDto) {
           {
             playerId: c.playerId,
             fplId: 1000 + i,
+            teamId: c.teamId,
             teamShortName: 'TST',
             status: 'a',
             news: null,
@@ -158,9 +159,46 @@ function build(mine: Candidate[], optimal: Candidate[], dto?: SquadDto) {
         ]),
       ),
     ),
+    // Every player projected in every horizon gameweek except the last: a `null` cell the test
+    // can look for, rather than an accidental absence.
+    horizonProjections: jest
+      .fn()
+      .mockResolvedValue(
+        new Map(
+          mine.map((c) => [
+            c.playerId,
+            new Map(
+              universe.gameweekIds.slice(0, -1).map((gw) => [gw, c.ep / 5]),
+            ),
+          ]),
+        ),
+      ),
+    // Team t0 is at home in the first horizon gameweek and away in the second; nothing else.
+    fixturesForTeams: jest.fn().mockResolvedValue(
+      new Map([
+        [
+          't0',
+          [
+            {
+              gameweekId: universe.gameweekIds[0],
+              opponentShortName: 'AWY',
+              isHome: true,
+              difficulty: 2,
+            },
+            {
+              gameweekId: universe.gameweekIds[1],
+              opponentShortName: 'HME',
+              isHome: false,
+              difficulty: 4,
+            },
+          ],
+        ],
+      ]),
+    ),
   };
 
   return {
+    repo,
     service: new InsightsService(
       optimizer as never,
       squads as never,
@@ -302,6 +340,66 @@ describe('InsightsService — captain and bench', () => {
       expect(Object.keys(p.evidence!.components).length).toBeGreaterThan(0);
       expect(p.evidence!.playProbability).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('InsightsService — the horizon on every player (plan 032)', () => {
+  it('lays the horizon out in gameweek order with a null where the model has no row', async () => {
+    const { service } = build(
+      squad('mine', () => 5),
+      squad('opt', () => 9),
+    );
+    const advice = await service.adviseManager(42);
+
+    for (const p of advice.players) {
+      expect(p.horizon.map((h) => h.gameweekId)).toEqual(
+        advice.horizonGameweekIds,
+      );
+      expect(p.horizon.slice(0, -1).every((h) => h.expectedPoints === 1)).toBe(
+        true,
+      );
+      expect(p.horizon[p.horizon.length - 1].expectedPoints).toBeNull();
+    }
+  });
+
+  it('reads each fixture from the player’s own side and leaves a blank empty', async () => {
+    const mine = squad('mine', () => 5);
+    const { service, repo } = build(
+      mine,
+      squad('opt', () => 9),
+    );
+    const advice = await service.adviseManager(42);
+
+    // Only the user's 15 carry a horizon, and only their clubs are asked for.
+    expect(repo.horizonProjections).toHaveBeenCalledWith(
+      mine.map((c) => c.playerId),
+      advice.horizonGameweekIds,
+      'test-model',
+    );
+    const calls = repo.fixturesForTeams.mock.calls as [string[], number[]][];
+    const askedTeams = calls[0][0];
+    expect([...askedTeams].sort()).toEqual(
+      [...new Set(mine.map((c) => c.teamId))].sort(),
+    );
+
+    const onT0 = advice.players.filter(
+      (p) => mine.find((c) => c.playerId === p.playerId)?.teamId === 't0',
+    );
+    const offT0 = advice.players.filter(
+      (p) => mine.find((c) => c.playerId === p.playerId)?.teamId !== 't0',
+    );
+    expect(onT0.length).toBeGreaterThan(0);
+    for (const p of onT0) {
+      expect(p.horizon[0].fixtures).toEqual([
+        { opponentShortName: 'AWY', isHome: true, difficulty: 2 },
+      ]);
+      expect(p.horizon[1].fixtures).toEqual([
+        { opponentShortName: 'HME', isHome: false, difficulty: 4 },
+      ]);
+      expect(p.horizon[2].fixtures).toEqual([]);
+    }
+    for (const p of offT0)
+      expect(p.horizon.every((h) => h.fixtures.length === 0)).toBe(true);
   });
 });
 

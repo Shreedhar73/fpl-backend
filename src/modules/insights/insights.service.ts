@@ -19,6 +19,7 @@ import {
   InsightsRepository,
   type NextGwProjection,
   type PlayerMeta,
+  type TeamHorizonFixture,
 } from './insights.repository';
 import { round2, squadDifference, squadHorizonEp, xiNextGwEp } from './advice';
 
@@ -109,15 +110,38 @@ export class InsightsService {
     };
 
     const involved = [...mine, ...optimalCandidates].map((c) => c.playerId);
-    const [projections, meta] = await Promise.all([
+    const minePlayerIds = mine.map((c) => c.playerId);
+    const [projections, meta, horizonEp] = await Promise.all([
       this.repo.projectionsFor(involved, nextGw, universe.modelVersion),
       this.repo.playerMeta(involved),
+      // The horizon rides only the user's 15 — the comparison's set difference is a list, not a
+      // ledger, and the optimal 15 already has its own view.
+      this.repo.horizonProjections(
+        minePlayerIds,
+        universe.gameweekIds,
+        universe.modelVersion,
+      ),
     ]);
+    const teamIds = [
+      ...new Set(
+        minePlayerIds
+          .map((id) => meta.get(id)?.teamId)
+          .filter((t): t is string => t !== undefined),
+      ),
+    ];
+    const fixtures = await this.repo.fixturesForTeams(
+      teamIds,
+      universe.gameweekIds,
+    );
     const epNext = (playerId: string): number =>
       projections.get(playerId)?.expectedPoints ?? 0;
 
     const players = arranged.squad.map((p) =>
-      this.toPlayerDto(p, squad, projections, meta),
+      this.toPlayerDto(p, squad, projections, meta, {
+        gameweekIds: universe.gameweekIds,
+        ep: horizonEp,
+        fixtures,
+      }),
     );
     const diff = squadDifference(mine, optimalCandidates);
 
@@ -228,10 +252,17 @@ export class InsightsService {
     squad: SquadDto,
     projections: Map<string, NextGwProjection>,
     meta: Map<string, PlayerMeta>,
+    horizon: {
+      gameweekIds: number[];
+      ep: Map<string, Map<number, number>>;
+      fixtures: Map<string, TeamHorizonFixture[]>;
+    },
   ): AdvicePlayerDto {
     const pick = squad.picks.find((x) => x.playerId === p.playerId);
     const projection = projections.get(p.playerId);
     const m = meta.get(p.playerId);
+    const epByGw = horizon.ep.get(p.playerId);
+    const clubFixtures = m ? (horizon.fixtures.get(m.teamId) ?? []) : [];
     return {
       playerId: p.playerId,
       fplId: pick?.fplId ?? m?.fplId ?? 0,
@@ -257,6 +288,20 @@ export class InsightsService {
             pHaul: projection.pHaul,
           }
         : null,
+      horizon: horizon.gameweekIds.map((gameweekId) => {
+        const ep = epByGw?.get(gameweekId);
+        return {
+          gameweekId,
+          expectedPoints: ep === undefined ? null : round2(ep),
+          fixtures: clubFixtures
+            .filter((f) => f.gameweekId === gameweekId)
+            .map((f) => ({
+              opponentShortName: f.opponentShortName,
+              isHome: f.isHome,
+              difficulty: f.difficulty,
+            })),
+        };
+      }),
     };
   }
 }

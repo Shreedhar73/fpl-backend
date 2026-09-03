@@ -19,6 +19,8 @@ export const ErrorCode = {
   SQUAD_NOT_IMPORTED: 'SQUAD_NOT_IMPORTED',
   /** A hand-built squad that breaks at least one rule. */
   SQUAD_ILLEGAL: 'SQUAD_ILLEGAL',
+  /** Every gameweek's deadline has passed — the season is over, or the sync has not run. */
+  NO_UPCOMING_GAMEWEEK: 'NO_UPCOMING_GAMEWEEK',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

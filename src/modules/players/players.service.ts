@@ -22,30 +22,53 @@ export class PlayersService {
   constructor(private readonly repo: PlayersRepository) {}
 
   async list(): Promise<PlayerListDto> {
-    const [players, modelVersion, gameweekId] = await Promise.all([
+    const [players, modelVersion, horizon] = await Promise.all([
       this.repo.listAll(),
       this.repo.servedModelVersion(),
-      this.repo.nextGameweek(),
+      this.repo.horizonGameweeks(HORIZON),
     ]);
+    // The first upcoming gameweek is the one a picker picks for — the head of the same horizon.
+    const gameweekId = horizon[0] ?? null;
 
-    const projections =
+    const [projections, sums, fixtures] = await Promise.all([
       modelVersion && gameweekId
-        ? await this.repo.projectionsFor(gameweekId, modelVersion)
-        : new Map<
-            string,
-            { expectedPoints: number; playProbability: number }
-          >();
+        ? this.repo.projectionsFor(gameweekId, modelVersion)
+        : Promise.resolve(
+            new Map<
+              string,
+              { expectedPoints: number; playProbability: number }
+            >(),
+          ),
+      modelVersion
+        ? this.repo.horizonSums(horizon, modelVersion)
+        : Promise.resolve(new Map<string, number>()),
+      this.repo.fixturesForAllTeams(horizon),
+    ]);
 
     return {
       gameweekId: projections.size > 0 ? gameweekId : null,
       modelVersion: projections.size > 0 ? modelVersion : null,
+      horizonGameweekIds: horizon,
+      fixtures: [...fixtures.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([teamShortName, rows]) => ({
+          teamShortName,
+          fixtures: rows.map((f) => ({
+            gameweekId: f.gameweekId,
+            opponentShortName: f.opponentShortName,
+            isHome: f.isHome,
+            difficulty: f.difficulty,
+          })),
+        })),
       count: players.length,
       players: players.map((p) => {
         const projection = projections.get(p.playerId);
+        const sum = sums.get(p.playerId);
         return {
           ...p,
           epNextGw: projection?.expectedPoints ?? null,
           playProbability: projection?.playProbability ?? null,
+          epHorizon: sum === undefined ? null : Math.round(sum * 100) / 100,
         };
       }),
     };
