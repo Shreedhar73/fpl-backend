@@ -193,6 +193,71 @@ export class PlayersRepository {
     );
   }
 
+  /**
+   * The undecayed horizon sum per player, grouped in SQL. Only players with at least one row
+   * appear, so a missing key is "not projected" and the service keeps it null.
+   */
+  async horizonSums(
+    gameweekIds: number[],
+    modelVersion: string,
+  ): Promise<Map<string, number>> {
+    if (gameweekIds.length === 0) return new Map();
+    const rows = await this.prisma.projection.groupBy({
+      by: ['playerId'],
+      where: { modelVersion, gameweekId: { in: gameweekIds } },
+      _sum: { expectedPoints: true },
+    });
+    return new Map(
+      rows.map((r) => [r.playerId, num(r._sum.expectedPoints) ?? 0]),
+    );
+  }
+
+  /**
+   * Every club's fixtures over the horizon, one query, keyed by the club's short name and read
+   * from that club's side — the same reading as `fixturesForTeam`, batched.
+   */
+  async fixturesForAllTeams(
+    gameweekIds: number[],
+  ): Promise<Map<string, TeamFixtureRow[]>> {
+    if (gameweekIds.length === 0) return new Map();
+    const rows = await this.prisma.fixture.findMany({
+      where: { gameweekId: { in: gameweekIds } },
+      orderBy: [{ gameweekId: 'asc' }, { kickoffTime: 'asc' }],
+      select: {
+        gameweekId: true,
+        kickoffTime: true,
+        homeDifficulty: true,
+        awayDifficulty: true,
+        homeTeam: { select: { shortName: true } },
+        awayTeam: { select: { shortName: true } },
+      },
+    });
+    const out = new Map<string, TeamFixtureRow[]>();
+    const push = (team: string, f: TeamFixtureRow) => {
+      const list = out.get(team) ?? [];
+      list.push(f);
+      out.set(team, list);
+    };
+    for (const r of rows) {
+      const gameweekId = r.gameweekId as number;
+      push(r.homeTeam.shortName, {
+        gameweekId,
+        opponentShortName: r.awayTeam.shortName,
+        isHome: true,
+        difficulty: r.homeDifficulty,
+        kickoffTime: r.kickoffTime,
+      });
+      push(r.awayTeam.shortName, {
+        gameweekId,
+        opponentShortName: r.homeTeam.shortName,
+        isHome: false,
+        difficulty: r.awayDifficulty,
+        kickoffTime: r.kickoffTime,
+      });
+    }
+    return out;
+  }
+
   async detail(playerId: string): Promise<PlayerDetailRow | null> {
     const r = await this.prisma.player.findUnique({
       where: { id: playerId },

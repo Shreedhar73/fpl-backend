@@ -56,6 +56,46 @@ export class PlayerListItemDto {
       'P(features at all) next gameweek. The term that dominates every other one.',
   })
   playProbability!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'Our expected points summed over `horizonGameweekIds`, undecayed (plan 032). Null when the ' +
+      'model has no row for this player in any of them. The number a builder sorts a run of ' +
+      'fixtures by; the per-gameweek split is on `GET /api/players/{playerId}`.',
+  })
+  epHorizon!: number | null;
+}
+
+export class TeamFixtureDto {
+  @ApiProperty()
+  gameweekId!: number;
+
+  @ApiProperty({ example: 'MCI' })
+  opponentShortName!: string;
+
+  @ApiProperty()
+  isHome!: boolean;
+
+  @ApiProperty({
+    description:
+      'FPL’s difficulty from this club’s side, 1–5. A home club reads the home figure.',
+  })
+  difficulty!: number;
+}
+
+export class TeamFixturesDto {
+  @ApiProperty({ example: 'MCI' })
+  teamShortName!: string;
+
+  @ApiProperty({
+    type: [TeamFixtureDto],
+    description:
+      'The club’s fixtures over the horizon, in gameweek order. A blank gameweek has no row; a ' +
+      'double has two.',
+  })
+  fixtures!: TeamFixtureDto[];
 }
 
 export class PlayerListDto {
@@ -69,6 +109,23 @@ export class PlayerListDto {
 
   @ApiProperty({ type: String, nullable: true })
   modelVersion!: string | null;
+
+  @ApiProperty({
+    type: [Number],
+    description:
+      'The gameweeks `epHorizon` is summed over and `fixtures` cover, in order. Empty before ' +
+      'the calendar is synced.',
+  })
+  horizonGameweekIds!: number[];
+
+  @ApiProperty({
+    type: [TeamFixturesDto],
+    description:
+      'Every club’s horizon fixtures, once per club rather than once per player: a 651-row list ' +
+      'joins on `teamShortName` instead of carrying 651 × 5 fixture rows (measured 129.5 KB raw ' +
+      'before this field, 2026-09-03).',
+  })
+  fixtures!: TeamFixturesDto[];
 
   @ApiProperty({
     description:

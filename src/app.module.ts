@@ -11,6 +11,7 @@ import { InsightsModule } from './modules/insights/insights.module';
 import { PlayersModule } from './modules/players/players.module';
 import { ArchiveModule } from './modules/archive/archive.module';
 import { CalibrationModule } from './modules/calibration/calibration.module';
+import { GameweeksModule } from './modules/gameweeks/gameweeks.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { CalibrationModule } from './modules/calibration/calibration.module';
     PlayersModule,
     ArchiveModule,
     CalibrationModule,
+    GameweeksModule,
     // Domain modules land here: fixtures, teams.
     // One directory each under src/modules/ — see fpl-architecture-contract.
   ],

@@ -54,6 +54,42 @@ export class EvidenceDto {
   pHaul!: number | null;
 }
 
+export class HorizonFixtureDto {
+  @ApiProperty({ example: 'MCI' })
+  opponentShortName!: string;
+
+  @ApiProperty()
+  isHome!: boolean;
+
+  @ApiProperty({
+    description:
+      'FPL’s difficulty of this fixture from THIS player’s side, 1–5. A home player reads the ' +
+      'home figure; the inverted reading looks just as plausible on screen and is wrong.',
+  })
+  difficulty!: number;
+}
+
+export class HorizonGameweekDto {
+  @ApiProperty()
+  gameweekId!: number;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'The served model’s expected points for this gameweek. Null where it has no row — a null ' +
+      'is not a zero, and a horizon cell must render it as absence.',
+  })
+  expectedPoints!: number | null;
+
+  @ApiProperty({
+    type: [HorizonFixtureDto],
+    description:
+      'This gameweek’s fixtures for the player’s club. Empty for a blank.',
+  })
+  fixtures!: HorizonFixtureDto[];
+}
+
 export class AdvicePlayerDto {
   @ApiProperty()
   playerId!: string;
@@ -127,6 +163,15 @@ export class AdvicePlayerDto {
       'Null when the model has no projection for this player in the next gameweek.',
   })
   evidence!: EvidenceDto | null;
+
+  @ApiProperty({
+    type: [HorizonGameweekDto],
+    description:
+      'One entry per horizon gameweek, in `horizonGameweekIds` order (plan 032): the projection ' +
+      'and the fixtures behind it, so a pitch, a ledger and a plan can show the run without a ' +
+      'fetch per player. Undecayed, unlike `epHorizon`.',
+  })
+  horizon!: HorizonGameweekDto[];
 }
 
 export class SquadDifferenceDto {

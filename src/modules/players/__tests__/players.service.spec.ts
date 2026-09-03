@@ -99,6 +99,8 @@ function build(o: Overrides = {}) {
     nextGameweek: jest.fn().mockResolvedValue(3),
     horizonGameweeks: jest.fn().mockResolvedValue(o.horizon ?? [3, 4, 5, 6, 7]),
     projectionsFor: jest.fn().mockResolvedValue(new Map()),
+    horizonSums: jest.fn().mockResolvedValue(new Map()),
+    fixturesForAllTeams: jest.fn().mockResolvedValue(new Map()),
     detail: jest.fn().mockResolvedValue(o.row === undefined ? ROW : o.row),
     horizonProjections: jest.fn().mockResolvedValue(o.projections ?? []),
     fixturesForTeam: jest.fn().mockResolvedValue(o.fixtures ?? []),
@@ -249,8 +251,67 @@ describe('PlayersService.list', () => {
     const list = await service.list();
 
     expect(repo.projectionsFor).not.toHaveBeenCalled();
+    expect(repo.horizonSums).not.toHaveBeenCalled();
     expect(list.modelVersion).toBeNull();
     expect(list.gameweekId).toBeNull();
     expect(list.players[0].epNextGw).toBeNull();
+    expect(list.players[0].epHorizon).toBeNull();
+    // The calendar is still stated — it is a fact about the season, not about the model.
+    expect(list.horizonGameweekIds).toEqual([3, 4, 5, 6, 7]);
+  });
+
+  it('sums the horizon per player and keeps an unprojected player null, not zero', async () => {
+    const { service, repo } = build();
+    repo.listAll.mockResolvedValue([
+      {
+        playerId: 'p1',
+        fplId: 1,
+        webName: 'Haaland',
+        position: 'FWD',
+        teamShortName: 'MCI',
+        nowCost: 155,
+        status: 'a',
+        news: null,
+      },
+      {
+        playerId: 'p2',
+        fplId: 2,
+        webName: 'Youngster',
+        position: 'MID',
+        teamShortName: 'MCI',
+        nowCost: 45,
+        status: 'a',
+        news: null,
+      },
+    ]);
+    repo.horizonSums.mockResolvedValue(new Map([['p1', 29.004]]));
+
+    const list = await service.list();
+
+    expect(repo.horizonSums).toHaveBeenCalledWith(
+      [3, 4, 5, 6, 7],
+      MODEL_VERSION,
+    );
+    expect(list.players[0].epHorizon).toBe(29);
+    expect(list.players[1].epHorizon).toBeNull();
+  });
+
+  it('carries each club’s fixtures once, from that club’s side, in club order', async () => {
+    const { service, repo } = build();
+    repo.fixturesForAllTeams.mockResolvedValue(
+      new Map([
+        ['MCI', [fixture(3, 'MUN', false), fixture(4, 'ARS', true)]],
+        ['ARS', [fixture(4, 'MCI', false)]],
+      ]),
+    );
+
+    const list = await service.list();
+
+    expect(repo.fixturesForAllTeams).toHaveBeenCalledWith([3, 4, 5, 6, 7]);
+    expect(list.fixtures.map((t) => t.teamShortName)).toEqual(['ARS', 'MCI']);
+    expect(list.fixtures[1].fixtures).toEqual([
+      { gameweekId: 3, opponentShortName: 'MUN', isHome: false, difficulty: 4 },
+      { gameweekId: 4, opponentShortName: 'ARS', isHome: true, difficulty: 2 },
+    ]);
   });
 });

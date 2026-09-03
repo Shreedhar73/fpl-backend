@@ -1123,6 +1123,93 @@
           "players"
         ]
       }
+    },
+    "/api/gameweeks/next": {
+      "get": {
+        "description": "Calendar only, no model output — so no `dataAsOfGw`. The first gameweek whose deadline has not passed, and the gameweek ids the advice is solved over from there.",
+        "operationId": "GameweeksController_next",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The next gameweek.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/NextGameweekDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Every deadline has passed, or the calendar has not been synced.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "NO_UPCOMING_GAMEWEEK"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "The gameweek a decision can still be made for, with its deadline and the horizon.",
+        "tags": [
+          "gameweeks"
+        ]
+      }
     }
   },
   "info": {
@@ -1489,6 +1576,52 @@
           "pHaul"
         ]
       },
+      "HorizonFixtureDto": {
+        "type": "object",
+        "properties": {
+          "opponentShortName": {
+            "type": "string",
+            "example": "MCI"
+          },
+          "isHome": {
+            "type": "boolean"
+          },
+          "difficulty": {
+            "type": "number",
+            "description": "FPL’s difficulty of this fixture from THIS player’s side, 1–5. A home player reads the home figure; the inverted reading looks just as plausible on screen and is wrong."
+          }
+        },
+        "required": [
+          "opponentShortName",
+          "isHome",
+          "difficulty"
+        ]
+      },
+      "HorizonGameweekDto": {
+        "type": "object",
+        "properties": {
+          "gameweekId": {
+            "type": "number"
+          },
+          "expectedPoints": {
+            "type": "number",
+            "nullable": true,
+            "description": "The served model’s expected points for this gameweek. Null where it has no row — a null is not a zero, and a horizon cell must render it as absence."
+          },
+          "fixtures": {
+            "description": "This gameweek’s fixtures for the player’s club. Empty for a blank.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HorizonFixtureDto"
+            }
+          }
+        },
+        "required": [
+          "gameweekId",
+          "expectedPoints",
+          "fixtures"
+        ]
+      },
       "AdvicePlayerDto": {
         "type": "object",
         "properties": {
@@ -1563,6 +1696,13 @@
                 "$ref": "#/components/schemas/EvidenceDto"
               }
             ]
+          },
+          "horizon": {
+            "description": "One entry per horizon gameweek, in `horizonGameweekIds` order (plan 032): the projection and the fixtures behind it, so a pitch, a ledger and a plan can show the run without a fetch per player. Undecayed, unlike `epHorizon`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HorizonGameweekDto"
+            }
           }
         },
         "required": [
@@ -1579,7 +1719,8 @@
           "benchOrder",
           "epNextGw",
           "epHorizon",
-          "evidence"
+          "evidence",
+          "horizon"
         ]
       },
       "SquadDifferenceDto": {
@@ -2248,6 +2389,51 @@
           "playerIds"
         ]
       },
+      "TeamFixtureDto": {
+        "type": "object",
+        "properties": {
+          "gameweekId": {
+            "type": "number"
+          },
+          "opponentShortName": {
+            "type": "string",
+            "example": "MCI"
+          },
+          "isHome": {
+            "type": "boolean"
+          },
+          "difficulty": {
+            "type": "number",
+            "description": "FPL’s difficulty from this club’s side, 1–5. A home club reads the home figure."
+          }
+        },
+        "required": [
+          "gameweekId",
+          "opponentShortName",
+          "isHome",
+          "difficulty"
+        ]
+      },
+      "TeamFixturesDto": {
+        "type": "object",
+        "properties": {
+          "teamShortName": {
+            "type": "string",
+            "example": "MCI"
+          },
+          "fixtures": {
+            "description": "The club’s fixtures over the horizon, in gameweek order. A blank gameweek has no row; a double has two.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamFixtureDto"
+            }
+          }
+        },
+        "required": [
+          "teamShortName",
+          "fixtures"
+        ]
+      },
       "PlayerListItemDto": {
         "type": "object",
         "properties": {
@@ -2297,6 +2483,11 @@
             "type": "number",
             "nullable": true,
             "description": "P(features at all) next gameweek. The term that dominates every other one."
+          },
+          "epHorizon": {
+            "type": "number",
+            "nullable": true,
+            "description": "Our expected points summed over `horizonGameweekIds`, undecayed (plan 032). Null when the model has no row for this player in any of them. The number a builder sorts a run of fixtures by; the per-gameweek split is on `GET /api/players/{playerId}`."
           }
         },
         "required": [
@@ -2309,7 +2500,8 @@
           "status",
           "news",
           "epNextGw",
-          "playProbability"
+          "playProbability",
+          "epHorizon"
         ]
       },
       "PlayerListDto": {
@@ -2323,6 +2515,20 @@
           "modelVersion": {
             "type": "string",
             "nullable": true
+          },
+          "horizonGameweekIds": {
+            "description": "The gameweeks `epHorizon` is summed over and `fixtures` cover, in order. Empty before the calendar is synced.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "fixtures": {
+            "description": "Every club’s horizon fixtures, once per club rather than once per player: a 651-row list joins on `teamShortName` instead of carrying 651 × 5 fixture rows (measured 129.5 KB raw before this field, 2026-09-03).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamFixturesDto"
+            }
           },
           "count": {
             "type": "number",
@@ -2338,6 +2544,8 @@
         "required": [
           "gameweekId",
           "modelVersion",
+          "horizonGameweekIds",
+          "fixtures",
           "count",
           "players"
         ]
@@ -2694,6 +2902,37 @@
           "horizonGameweekIds",
           "projections",
           "recent"
+        ]
+      },
+      "NextGameweekDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "FPL’s event id, e.g. 3."
+          },
+          "name": {
+            "type": "string",
+            "example": "Gameweek 3"
+          },
+          "deadlineTime": {
+            "type": "string",
+            "description": "ISO 8601, UTC. The moment picks lock — the clock every screen counts down to.",
+            "example": "2026-09-04T17:30:00.000Z"
+          },
+          "horizonGameweekIds": {
+            "description": "This gameweek and the ones after it that the advice is solved over, in order — the same read of the calendar the optimizer makes, so a horizon column on screen is the horizon in the numbers.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "deadlineTime",
+          "horizonGameweekIds"
         ]
       }
     }
