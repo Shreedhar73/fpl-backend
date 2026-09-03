@@ -25,6 +25,11 @@ export type PurchasePriceSource =
   | 'transfer-log'
   /** the player's price in the gameweek this manager started — exact for an initial-squad pick */
   | 'starting-gameweek-price'
+  /**
+   * today's market price, for a fifteen that was never bought (B-045) — exact by construction,
+   * since a hypothetical squad is priced at what it would cost to assemble now
+   */
+  | 'market-price'
   /** neither is available */
   | 'unknown';
 

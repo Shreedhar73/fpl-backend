@@ -18,11 +18,13 @@ import {
   type Universe,
 } from '../optimizer/optimizer.service';
 import { SquadService } from '../squad/squad.service';
+import { SquadError } from '../squad/squad.errors';
 import type { SquadDto } from '../squad/dto/squad.dto';
 import {
   reconstructEntryState,
   reconstructPurchasePrices,
   sellValueOf,
+  type PurchasePrice,
   type PurchasePriceSource,
 } from '../squad/entry-state';
 import { adviseChips, type ChipAdvice } from './chips';
@@ -50,11 +52,20 @@ import { TransfersRepository } from './transfers.repository';
  * 2. **Money comes back at sell value.** A plan priced in market prices spends money the manager does
  *    not have. When a sell value could not be reconstructed the plan says so per player rather than
  *    substituting `nowCost`, because that substitution is exactly the error and it is silent.
+ *
+ * **Since B-045 there are two ways in.** `plan(managerId)` reconstructs the three private facts from
+ * the manager's public record. `planBuilt(playerIds, …)` plans from a fifteen nobody has bought: two
+ * of the three facts are *stated* by the caller (free transfers, optionally the bank) and the third
+ * has one honest value — a hypothetical squad is priced at what it costs to assemble today, so sell
+ * value IS market price, by construction rather than by fallback. Both feed the same solve, so the
+ * two surfaces cannot disagree about what a plan is.
  */
 
 // Both moved to `transfer-lp.ts` so a backtest can read them without importing this service; they
 // are re-exported here because callers and tests refer to them by this path.
 export { HIT_COST, MAX_HITS, maxTransfersFor };
+
+export type FreeTransfersSource = 'reconstructed' | 'stated';
 
 export interface PlannedMove {
   out: {
@@ -80,12 +91,15 @@ export interface PlannedMove {
 }
 
 export interface TransferPlan {
-  managerId: number;
+  /** null for a plan from a hand-built fifteen */
+  managerId: number | null;
   gameweekId: number;
   horizonGameweekIds: number[];
   modelVersion: string;
   freeTransfers: number;
-  /** true when the free-transfer replay covered every gameweek since the manager started */
+  /** replayed from a manager's history, or stated by the caller for a built fifteen */
+  freeTransfersSource: FreeTransfersSource;
+  /** true when the count is not a lower bound: a complete replay, or a stated number */
   freeTransfersReconstructed: boolean;
   bank: number;
   moves: PlannedMove[];
@@ -101,6 +115,32 @@ export interface TransferPlan {
   sellValueUnknown: string[];
   chips: ChipAdvice[];
   /** what this plan is not, in the payload rather than only in a plan file */
+  caveats: string[];
+}
+
+export interface BuiltPlanOptions {
+  /** free transfers the user says they hold; defaults to one, capped at the rule's bank */
+  freeTransfers?: number;
+  /** tenths; defaults to what the fifteen leaves of the budget at today's prices */
+  bank?: number;
+}
+
+/** An owned candidate with where its sell value came from, so a move can say so. */
+type PricedOwned = OwnedCandidate & { sellValueSource: PurchasePriceSource };
+
+/** Everything the solve needs that differs between an imported and a built fifteen. */
+interface PlanInput {
+  managerId: number | null;
+  squad: SquadDto;
+  universe: Universe;
+  bank: number;
+  freeTransfers: number;
+  freeTransfersSource: FreeTransfersSource;
+  freeTransfersReconstructed: boolean;
+  chipsUsed: string[];
+  /** what this pick cost, from wherever this entry point can honestly get it */
+  purchaseOf: (pick: SquadDto['picks'][number]) => PurchasePrice;
+  /** the caveats specific to this entry point; the shared ones are added here */
   caveats: string[];
 }
 
@@ -133,7 +173,6 @@ export class TransfersService {
         ? Math.min(...history.current.map((r) => r.event))
         : squad.gameweekId;
 
-    const byPlayerId = new Map(universe.candidates.map((c) => [c.playerId, c]));
     const fplIdOf = await this.repo.fplIdByPlayerId(
       squad.picks.map((p) => p.playerId),
     );
@@ -147,7 +186,107 @@ export class TransfersService {
       startingPrices,
     );
 
-    const owned: OwnedCandidate[] = [];
+    const caveats: string[] = [];
+    if (!state.complete) {
+      caveats.push(
+        'The free-transfer count is a replay of this manager’s gameweek history and that history ' +
+          'has a gap, so the count is a lower bound rather than a certainty.',
+      );
+    }
+    if (squad.picks.some((p) => p.sellValue === null)) {
+      caveats.push(
+        'Sell values here are reconstructed from the public transfer log and gameweek prices, not ' +
+          'read from your account — FPL exposes neither purchase nor selling price publicly (D-013).',
+      );
+    }
+
+    return this.solve({
+      managerId,
+      squad,
+      universe,
+      bank: squad.bank,
+      freeTransfers: state.freeTransfers,
+      freeTransfersSource: 'reconstructed',
+      freeTransfersReconstructed: state.complete,
+      chipsUsed: state.chipsUsed,
+      purchaseOf: (pick) => {
+        const fplId = fplIdOf.get(pick.playerId);
+        return (
+          (fplId === undefined ? undefined : purchase.get(fplId)) ?? {
+            price: null,
+            source: 'unknown',
+          }
+        );
+      },
+      caveats,
+    });
+  }
+
+  /**
+   * A plan from a fifteen nobody has bought (B-045).
+   *
+   * Validated first and refused if illegal, for the same reason the advice is: a plan for a squad
+   * that cannot be fielded would read as encouragement. Then the three private facts, each with
+   * the only honest value a hypothetical squad has:
+   *
+   * - **purchase price = market price**, so sell value equals market price. Not a fallback and not
+   *   `unknown` — a squad assembled today at today's prices sells at those prices, exactly.
+   * - **free transfers** are whatever the caller says. Nothing here can check the number, and the
+   *   payload says it was stated rather than pretending it was replayed.
+   * - **the bank** defaults to what the fifteen leaves of the budget, which is what FPL would leave
+   *   a manager who bought exactly this squad now; the validator has already required Σ cost ≤ budget
+   *   so the default is never negative.
+   * - **no chip is spent.** The fifteen is hypothetical, so is its season.
+   */
+  async planBuilt(
+    playerIds: string[],
+    options: BuiltPlanOptions = {},
+  ): Promise<TransferPlan> {
+    const verdict = await this.squads.validateSquad(playerIds);
+    if (!verdict.legal) {
+      throw SquadError.illegalSquad(verdict.violations.map((v) => v.message));
+    }
+    const squad = await this.squads.asSquadDto(playerIds);
+    const universe = await this.optimizer.buildUniverse();
+
+    const cap = universe.rules.freeTransferCap();
+    const freeTransfers = Math.min(
+      cap,
+      Math.max(1, Math.floor(options.freeTransfers ?? 1)),
+    );
+    const bankStated = options.bank !== undefined;
+    const bank = bankStated ? Math.max(0, options.bank!) : squad.bank;
+
+    const caveats = [
+      'This fifteen was never bought, so every player is priced at today’s market: sell value and ' +
+        'market price are the same number by construction, not a reconstruction.',
+      `The free-transfer count (${freeTransfers}) is the one you gave; nothing here can check it.`,
+      bankStated
+        ? 'The bank is the one you gave.'
+        : 'The bank is what this fifteen leaves of the budget at today’s prices.',
+    ];
+
+    return this.solve({
+      managerId: null,
+      squad,
+      universe,
+      bank,
+      freeTransfers,
+      freeTransfersSource: 'stated',
+      freeTransfersReconstructed: true,
+      chipsUsed: [],
+      purchaseOf: (pick) => ({ price: pick.nowCost, source: 'market-price' }),
+      caveats,
+    });
+  }
+
+  /** The solve and its description, shared by both entry points so they cannot drift. */
+  private async solve(input: PlanInput): Promise<TransferPlan> {
+    const { squad, universe } = input;
+    const rules = universe.rules;
+    const byPlayerId = new Map(universe.candidates.map((c) => [c.playerId, c]));
+
+    const owned: PricedOwned[] = [];
     const sellValueUnknown: string[] = [];
     for (const pick of squad.picks) {
       const candidate = byPlayerId.get(pick.playerId);
@@ -160,11 +299,10 @@ export class TransfersService {
         );
         continue;
       }
-      const fplId = fplIdOf.get(pick.playerId);
-      const p = fplId === undefined ? undefined : purchase.get(fplId);
-      const sellValue = sellValueOf(p?.price ?? null, candidate.cost);
+      const p = input.purchaseOf(pick);
+      const sellValue = sellValueOf(p.price, candidate.cost);
       if (sellValue === null) sellValueUnknown.push(pick.webName);
-      owned.push({ ...candidate, sellValue });
+      owned.push({ ...candidate, sellValue, sellValueSource: p.source });
     }
 
     const ownedKeys = new Set(owned.map((c) => c.key));
@@ -175,12 +313,12 @@ export class TransfersService {
       owned,
       market,
       rules,
-      bank: squad.bank,
-      freeTransfers: state.freeTransfers,
+      bank: input.bank,
+      freeTransfers: input.freeTransfers,
       hitCost: HIT_COST,
       // Everything free, plus the two hits the advice is asked to consider (#97). A flat count made
       // the reachable hit depth a function of the bank rather than of the question.
-      maxTransfers: maxTransfersFor(state.freeTransfers),
+      maxTransfers: maxTransfersFor(input.freeTransfers),
       // The same objective the recommendation is solved under (B-024). It was NOT, for two releases:
       // B-023 gave the squad solve an eleven, a discounted bench and an armband, and this program
       // kept maximising all fifteen equally — so the plan and the recommendation could prefer
@@ -208,9 +346,9 @@ export class TransfersService {
     );
     const out = owned.filter((c) => !chosen.has(c.key));
     const bought = market.filter((c) => chosen.has(c.key));
-    const moves = this.pairMoves(out, bought, purchase, fplIdOf);
+    const moves = this.pairMoves(out, bought);
 
-    const hits = Math.max(0, moves.length - state.freeTransfers);
+    const hits = Math.max(0, moves.length - input.freeTransfers);
     const currentEp = owned.reduce((s, c) => s + c.ep, 0);
     const plannedEp =
       owned.filter((c) => chosen.has(c.key)).reduce((s, c) => s + c.ep, 0) +
@@ -223,23 +361,25 @@ export class TransfersService {
       horizon,
       ownedTeamIds: owned.map((c) => c.teamId),
       bestPlayer: best ? { webName: best.webName, teamId: best.teamId } : null,
-      chipsUsed: state.chipsUsed,
+      chipsUsed: input.chipsUsed,
       horizonGap: await this.gapToRecommendation(currentEp),
     });
 
     this.log.log(
-      `manager ${managerId}: ${moves.length} transfer(s), ${hits} hit(s), ` +
+      `${input.managerId === null ? 'built squad' : `manager ${input.managerId}`}: ` +
+        `${moves.length} transfer(s), ${hits} hit(s), ` +
         `net ${(plannedEp - currentEp).toFixed(2)} horizon EP`,
     );
 
     return {
-      managerId,
+      managerId: input.managerId,
       gameweekId: universe.gameweekIds[0],
       horizonGameweekIds: universe.gameweekIds,
       modelVersion: universe.modelVersion,
-      freeTransfers: state.freeTransfers,
-      freeTransfersReconstructed: state.complete,
-      bank: squad.bank,
+      freeTransfers: input.freeTransfers,
+      freeTransfersSource: input.freeTransfersSource,
+      freeTransfersReconstructed: input.freeTransfersReconstructed,
+      bank: input.bank,
       moves,
       hits,
       hitCost: hits * HIT_COST,
@@ -248,7 +388,7 @@ export class TransfersService {
       netGainEp: round2(plannedEp - currentEp),
       sellValueUnknown,
       chips,
-      caveats: this.caveatsFor(squad, state, sellValueUnknown),
+      caveats: this.caveatsFor(input.caveats, sellValueUnknown),
     };
   }
 
@@ -273,24 +413,13 @@ export class TransfersService {
    * the only one a reader can act on. Within a position the highest-EP arrival is matched to the
    * lowest-EP departure, which is the pairing that makes each line read as an improvement.
    */
-  private pairMoves(
-    out: OwnedCandidate[],
-    bought: Candidate[],
-    purchase: Map<
-      number,
-      { price: number | null; source: PurchasePriceSource }
-    >,
-    fplIdOf: Map<string, number>,
-  ): PlannedMove[] {
+  private pairMoves(out: PricedOwned[], bought: Candidate[]): PlannedMove[] {
     const moves: PlannedMove[] = [];
     const remaining = [...bought].sort((a, b) => b.ep - a.ep);
     for (const leaving of [...out].sort((a, b) => a.ep - b.ep)) {
       const i = remaining.findIndex((c) => c.position === leaving.position);
       if (i === -1) continue;
       const arriving = remaining.splice(i, 1)[0];
-      const fplId = fplIdOf.get(leaving.playerId);
-      const source = (fplId === undefined ? undefined : purchase.get(fplId))
-        ?.source;
       moves.push({
         out: {
           playerId: leaving.playerId,
@@ -299,7 +428,7 @@ export class TransfersService {
           teamShortName: leaving.teamShortName,
           nowCost: leaving.cost,
           sellValue: leaving.sellValue,
-          sellValueSource: source ?? 'unknown',
+          sellValueSource: leaving.sellValueSource,
           epHorizon: round2(leaving.ep),
         },
         in: {
@@ -323,34 +452,20 @@ export class TransfersService {
     return Math.max(0, optimalEp - currentEp);
   }
 
-  private caveatsFor(
-    squad: SquadDto,
-    state: { complete: boolean },
-    sellValueUnknown: string[],
-  ): string[] {
+  /** The caveats every plan carries, after the ones specific to how this fifteen was priced. */
+  private caveatsFor(specific: string[], sellValueUnknown: string[]): string[] {
     const out = [
       'Every number here is a horizon expectation with no uncertainty attached. A 6.0 from a nailed ' +
         'starter and a 6.0 from a rotation risk are the same number to this planner (B-017).',
       'Chips are recommended as a window and never spent — a chip is unspendable once used, and no ' +
         'model here can price the week you would then never get to use it in.',
+      ...specific,
     ];
-    if (!state.complete) {
-      out.push(
-        'The free-transfer count is a replay of this manager’s gameweek history and that history ' +
-          'has a gap, so the count is a lower bound rather than a certainty.',
-      );
-    }
     if (sellValueUnknown.length > 0) {
       out.push(
         `Sell value could not be reconstructed for ${sellValueUnknown.join(', ')}, so the budget ` +
           'used their market price. That OVERSTATES what you would get for a player whose price has ' +
           'risen, which is the direction that produces a plan you cannot afford.',
-      );
-    }
-    if (squad.picks.some((p) => p.sellValue === null)) {
-      out.push(
-        'Sell values here are reconstructed from the public transfer log and gameweek prices, not ' +
-          'read from your account — FPL exposes neither purchase nor selling price publicly (D-013).',
       );
     }
     return out;
