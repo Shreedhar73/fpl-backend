@@ -41,8 +41,9 @@ export function round2(x: number): number {
 
 /**
  * The set difference between two squads, in both directions. Not a transfer plan: a transfer costs
- * money and possibly a 4-point hit, and whether one is worth taking is B-008's question. Answering
- * it here with a subtraction would be the naive answer nobody re-opens.
+ * money and possibly a 4-point hit, and whether one is worth taking is the transfer planner's
+ * question (`TransfersService`, for an imported or a hand-built fifteen). Answering it here with a
+ * subtraction would be the naive answer nobody re-opens.
  */
 export function squadDifference(
   mine: Candidate[],

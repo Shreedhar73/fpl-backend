@@ -43,14 +43,22 @@ export class TransferOutDto extends TransferSideDto {
   sellValue!: number | null;
 
   @ApiProperty({
-    enum: ['transfer-log', 'starting-gameweek-price', 'unknown'],
+    enum: [
+      'transfer-log',
+      'starting-gameweek-price',
+      'market-price',
+      'unknown',
+    ],
     description:
       "Where the purchase price came from. 'transfer-log' is exact — the manager's own " +
       "element_in_cost. 'starting-gameweek-price' is exact for a player held since their first " +
-      "gameweek, because FPL's per-gameweek value IS the price that week. 'unknown' means the " +
-      'budget used the market price, which overstates it.',
+      "gameweek, because FPL's per-gameweek value IS the price that week. 'market-price' is exact " +
+      'by construction: a hand-built fifteen was never bought, so every player sells for what he ' +
+      "costs today. 'unknown' means the budget used the market price for a player who WAS bought, " +
+      'which overstates it.',
   })
-  sellValueSource!: 'transfer-log' | 'starting-gameweek-price' | 'unknown';
+  sellValueSource!:
+    'transfer-log' | 'starting-gameweek-price' | 'market-price' | 'unknown';
 }
 
 export class PlannedMoveDto {
@@ -93,8 +101,13 @@ export class ChipAdviceDto {
 }
 
 export class TransferPlanDto {
-  @ApiProperty()
-  managerId!: number;
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'Null for a plan from a hand-built fifteen (POST /insights/transfers).',
+  })
+  managerId!: number | null;
 
   @ApiProperty({ description: 'The gameweek the plan is for — the next one.' })
   gameweekId!: number;
@@ -107,15 +120,23 @@ export class TransferPlanDto {
 
   @ApiProperty({
     description:
-      "Free transfers in hand, replayed from the manager's own gameweek history. FPL exposes no " +
-      'free-transfer count publicly.',
+      'Free transfers in hand. For a manager, replayed from their own gameweek history — FPL ' +
+      'exposes no free-transfer count publicly. For a hand-built fifteen, the number the user stated.',
   })
   freeTransfers!: number;
 
   @ApiProperty({
+    enum: ['reconstructed', 'stated'],
     description:
-      'False when that replay had a gap in it, which makes the count a lower bound rather than a ' +
-      'number.',
+      "'reconstructed' from the manager's gameweek history; 'stated' by the user for a hand-built " +
+      'fifteen, which nothing here can check.',
+  })
+  freeTransfersSource!: 'reconstructed' | 'stated';
+
+  @ApiProperty({
+    description:
+      'False when the replay had a gap in it, which makes the count a lower bound rather than a ' +
+      'number. Always true for a stated count: it is whatever the user said, not a bound.',
   })
   freeTransfersReconstructed!: boolean;
 

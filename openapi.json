@@ -843,6 +843,140 @@
         ]
       }
     },
+    "/api/insights/transfers": {
+      "post": {
+        "description": "The squad is validated first and refused if illegal. Sell values are today’s market prices (a hand-built fifteen was never bought, so that is exact by construction), the free-transfer count is the one stated, and the bank defaults to what the fifteen leaves of the budget. Chips are all unspent. The response shape is the manager route’s, with managerId null.",
+        "operationId": "InsightsController_transferPlanForBuilt",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferPlanRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/TransferPlanDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "That squad breaks at least one rule — the message lists every one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "SQUAD_ILLEGAL"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "One of those player ids does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN_PLAYER"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "What to do with a squad built by hand.",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
     "/api/players": {
       "get": {
         "description": "Served whole rather than paged: the row count is bounded by the game itself, and a picker filters across all of it at once. Expected points are null, not zero, for a player the model has not projected.",
@@ -1523,7 +1657,7 @@
             "description": "The optimal squad's formation."
           },
           "optimalHasThatYouDoNot": {
-            "description": "In the optimal 15 and not in this squad. **Not a transfer recommendation** — a transfer costs money and possibly 4 points, and deciding whether one is worth it is B-008. This is the set difference and nothing more.",
+            "description": "In the optimal 15 and not in this squad. **Not a transfer recommendation** — a transfer costs money and possibly 4 points, and deciding whether one is worth it is the transfer plan (GET /insights/transfers/{managerId}, or POST /insights/transfers for a built 15). This is the set difference and nothing more.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SquadDifferenceDto"
@@ -1864,9 +1998,10 @@
             "enum": [
               "transfer-log",
               "starting-gameweek-price",
+              "market-price",
               "unknown"
             ],
-            "description": "Where the purchase price came from. 'transfer-log' is exact — the manager's own element_in_cost. 'starting-gameweek-price' is exact for a player held since their first gameweek, because FPL's per-gameweek value IS the price that week. 'unknown' means the budget used the market price, which overstates it."
+            "description": "Where the purchase price came from. 'transfer-log' is exact — the manager's own element_in_cost. 'starting-gameweek-price' is exact for a player held since their first gameweek, because FPL's per-gameweek value IS the price that week. 'market-price' is exact by construction: a hand-built fifteen was never bought, so every player sells for what he costs today. 'unknown' means the budget used the market price for a player who WAS bought, which overstates it."
           }
         },
         "required": [
@@ -1981,7 +2116,9 @@
         "type": "object",
         "properties": {
           "managerId": {
-            "type": "number"
+            "type": "number",
+            "nullable": true,
+            "description": "Null for a plan from a hand-built fifteen (POST /insights/transfers)."
           },
           "gameweekId": {
             "type": "number",
@@ -1998,11 +2135,19 @@
           },
           "freeTransfers": {
             "type": "number",
-            "description": "Free transfers in hand, replayed from the manager's own gameweek history. FPL exposes no free-transfer count publicly."
+            "description": "Free transfers in hand. For a manager, replayed from their own gameweek history — FPL exposes no free-transfer count publicly. For a hand-built fifteen, the number the user stated."
+          },
+          "freeTransfersSource": {
+            "type": "string",
+            "enum": [
+              "reconstructed",
+              "stated"
+            ],
+            "description": "'reconstructed' from the manager's gameweek history; 'stated' by the user for a hand-built fifteen, which nothing here can check."
           },
           "freeTransfersReconstructed": {
             "type": "boolean",
-            "description": "False when that replay had a gap in it, which makes the count a lower bound rather than a number."
+            "description": "False when the replay had a gap in it, which makes the count a lower bound rather than a number. Always true for a stated count: it is whatever the user said, not a bound."
           },
           "bank": {
             "type": "number",
@@ -2062,6 +2207,7 @@
           "horizonGameweekIds",
           "modelVersion",
           "freeTransfers",
+          "freeTransfersSource",
           "freeTransfersReconstructed",
           "bank",
           "moves",
@@ -2073,6 +2219,33 @@
           "sellValueUnknown",
           "chips",
           "caveats"
+        ]
+      },
+      "TransferPlanRequestDto": {
+        "type": "object",
+        "properties": {
+          "playerIds": {
+            "description": "Our internal player ids (cuid) for the 15.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "freeTransfers": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 1,
+            "description": "Free transfers in hand, as the user states them — nothing here can check the number. Capped at the bank FPL allows (5)."
+          },
+          "bank": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Bank in tenths of a million. Omitted, it is what the fifteen leaves of the budget at today's prices — what FPL would leave a manager who bought exactly this squad now."
+          }
+        },
+        "required": [
+          "playerIds"
         ]
       },
       "PlayerListItemDto": {

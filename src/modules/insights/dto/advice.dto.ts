@@ -2,8 +2,9 @@ import { ApiProperty } from '@nestjs/swagger';
 
 /**
  * The advice for a squad. Deliberately does NOT contain transfer or chip recommendations: those
- * need an owned squad's sell value and a hit calculation, which is B-008. What is here is
- * everything derivable from the squad plus the projections, and nothing is guessed.
+ * need sell values, a free-transfer count and a hit calculation, and they are a separate solve —
+ * `TransferPlanDto`, from `GET /insights/transfers/{managerId}` or `POST /insights/transfers`. What
+ * is here is everything derivable from the squad plus the projections, and nothing is guessed.
  */
 
 export class EvidenceDto {
@@ -187,7 +188,8 @@ export class ComparisonDto {
     type: [SquadDifferenceDto],
     description:
       'In the optimal 15 and not in this squad. **Not a transfer recommendation** — a transfer ' +
-      'costs money and possibly 4 points, and deciding whether one is worth it is B-008. This is ' +
+      'costs money and possibly 4 points, and deciding whether one is worth it is the transfer ' +
+      'plan (GET /insights/transfers/{managerId}, or POST /insights/transfers for a built 15). This is ' +
       'the set difference and nothing more.',
   })
   optimalHasThatYouDoNot!: SquadDifferenceDto[];
