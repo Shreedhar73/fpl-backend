@@ -143,16 +143,21 @@ function build(mine: Candidate[], optimal: Candidate[], dto?: SquadDto) {
         ]),
       ),
     ),
-    playerMeta: jest
-      .fn()
-      .mockResolvedValue(
-        new Map(
-          universe.candidates.map((c, i) => [
-            c.playerId,
-            { playerId: c.playerId, fplId: 1000 + i, teamShortName: 'TST' },
-          ]),
-        ),
+    playerMeta: jest.fn().mockResolvedValue(
+      new Map(
+        universe.candidates.map((c, i) => [
+          c.playerId,
+          {
+            playerId: c.playerId,
+            fplId: 1000 + i,
+            teamShortName: 'TST',
+            status: 'a',
+            news: null,
+            chanceOfPlayingNextRound: null,
+          },
+        ]),
       ),
+    ),
   };
 
   return {

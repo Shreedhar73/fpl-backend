@@ -892,6 +892,103 @@
           "players"
         ]
       }
+    },
+    "/api/players/{playerId}": {
+      "get": {
+        "description": "The payload behind the player sheet. Projections are the served model’s, one per horizon gameweek, each with that gameweek’s fixtures and difficulty from the player’s side; `projections` is empty, not zeros, for a player the model has not reached.",
+        "operationId": "PlayersController_detail",
+        "parameters": [
+          {
+            "name": "playerId",
+            "required": true,
+            "in": "path",
+            "description": "Our internal id (cuid).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The player.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PlayerDetailDto"
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No player with that id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiEnvelopeDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "null",
+                          "nullable": true
+                        },
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "errorCode": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN_PLAYER"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "One player, whole: projections over the horizon, fixtures, form and availability.",
+        "tags": [
+          "players"
+        ]
+      }
     }
   },
   "info": {
@@ -1286,6 +1383,20 @@
             "type": "number",
             "description": "Market price in tenths of a million."
           },
+          "status": {
+            "type": "string",
+            "description": "a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad. Only \"a\" is safe to start. Carried here so a flag can sit on the shirt without a second fetch (plan 030)."
+          },
+          "news": {
+            "type": "string",
+            "nullable": true,
+            "description": "The availability note, when there is one."
+          },
+          "chanceOfPlayingNextRound": {
+            "type": "number",
+            "nullable": true,
+            "description": "FPL’s own chance of playing next round, as a percentage. Null when FPL has published none."
+          },
           "role": {
             "type": "string",
             "enum": [
@@ -1327,6 +1438,9 @@
           "position",
           "teamShortName",
           "nowCost",
+          "status",
+          "news",
+          "chanceOfPlayingNextRound",
           "role",
           "benchOrder",
           "epNextGw",
@@ -2053,6 +2167,360 @@
           "modelVersion",
           "count",
           "players"
+        ]
+      },
+      "PlayerSeasonTotalsDto": {
+        "type": "object",
+        "properties": {
+          "appearances": {
+            "type": "number",
+            "description": "Matches with a recorded stat row this season."
+          },
+          "points": {
+            "type": "number"
+          },
+          "minutes": {
+            "type": "number"
+          },
+          "goals": {
+            "type": "number"
+          },
+          "assists": {
+            "type": "number"
+          },
+          "cleanSheets": {
+            "type": "number"
+          },
+          "bonus": {
+            "type": "number"
+          },
+          "expectedGoals": {
+            "type": "number"
+          },
+          "expectedAssists": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "appearances",
+          "points",
+          "minutes",
+          "goals",
+          "assists",
+          "cleanSheets",
+          "bonus",
+          "expectedGoals",
+          "expectedAssists"
+        ]
+      },
+      "PlayerFixtureDto": {
+        "type": "object",
+        "properties": {
+          "opponentShortName": {
+            "type": "string",
+            "example": "MCI"
+          },
+          "isHome": {
+            "type": "boolean",
+            "description": "True when this player’s club is the home side."
+          },
+          "difficulty": {
+            "type": "number",
+            "description": "FPL’s fixture difficulty rating for THIS player’s club in this match, 1 (easiest) to 5. Read from the side the player is on, so a home player sees the home difficulty.",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "kickoffTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO instant. Null when FPL has not scheduled the match yet."
+          }
+        },
+        "required": [
+          "opponentShortName",
+          "isHome",
+          "difficulty",
+          "kickoffTime"
+        ]
+      },
+      "PlayerProjectionDto": {
+        "type": "object",
+        "properties": {
+          "gameweekId": {
+            "type": "number"
+          },
+          "expectedPoints": {
+            "type": "number",
+            "description": "Expected points in this gameweek alone."
+          },
+          "expectedMinutes": {
+            "type": "number",
+            "description": "Expected minutes in this gameweek."
+          },
+          "playProbability": {
+            "type": "number",
+            "description": "P(the player features at all)."
+          },
+          "sd": {
+            "type": "number",
+            "nullable": true,
+            "description": "Standard deviation of the points distribution. Null for a model version that composed none — unknown, never zero."
+          },
+          "pBlank": {
+            "type": "number",
+            "nullable": true,
+            "description": "P(2 points or fewer). Null when the model carried no distribution."
+          },
+          "pHaul": {
+            "type": "number",
+            "nullable": true,
+            "description": "P(10 points or more). Null when the model carried no distribution."
+          },
+          "components": {
+            "type": "object",
+            "description": "Per-term breakdown of the expected points: appearance, goals, assists, cs, conceded, defcon, saves, bonus, fixtures. The model’s own reasoning, not a rationalisation.",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "fixtures": {
+            "description": "The club’s fixtures in this gameweek. Empty is a blank, two is a double — both facts about the published calendar, not inferences.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerFixtureDto"
+            }
+          }
+        },
+        "required": [
+          "gameweekId",
+          "expectedPoints",
+          "expectedMinutes",
+          "playProbability",
+          "sd",
+          "pBlank",
+          "pHaul",
+          "components",
+          "fixtures"
+        ]
+      },
+      "PlayerRecentGameweekDto": {
+        "type": "object",
+        "properties": {
+          "gameweekId": {
+            "type": "number"
+          },
+          "opponentShortName": {
+            "type": "string",
+            "example": "ARS"
+          },
+          "wasHome": {
+            "type": "boolean"
+          },
+          "minutes": {
+            "type": "number"
+          },
+          "points": {
+            "type": "number",
+            "description": "FPL points actually scored in this match."
+          },
+          "goals": {
+            "type": "number"
+          },
+          "assists": {
+            "type": "number"
+          },
+          "cleanSheets": {
+            "type": "number"
+          },
+          "bonus": {
+            "type": "number"
+          },
+          "expectedGoals": {
+            "type": "number",
+            "description": "Expected goals in this match, FPL’s own figure."
+          },
+          "expectedAssists": {
+            "type": "number",
+            "description": "Expected assists in this match, FPL’s own figure."
+          }
+        },
+        "required": [
+          "gameweekId",
+          "opponentShortName",
+          "wasHome",
+          "minutes",
+          "points",
+          "goals",
+          "assists",
+          "cleanSheets",
+          "bonus",
+          "expectedGoals",
+          "expectedAssists"
+        ]
+      },
+      "PlayerDetailDto": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string",
+            "description": "Our internal id (cuid)."
+          },
+          "fplId": {
+            "type": "number"
+          },
+          "webName": {
+            "type": "string",
+            "example": "Haaland"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "Erling Haaland"
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "GKP",
+              "DEF",
+              "MID",
+              "FWD"
+            ]
+          },
+          "teamShortName": {
+            "type": "string",
+            "example": "MCI"
+          },
+          "teamName": {
+            "type": "string",
+            "example": "Man City"
+          },
+          "nowCost": {
+            "type": "number",
+            "description": "Market price in tenths of a million."
+          },
+          "status": {
+            "type": "string",
+            "description": "a=available d=doubtful i=injured s=suspended u=unavailable n=not in squad. Only \"a\" is safe to start."
+          },
+          "news": {
+            "type": "string",
+            "nullable": true,
+            "description": "The availability note, when there is one."
+          },
+          "chanceOfPlayingNextRound": {
+            "type": "number",
+            "nullable": true,
+            "description": "FPL’s own chance of playing next round, as a percentage. Null when FPL has published none, which is the normal state for a fit player."
+          },
+          "form": {
+            "type": "number",
+            "nullable": true,
+            "description": "FPL’s form figure: points per match over the last 30 days. Null before any match."
+          },
+          "pointsPerGame": {
+            "type": "number",
+            "nullable": true,
+            "description": "FPL’s points per game this season."
+          },
+          "seasonMinutes": {
+            "type": "number",
+            "description": "Minutes played this season, FPL’s figure."
+          },
+          "seasonStarts": {
+            "type": "number",
+            "description": "Starts this season, FPL’s figure."
+          },
+          "penaltiesOrder": {
+            "type": "number",
+            "nullable": true,
+            "description": "1 means first-choice penalty taker. Null when not on the list."
+          },
+          "directFreekicksOrder": {
+            "type": "number",
+            "nullable": true
+          },
+          "cornersOrder": {
+            "type": "number",
+            "nullable": true
+          },
+          "selectedByPercent": {
+            "type": "number",
+            "nullable": true,
+            "description": "Share of FPL managers who own this player, as a percentage, from the latest ownership snapshot. Null when none has been recorded. Ownership is a fact about the crowd, never an input to the projection."
+          },
+          "priceChangeSinceTracked": {
+            "type": "number",
+            "nullable": true,
+            "description": "Price change in tenths since this app first tracked the player — NOT since the season started, which no stored row can say. Null with fewer than two price points."
+          },
+          "priceTrackedSince": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO instant of the first tracked price, so the change above can be dated."
+          },
+          "seasonTotals": {
+            "nullable": true,
+            "description": "Summed from the per-gameweek stat rows. Null before the player has one.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PlayerSeasonTotalsDto"
+              }
+            ]
+          },
+          "modelVersion": {
+            "type": "string",
+            "nullable": true,
+            "description": "The served model version the projections below came from. Null when nothing is projected."
+          },
+          "horizonGameweekIds": {
+            "description": "The gameweeks a decision can still be made for, in order — the optimizer’s horizon.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "projections": {
+            "description": "One entry per horizon gameweek the served model has projected, in gameweek order. Empty when the model has not reached this player.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerProjectionDto"
+            }
+          },
+          "recent": {
+            "description": "The last finished matches, newest first. Empty before the season’s first match.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerRecentGameweekDto"
+            }
+          }
+        },
+        "required": [
+          "playerId",
+          "fplId",
+          "webName",
+          "fullName",
+          "position",
+          "teamShortName",
+          "teamName",
+          "nowCost",
+          "status",
+          "news",
+          "chanceOfPlayingNextRound",
+          "form",
+          "pointsPerGame",
+          "seasonMinutes",
+          "seasonStarts",
+          "penaltiesOrder",
+          "directFreekicksOrder",
+          "cornersOrder",
+          "selectedByPercent",
+          "priceChangeSinceTracked",
+          "priceTrackedSince",
+          "seasonTotals",
+          "modelVersion",
+          "horizonGameweekIds",
+          "projections",
+          "recent"
         ]
       }
     }
