@@ -22,7 +22,9 @@ import {
   featureNames,
   toCsv,
 } from '../modules/calibration/feature-export';
-import { FITTED_PARAMS } from '../modules/projections/fitted';
+// The v3 incumbent (D-037): the training CSVs must be built under the params the committed v4
+// models were fitted against, or a refit would learn a residual on a different `v3ep`.
+import { V3_INCUMBENT_PARAMS as FITTED_PARAMS } from '../modules/projections/fitted';
 
 async function main(): Promise<void> {
   const log = new Logger('export-features');

@@ -2,7 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { exportFeatures } from '../calibration/feature-export';
-import { FITTED_PARAMS } from './fitted';
+// The v3 incumbent, NOT the served params (D-037). The composite's residual leg was trained
+// against `v3ep` computed under v3, and its minutes come from "the incumbent's minutes machinery"
+// as of the fit; handing it v5 — rates decay and per-player starter minutes on, a different
+// corpus — would write a different model under `v4-composite-2026-08-27`, with nothing going red.
+// The fit-v4 manifest asserts the feature LIST, not the params the features were built under.
+import { V3_INCUMBENT_PARAMS as FITTED_PARAMS } from './fitted';
 import { ForecastRepository } from './forecast.repository';
 import { availabilityMultiplier } from './forecast.service';
 import { minutesDistribution } from './model-v2';
